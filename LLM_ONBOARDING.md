@@ -7,8 +7,8 @@ Quick reference for AI assistants working on Alpha-OSK.
 ## Project Overview
 
 **Name:** Alpha-OSK  
-**Purpose:** AI-powered on-screen keyboard for Windows accessibility  
-**Status:** Planning / Early Development
+**Purpose:** AI-powered on-screen keyboard for **Linux** accessibility  
+**Status:** 🚀 Active Development — Core keyboard working, AI prediction integrated
 
 ---
 
@@ -18,8 +18,44 @@ I'm Owen — a wheelchair user with muscular dystrophy.
 
 - **Typing is hard** — Be proactive. Make decisions. Don't ask for confirmation on small things.
 - **Offer A/B/C choices** — I can type one letter instead of explaining.
-- **PowerShell on Windows** — Use PowerShell syntax. Prefer single-line commands.
+- **Linux environment** — Use bash syntax. This is a Linux project.
 - **Accessibility matters** — This is a tool I actually need.
+
+---
+
+## Architecture
+
+```
+alpha-osk/
+├── run.py                 # Smart launcher (venv + deps + launch)
+├── src/
+│   ├── keyboard_app.py    # QML engine setup, window flags
+│   ├── keyboard_bridge.py # Python↔QML bridge (key synthesis, modifiers)
+│   └── prediction/
+│       ├── ngram_predictor.py      # Fast n-gram predictions (<10ms)
+│       ├── transformer_predictor.py # LLM re-ranking (DistilGPT-2)
+│       └── hybrid_predictor.py     # Combines both, emits Qt signals
+├── qml/
+│   ├── Main.qml           # Main keyboard window (modular layout)
+│   └── components/
+│       ├── KeyButton.qml      # Reusable key with animations
+│       ├── NavigationPanel.qml # Insert/Delete/Home/End/PgUp/PgDn/Arrows
+│       ├── NumpadPanel.qml    # Number pad
+│       ├── FunctionRow.qml    # F1-F12 keys
+│       ├── SettingsPanel.qml  # Toggle panels
+│       └── SettingsToggle.qml # Toggle switch component
+└── templates/             # Project dashboard (HTML)
+```
+
+---
+
+## Tech Stack
+
+- **Language:** Python 3.9+
+- **UI Framework:** PySide6 + QML6 (Qt Quick)
+- **Key Synthesis:** xdotool (X11) / ydotool (Wayland)
+- **Prediction:** Hybrid n-gram + transformer (DistilGPT-2)
+- **Dashboard:** HTML served via Python http.server
 
 ---
 
@@ -27,39 +63,54 @@ I'm Owen — a wheelchair user with muscular dystrophy.
 
 | File | Purpose |
 |------|---------|
-| `README.md` | Project overview, status, quick start |
-| `TODO.md` | Task tracking (use `- [ ]` checkbox format) |
-| `DESIGN.md` | Layout specs and UX documentation |
-| `run.py` | Dashboard launcher |
-| `templates/dashboard.html` | Project dashboard UI |
+| `run.py` | Launcher — creates venv, installs deps, runs keyboard |
+| `src/keyboard_bridge.py` | Python↔QML bridge — modifiers, key synthesis, predictions |
+| `src/prediction/hybrid_predictor.py` | Prediction engine combining n-gram + LLM |
+| `qml/Main.qml` | Main UI — modular with toggleable panels |
+| `docs/PREDICTION_OPTIONS.md` | Comparison of prediction approaches |
 
 ---
 
-## Tech Stack
+## Current Features
 
-- **Language:** Python 3.11+
-- **UI Framework:** PySide6 (Qt) for keyboard
-- **AI/ML:** Transformers, Whisper, Flower
-- **Dashboard:** HTML served via Python http.server
+- ✅ Full QWERTY layout with all symbols
+- ✅ Modifiers: Shift, Caps, Ctrl, Alt, Win/Super (sticky)
+- ✅ Toggleable panels: Function row, Navigation, Numpad
+- ✅ Settings panel with layout toggles
+- ✅ Compact mode option
+- ✅ Hybrid prediction (n-gram instant + LLM refined)
+- ✅ Next-word prediction after selecting a word
+- ✅ Key hold/repeat for continuous typing
+- ✅ Draggable window, stays on top, doesn't steal focus
+- ✅ Dark theme with press animations
 
 ---
 
-## Core Concepts
+## Modular UI System
 
-### AI Features
-1. **Prediction** — Context-aware word completion using transformers
-2. **Voice** — Whisper-based speech-to-text with commands
-3. **Federated Learning** — On-device learning that shares model updates, not data
+The keyboard has toggleable sections (via Settings ⚙ button):
 
-### Accessibility Modes
-- **Dwell click** — Hover to activate
-- **Scanning** — Row/column navigation for switch users
-- **Voice** — Hands-free dictation
+| Panel | Keys | Default |
+|-------|------|---------|
+| Function Row | Esc, F1-F12, PrtSc, ScrLk, Pause | Off |
+| Navigation | Ins, Del, Home, End, PgUp, PgDn, Arrows | Off |
+| Numpad | Full number pad with NumLock | Off |
+| Compact Mode | Smaller key sizes | Off |
 
-### Inspiration
-- GNOME On-Board (Linux) — Good accessibility, no AI
-- Windows OSK — Built-in but dated
-- Mobile keyboards — Great AI, poor accessibility
+---
+
+## Quick Start
+
+```bash
+# Install system dependency
+sudo apt install xdotool
+
+# Run the keyboard (auto-creates venv, installs PySide6)
+python run.py
+
+# Optional: Install LLM for better predictions
+./venv/bin/pip install transformers torch
+```
 
 ---
 
@@ -74,23 +125,19 @@ refactor: restructure code
 chore: maintenance tasks
 ```
 
-PowerShell:
-```powershell
-git add -A; git commit -m "feat: description"; git push
+```bash
+git add -A && git commit -m "feat: description" && git push
 ```
 
 ---
 
-## Quick Start
+## Inspiration Projects
 
-```powershell
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python run.py
-```
-
-Dashboard opens at `http://localhost:8080`
+| Project | Location | What We Borrowed |
+|---------|----------|------------------|
+| GNOME On-Board | `/home/owen/dev/onboard` | Accessibility features, layout ideas |
+| Project-Nimbus | `/home/owen/dev/Project-Nimbus` | PySide6+QML architecture pattern |
+| gitconnect | `/home/owen/dev/gitconnect` | Desktop app patterns |
 
 ---
 

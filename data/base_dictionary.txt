@@ -1,0 +1,120 @@
+# Alpha-OSK Base Dictionary
+# Common English words and phrases for prediction training
+# Format: one word/phrase per line
+
+# Top 500 most common English words
+the be to of and a in that have I it for not on with he as you do at
+this but his by from they we say her she or an will my one all would there their what
+so up out if about who get which go me when make can like time no just him know take
+people into year your good some could them see other than then now look only come its over
+think also back after use two how our work first well way even new want because any these
+give day most us is are was were been being am had has have having does did done
+doing went gone said saying seen seeing took taken getting making coming knowing thinking
+looking wanted needed used tried asked told called found felt left kept gave brought thought heard
+met began became seemed appeared happened worked played lived moved turned learned started
+helped changed followed opened closed stopped tried watched waited walked talked loved
+
+# Common word pairs (bigrams)
+I am I'm I have I've I will I'll I would I'd I had I could I can I don't I didn't
+you are you're you have you've you will you'll you would you'd you can you don't
+we are we're we have we've we will we'll we would we'd we can we don't
+they are they're they have they've they will they'll they would they'd
+it is it's that is that's there is there's what is what's who is who's
+he is he's she is she's how is how's where is where's when is when's
+going to gonna want to wanna got to gotta have to has to need to
+do you don't you can you could you would you will you are you have
+did you have you had you were you was it was it is it will
+thank you thanks for sorry for excuse me please help nice to good to
+how are what are where are when are why are who are which are
+in the on the at the to the for the with the from the by the
+of the and the but the or the so the as the if the when the
+this is that is there is here is it is what is who is how is
+I think I know I want I need I like I love I feel I believe I hope
+I mean I guess I suppose I wonder I wish I remember I understand I see
+can I may I will I shall I should I would I could I might I must
+let me tell me show me give me help me ask me call me
+
+# Technology and computing
+computer laptop phone tablet screen keyboard mouse click type scroll
+internet wifi bluetooth download upload email message text chat video
+app application software program file folder document save delete copy
+paste cut undo redo search find replace open close window browser
+website page link button menu settings options preferences password
+username login logout sign account profile picture photo image
+camera microphone speaker volume mute pause play stop record
+battery charging power on off restart shutdown update install
+
+# Accessibility words
+accessible accessibility assistive technology screen reader voice
+speech dictation magnifier zoom contrast high low vision blind
+deaf hearing impaired disability wheelchair mobility dwell click
+scanning switch control eye tracking head mouse adaptive
+
+# Time and dates
+today tomorrow yesterday morning afternoon evening night week month year
+Monday Tuesday Wednesday Thursday Friday Saturday Sunday
+January February March April May June July August September October November December
+hour minute second time date day now later soon early late before after
+always never sometimes often usually rarely occasionally frequently
+
+# Numbers as words
+zero one two three four five six seven eight nine ten eleven twelve
+thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty
+thirty forty fifty sixty seventy eighty ninety hundred thousand million
+
+# Common phrases
+how are you what's up nice to meet you see you later have a good day
+thank you very much you're welcome no problem of course that's right
+I agree I disagree I understand I don't know I'm not sure I think so
+let me know if you need anything is there anything else can I help you
+what do you mean could you please would you mind I'd like to
+by the way in my opinion as far as I know to be honest for example
+on the other hand in addition however therefore because of due to
+as well as such as kind of sort of a lot of in order to
+
+# Emotions and reactions
+happy sad angry upset excited nervous anxious worried scared afraid
+tired exhausted bored interested curious confused surprised shocked
+proud embarrassed grateful thankful sorry disappointed frustrated
+amazing wonderful great good bad terrible awful excellent perfect
+beautiful ugly nice mean kind gentle harsh rough soft hard easy difficult
+
+# Actions and verbs
+go come walk run sit stand sleep wake eat drink read write work play
+learn teach help give take send receive call answer ask tell say speak
+listen hear watch see look find search buy sell pay cost make create
+build break fix repair change move turn open close start stop begin end
+continue finish complete cancel delete remove add include choose decide
+
+# Questions
+what where when why how who which whose whom
+what is what are what was what were what will what would what could
+where is where are where was where were where will where would
+when is when will when can when should when would when did
+why is why are why was why were why would why did why does
+how is how are how was how were how will how would how do how does
+who is who are who was who were who will who would who did
+
+# Greetings and closings
+hello hi hey good morning good afternoon good evening good night goodbye bye
+welcome back see you take care best regards sincerely yours truly
+dear sir madam to whom it may concern attention regarding subject re
+
+# Medical and health (accessibility context)
+doctor nurse hospital clinic appointment medicine medication therapy
+physical occupational speech pain symptom diagnosis treatment
+wheelchair walker cane crutches prosthetic orthotic splint brace
+muscle strength weakness fatigue spasm tremor coordination balance
+
+# Home and daily life
+home house room bedroom bathroom kitchen living dining office
+door window floor wall ceiling roof stairs elevator lift
+bed chair table desk lamp light fan air conditioner heater
+food breakfast lunch dinner snack meal cook prepare clean wash
+
+# Work and communication
+work job career office meeting email message call phone
+boss manager colleague coworker team project deadline schedule
+document report presentation meeting agenda notes minutes
+send reply forward attach copy paste delete save print
+

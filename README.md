@@ -1,6 +1,6 @@
 # Alpha-OSK
 
-**AI-Powered On-Screen Keyboard for Windows**
+**AI-Powered On-Screen Keyboard for Linux**
 
 An accessible on-screen keyboard designed for users with motor disabilities, featuring AI-enabled predictive text, voice dictation, and federated learning for personalized adaptation.
 
@@ -8,12 +8,12 @@ An accessible on-screen keyboard designed for users with motor disabilities, fea
 
 ## Status
 
-**Phase:** 🚧 Planning / Early Development
+**Phase:** � Active Development
 
 | Area | Status |
 |------|--------|
-| Core Keyboard | ⏳ Planned |
-| AI Prediction | ⏳ Planned |
+| Core Keyboard | ✅ Complete |
+| AI Prediction | 🚧 In Progress |
 | Voice Dictation | ⏳ Planned |
 | Federated Learning | ⏳ Planned |
 | Collaboration Features | ⏳ Planned |
@@ -23,7 +23,7 @@ An accessible on-screen keyboard designed for users with motor disabilities, fea
 
 ## Vision
 
-Current Windows on-screen keyboards (including the built-in OSK) lack modern AI capabilities. Alpha-OSK aims to be what GNOME On-Board is for Linux—but better, with:
+Current Linux on-screen keyboards (including GNOME On-Board) lack modern AI capabilities. Alpha-OSK builds on the accessibility-first approach of On-Board with:
 
 - **Intelligent word prediction** that learns your vocabulary
 - **Voice dictation** with low-latency transcription
@@ -62,10 +62,20 @@ Current Windows on-screen keyboards (including the built-in OSK) lack modern AI 
 
 ---
 
+## Current Features
+
+- ✅ **QWERTY layout** with shift/caps lock toggle
+- ✅ **Number and symbol layers** (123/#+= toggle)
+- ✅ **Sticky modifiers** — Ctrl, Alt (auto-release after next key)
+- ✅ **Key synthesis** via xdotool (X11) or ydotool (Wayland)
+- ✅ **Dark theme** with press animations
+- ✅ **Draggable window** — stays on top, doesn't steal focus
+- ✅ **Prediction bar** — UI ready, engine in development
+
 ## Inspiration
 
 - **GNOME On-Board (Linux)** — Great customization, but limited AI
-- **Windows OSK** — Functional but dated, no learning
+- **Project-Nimbus** — PySide6+QML architecture pattern
 - **iOS/Android keyboards** — Excellent prediction, not accessible enough
 
 Alpha-OSK combines the best of accessibility-first design with modern AI.
@@ -74,9 +84,10 @@ Alpha-OSK combines the best of accessibility-first design with modern AI.
 
 ## Tech Stack
 
-- **Language:** Python 3.11+
-- **UI Framework:** PySide6 (Qt)
-- **AI/ML:** 
+- **Language:** Python 3.9+
+- **UI Framework:** PySide6 + QML6 (Qt Quick)
+- **Key Synthesis:** xdotool (X11) / ydotool (Wayland)
+- **AI/ML (Planned):** 
   - Transformers (Hugging Face) for prediction
   - Whisper (OpenAI) for voice
   - Flower for federated learning
@@ -86,14 +97,27 @@ Alpha-OSK combines the best of accessibility-first design with modern AI.
 
 ## Quick Start
 
-```powershell
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+### Install System Dependencies
+```bash
+sudo apt install xdotool  # For X11 key synthesis
+```
+
+### Run the Keyboard
+```bash
 python run.py
 ```
 
-The dashboard opens at `http://localhost:8080`
+The launcher automatically:
+- Creates a virtual environment
+- Installs PySide6 and dependencies
+- Launches the on-screen keyboard
+
+### Run the Dashboard
+```bash
+python run.py --dashboard
+```
+
+Dashboard opens at `http://localhost:8080`
 
 ---
 
@@ -104,15 +128,18 @@ alpha-osk/
 ├── README.md              # This file
 ├── TODO.md                # Task tracking
 ├── DESIGN.md              # Layout and UX specifications
-├── run.py                 # Dashboard launcher
+├── run.py                 # Smart launcher (venv + dependency mgmt)
 ├── requirements.txt       # Python dependencies
+├── src/
+│   ├── keyboard_app.py    # QML engine setup and window config
+│   ├── keyboard_bridge.py # Python↔QML bridge for key synthesis
+│   └── __init__.py
+├── qml/
+│   ├── Main.qml           # Main keyboard window
+│   └── components/
+│       └── KeyButton.qml  # Reusable key component
 ├── templates/
 │   └── dashboard.html     # Project dashboard
-├── src/                   # Source code (coming soon)
-│   ├── keyboard/          # Core keyboard logic
-│   ├── prediction/        # AI prediction engine
-│   ├── voice/             # Voice dictation
-│   └── federation/        # Federated learning client
 └── docs/                  # Extended documentation
 ```
 

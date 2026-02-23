@@ -4,6 +4,8 @@
 
 This document defines the UX principles and layout specifications for Alpha-OSK.
 
+**Implementation Status:** Core keyboard ✅ | AI Prediction 🚧 | Voice ⏳ | Federated Learning ⏳
+
 ---
 
 ## Design Philosophy
@@ -240,19 +242,46 @@ For limited screen space or one-handed use:
 ## Technical Requirements
 
 ### Performance
-- **Keystroke latency**: < 50ms
-- **Prediction update**: < 100ms
-- **Voice transcription**: < 500ms (streaming)
+- **Keystroke latency**: < 50ms ✅ (achieved with xdotool)
+- **Prediction update**: < 100ms (target)
+- **Voice transcription**: < 500ms (streaming, planned)
 
 ### Compatibility
-- Windows 10/11
+- Linux (X11 and Wayland)
 - Works with all standard applications
 - Compatible with other AT software (screen readers, switch interfaces)
 
 ### Resource Usage
-- Idle: < 50MB RAM
-- Active: < 200MB RAM
+- Idle: < 50MB RAM ✅
+- Active: < 200MB RAM (target with AI)
 - GPU optional (for faster voice transcription)
+
+## Current Implementation
+
+### Architecture
+- **Framework**: PySide6 + QML6 (Qt Quick)
+- **Bridge Pattern**: Python QObject exposed to QML as context property
+- **Key Synthesis**: xdotool (X11) / ydotool (Wayland) via subprocess
+- **Window Flags**: WindowStaysOnTopHint, Tool, FramelessWindowHint, WindowDoesNotAcceptFocus
+
+### Implemented Features
+- ✅ QWERTY layout (adaptive, matches design spec)
+- ✅ Number layer (1-0 with symbols on shift)
+- ✅ Symbol layer (#+= toggle)
+- ✅ Sticky modifiers: Shift, Caps Lock, Ctrl, Alt
+- ✅ Auto-release modifiers after keypress
+- ✅ Prediction bar UI (3 slots + close button)
+- ✅ Dark theme with gradients and press animations
+- ✅ Draggable via top handle
+- ✅ Special keys: Backspace, Enter, Tab, Arrows, Space
+
+### Pending Features
+- ⏳ AI prediction engine (see docs/PREDICTION_OPTIONS.md)
+- ⏳ Dwell-click mode
+- ⏳ Scanning mode
+- ⏳ Adjustable key sizes
+- ⏳ High-contrast themes
+- ⏳ Voice dictation
 
 ---
 

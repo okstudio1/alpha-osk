@@ -1,25 +1,26 @@
 # TODO
 
-## Phase 1: Foundation
+## Phase 1: Foundation ✅
 
-- [ ] **Set up project structure** — Create src directories
-- [ ] **Basic keyboard window** — PySide6 floating window
-- [ ] **Key input simulation** — Send keystrokes to focused app
-- [ ] **Simple QWERTY layout** — Standard keyboard arrangement
+- [x] **Set up project structure** — Create src directories
+- [x] **Basic keyboard window** — PySide6 + QML6 floating window
+- [x] **Key input simulation** — Send keystrokes to focused app via xdotool
+- [x] **Simple QWERTY layout** — Standard keyboard arrangement
 
 ## Phase 2: Accessibility Core
 
 - [ ] **Dwell-click support** — Trigger keys by hovering
 - [ ] **Scanning mode** — Row/column scanning for switch users
-- [ ] **Adjustable key sizes** — Per-user customization
+- [x] **Adjustable key sizes** — Compact mode toggle in settings
 - [ ] **High-contrast themes** — WCAG-compliant color schemes
-- [ ] **Sticky/latch keys** — Shift, Ctrl, Alt modifiers
+- [x] **Sticky/latch keys** — Shift, Caps, Ctrl, Alt, Win/Super (auto-release)
+- [x] **Modular layout** — Toggleable Function Row, Nav Panel, Numpad
 
-## Phase 3: AI Prediction
+## Phase 3: AI Prediction ✅
 
-- [ ] **Word prediction engine** — Basic n-gram model
-- [ ] **Transformer integration** — GPT-2 or similar for context
-- [ ] **Personal vocabulary** — Learn user-specific words
+- [x] **Word prediction engine** — Hybrid n-gram + DistilGPT-2 LLM
+- [x] **Prediction integration** — Connected to QML UI with real-time updates
+- [x] **Personal vocabulary** — Learns from typed words and selections
 - [ ] **Abbreviation expansion** — Custom shortcuts (e.g., "omw" → "on my way")
 - [ ] **Medical/AT dictionary** — Specialized terms
 
@@ -60,3 +61,19 @@
 - [x] Project planning
 - [x] Initial documentation
 - [x] Dashboard setup
+- [x] PySide6 + QML6 architecture
+- [x] Python↔QML bridge (keyboard_bridge.py)
+- [x] Full QWERTY layout with all symbols (`, [], {}, \|, etc.)
+- [x] Sticky modifiers (Shift, Caps, Ctrl, Alt, Win/Super)
+- [x] Key synthesis via xdotool/ydotool
+- [x] Dark theme with press animations
+- [x] Draggable window (stays on top, no focus steal)
+- [x] Hybrid prediction engine (n-gram + LLM)
+- [x] Function row (F1-F12, Esc, PrtSc, etc.)
+- [x] Navigation panel (Ins, Del, Home, End, PgUp, PgDn, Arrows)
+- [x] Number pad with NumLock
+- [x] Settings panel with layout toggles
+- [x] Compact mode option
+- [x] LLM_ONBOARDING.md updated for AI assistants
+- [x] Key hold/repeat functionality
+- [x] Next-word prediction after word selection

@@ -1,12 +1,15 @@
 # Alpha-OSK Dependencies
 
-# Dashboard (minimal for now)
-# No external dependencies needed - uses Python stdlib
+# Core UI framework (Qt6 / QML)
+PySide6>=6.6.0
+
+# Prediction engine (optional - n-gram works without these)
+# Install for LLM-enhanced predictions:
+#   pip install transformers torch
+transformers>=4.36.0
+torch>=2.1.0
 
 # Future dependencies (uncomment as needed):
-# PySide6>=6.6.0        # Qt UI framework
-# transformers>=4.36.0  # AI text prediction
-# torch>=2.1.0          # PyTorch backend
 # openai-whisper>=20231117  # Voice transcription
 # flwr>=1.6.0           # Federated learning (Flower)
 # sounddevice>=0.4.6    # Audio input
