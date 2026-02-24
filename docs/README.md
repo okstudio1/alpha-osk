@@ -1,0 +1,255 @@
+# Alpha-OSK Documentation
+
+Welcome to the Alpha-OSK documentation. This directory contains comprehensive guides on the philosophy, technical innovations, and implementation details of the project.
+
+---
+
+## 📚 Documentation Index
+
+### Philosophy & Vision
+
+**[`../PHILOSOPHY.md`](../PHILOSOPHY.md)** - Core design philosophy and principles
+
+Learn about the information-theoretic foundations, accessibility-first design, and the principles borrowed from the Dasher Project. This document explains **why** we make the decisions we make.
+
+**Key topics:**
+- Information-efficient design
+- Accessibility first, always
+- Continuous, natural interaction
+- Adaptive learning
+- Transparency and openness
+
+**Best quotes:**
+> *"Writing can be described as zooming in on an alphabetical library, steering as you go."* — Dasher Project
+
+> *"We alter the SIZE of the shelf space devoted to each book in proportion to the probability of the corresponding text."*
+
+---
+
+### Technical Implementation
+
+**[`TECHNICAL_INNOVATIONS.md`](TECHNICAL_INNOVATIONS.md)** - Dasher Project innovations
+
+Detailed technical analysis of 8 major innovations from the **Dasher Project** (Cambridge University) and how they can be implemented in Alpha-OSK.
+
+**[`MOBILE_KEYBOARD_INNOVATIONS.md`](MOBILE_KEYBOARD_INNOVATIONS.md)** - Mobile keyboard innovations
+
+Technical approaches from **Gboard** and **SwiftKey** including fuzzy/spatial recognition, gesture typing, smart autocorrect, and personalized dictionaries.
+
+**Dasher innovations (8 total):**
+1. Alphabet System, 2. PPM Language Model, 3. Adaptive Learning, 4. Visual Probability Encoding, 5. Training Text System, 6. Direct Input Integration, 7. Switch Scanning Mode, 8. Performance Optimization
+
+**Mobile keyboard innovations (6 total):**
+1. Fuzzy/Spatial Recognition, 2. Gesture Typing, 3. Next-Word Prediction, 4. Smart Autocorrect, 5. Personalized Dictionary, 6. Multi-Language Support
+
+**Implementation roadmap:**
+- Phase 1: Quick wins (1-2 weeks)
+- Phase 2: Core enhancements (2-4 weeks)
+- Phase 3: Advanced features (1-2 months)
+- Phase 4: Accessibility (2-4 weeks)
+
+---
+
+### Prediction System
+
+**[`PREDICTION_OPTIONS.md`](PREDICTION_OPTIONS.md)** - Comparison of prediction approaches
+
+Analysis of different prediction strategies and the rationale for Alpha-OSK's hybrid approach.
+
+---
+
+## 🎯 Quick Reference
+
+### For New Contributors
+
+1. **Start here:** [`../PHILOSOPHY.md`](../PHILOSOPHY.md) - Understand the "why"
+2. **Then read:** [`TECHNICAL_INNOVATIONS.md`](TECHNICAL_INNOVATIONS.md) - Learn the "how"
+3. **Check:** [`../LLM_ONBOARDING.md`](../LLM_ONBOARDING.md) - Quick project overview
+
+### For Developers
+
+**Key principles when coding:**
+1. Does this reduce effort?
+2. Is this accessible?
+3. Is this intelligent?
+4. Is this documented?
+5. Is this open?
+
+### For Researchers
+
+Alpha-OSK builds on decades of HCI research, particularly:
+- **Dasher Project** (Cambridge University) - Information-theoretic text entry
+- **PPM algorithms** - Language modeling
+- **Accessibility research** - Assistive technology design
+
+See [`../PHILOSOPHY.md`](../PHILOSOPHY.md) for full references.
+
+---
+
+## 🔗 External Resources
+
+### Dasher Project
+- [Official Website](https://dasher.at)
+- [How Dasher Works](https://dasher.at/docs/concepts/how-dasher-works/)
+- [Research Publications](https://dasher.at/docs/research/publications/)
+- [Development Guide](https://dasher.at/docs/development/)
+
+### Related Projects
+- [GNOME On-Board](https://launchpad.net/onboard) - Linux on-screen keyboard
+- [Dasher GitHub](https://github.com/dasher-project/dasher) - Source code
+
+---
+
+## 📖 Document Relationships
+
+```
+PHILOSOPHY.md
+    ↓ (inspires)
+TECHNICAL_INNOVATIONS.md
+    ↓ (implements)
+src/prediction/
+    ├── ngram_predictor.py
+    ├── transformer_predictor.py
+    └── hybrid_predictor.py
+```
+
+**Philosophy → Technical Design → Implementation**
+
+---
+
+## 🚀 Implementation Status
+
+### Completed ✅
+- Core keyboard with QWERTY layout
+- Hybrid prediction (n-gram + transformer)
+- Sticky modifiers
+- Toggleable panels
+- Dark theme with animations
+
+### In Progress 🔄
+- PPM language model
+- Adaptive learning system
+- Multi-language alphabet support
+
+### Planned 📋
+- Switch scanning mode
+- AT-SPI direct input
+- Domain-specific models
+- Eye-tracking support
+
+See [`TECHNICAL_INNOVATIONS.md`](TECHNICAL_INNOVATIONS.md) for detailed roadmap.
+
+---
+
+## 💡 Contributing
+
+When adding new features or documentation:
+
+1. **Check philosophy alignment** - Does it fit our principles?
+2. **Document the "why"** - Not just the "what"
+3. **Include examples** - Code snippets, use cases
+4. **Reference research** - Stand on shoulders of giants
+5. **Think accessibility** - Will this work for all users?
+
+---
+
+## 📝 Documentation Standards
+
+### For Technical Docs
+- Include code examples
+- Explain algorithms, not just APIs
+- Show before/after comparisons
+- Provide implementation roadmaps
+
+### For Philosophy Docs
+- Use quotes from research
+- Explain principles with examples
+- Connect to real user needs
+- Reference academic sources
+
+### For All Docs
+- Write for future contributors
+- Assume reader is intelligent but unfamiliar
+- Use clear headings and structure
+- Include visual aids when helpful
+
+---
+
+## 🎓 Learning Path
+
+**New to assistive technology?**
+1. Read Dasher's ["How It Works"](https://dasher.at/docs/concepts/how-dasher-works/)
+2. Try Dasher yourself to understand the paradigm
+3. Read our [`PHILOSOPHY.md`](../PHILOSOPHY.md)
+4. Explore the codebase with context
+
+**Want to contribute code?**
+1. Understand the philosophy first
+2. Read [`TECHNICAL_INNOVATIONS.md`](TECHNICAL_INNOVATIONS.md)
+3. Pick a Phase 1 task (quick wins)
+4. Submit PR with clear documentation
+
+**Interested in research?**
+1. Review Dasher's [publications](https://dasher.at/docs/research/publications/)
+2. Identify gaps or improvements
+3. Propose experiments
+4. Document findings
+
+---
+
+## 📊 Metrics & Goals
+
+### Prediction Accuracy
+- **Current:** ~70% top-3 accuracy
+- **Target:** 85% top-3 accuracy (with PPM)
+- **Stretch:** 90% with adaptive learning
+
+### Performance
+- **Current:** <10ms n-gram prediction
+- **Target:** <50ms PPM prediction
+- **Requirement:** <100ms total latency
+
+### Accessibility
+- **Current:** Mouse/touchscreen support
+- **Target:** Switch scanning mode
+- **Stretch:** Eye-tracking integration
+
+---
+
+## 🔍 Finding Information
+
+**Looking for...**
+- **Why we do things this way?** → [`../PHILOSOPHY.md`](../PHILOSOPHY.md)
+- **How to implement feature X?** → [`TECHNICAL_INNOVATIONS.md`](TECHNICAL_INNOVATIONS.md)
+- **Quick project overview?** → [`../LLM_ONBOARDING.md`](../LLM_ONBOARDING.md)
+- **Prediction comparison?** → [`PREDICTION_OPTIONS.md`](PREDICTION_OPTIONS.md)
+- **Code architecture?** → [`../LLM_ONBOARDING.md`](../LLM_ONBOARDING.md#architecture)
+
+---
+
+## 🙏 Acknowledgments
+
+This documentation builds on:
+- **Dasher Project** - 25+ years of research and development
+- **GNOME On-Board** - Pioneering Linux accessibility
+- **The accessibility community** - Real users with real needs
+
+Special thanks to:
+- David MacKay and the Cambridge Inference Group
+- All Dasher contributors and researchers
+- The open-source accessibility community
+
+---
+
+## 📄 License
+
+All documentation is licensed under the same terms as Alpha-OSK (see main LICENSE file).
+
+When referencing Dasher research, please cite:
+> Ward, D. J., Blackwell, A. F., & MacKay, D. J. (2002). *Dasher—a data entry interface using continuous gestures and language models.* UIST '00.
+
+---
+
+*Last updated: February 2026*
+
+**Questions?** Open an issue or discussion on GitHub.

@@ -12,6 +12,23 @@ Quick reference for AI assistants working on Alpha-OSK.
 
 ---
 
+## Philosophy
+
+> *"Writing can be described as **zooming in on an alphabetical library, steering as you go**."*  
+> — Dasher Project
+
+Alpha-OSK is built on principles learned from decades of assistive technology research, particularly the [Dasher Project](https://dasher.at) from Cambridge University.
+
+**Core Principles:**
+1. **Information-efficient design** — Make probable text easier to find
+2. **Accessibility first** — Built by a wheelchair user, for real needs
+3. **Adaptive learning** — Gets better the more you use it
+4. **Transparent and open** — Free, documented, community-driven
+
+📖 **Read the full philosophy:** [`PHILOSOPHY.md`](PHILOSOPHY.md)
+
+---
+
 ## About the Owner
 
 I'm Owen — a wheelchair user with muscular dystrophy.
@@ -135,6 +152,7 @@ git add -A && git commit -m "feat: description" && git push
 
 | Project | Location | What We Borrowed |
 |---------|----------|------------------|
+| **Dasher** | `/home/owen/dev/dasher-website` | Philosophy, information-efficient design, accessibility principles |
 | GNOME On-Board | `/home/owen/dev/onboard` | Accessibility features, layout ideas |
 | Project-Nimbus | `/home/owen/dev/Project-Nimbus` | PySide6+QML architecture pattern |
 | gitconnect | `/home/owen/dev/gitconnect` | Desktop app patterns |
