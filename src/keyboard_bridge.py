@@ -61,8 +61,8 @@ class KeyboardBridge(QObject):
         else:
             _logger.warning("No key synthesis tool found (xdotool or ydotool)")
         
-        # Initialize prediction engine
-        self._predictor = HybridPredictor(enable_llm=True, parent=self)
+        # Initialize prediction engine (LLM disabled by default - overkill for keyboard)
+        self._predictor = HybridPredictor(enable_llm=False, parent=self)
         self._predictor.predictionsReady.connect(self._on_predictions_ready)
         self._predictor.predictionsRefined.connect(self._on_predictions_refined)
         self._predictor.modelLoading.connect(self.predictionLoading.emit)
@@ -146,6 +146,9 @@ class KeyboardBridge(QObject):
 
     # --- QML Slots ---
 
+    # Punctuation that should not have a space before them
+    _NO_SPACE_BEFORE = {"?", "!", ".", ",", ";", ":", "'", '"', ")", "]", "}"}
+    
     @Slot(str)
     def pressKey(self, key: str) -> None:
         """Called from QML when a character key is pressed."""
@@ -153,6 +156,13 @@ class KeyboardBridge(QObject):
             char = key.upper()
         else:
             char = key.lower()
+
+        # Handle punctuation spacing - remove preceding space
+        if char in self._NO_SPACE_BEFORE and self._context_buffer.endswith(" "):
+            # Delete the trailing space before typing punctuation
+            self._send_key("BackSpace")
+            self._context_buffer = self._context_buffer[:-1]
+            _logger.info("Removed space before '%s'", char)
 
         self._send_text(char)
         
@@ -284,6 +294,8 @@ class KeyboardBridge(QObject):
     @Slot(str)
     def pressPrediction(self, word: str) -> None:
         """Called when user taps a prediction suggestion."""
+        _logger.info("Prediction selected: %s", word)
+        
         # Complete the word: type remaining characters + space
         if self._current_word:
             # Type only the remaining part of the word
@@ -302,12 +314,23 @@ class KeyboardBridge(QObject):
             self._context_buffer = self._context_buffer[-100:]
         self._current_word = ""
         
-        # Clear current predictions and request next-word predictions
+        # IMPORTANT: Clear predictions first, then get next-word predictions
         self._predictions = []
         self.predictionsChanged.emit([])
         
-        # Request predictions for NEXT word (context ends with space)
-        self._predictor.predict_with_refinement(self._context_buffer, n=5)
+        # Get next-word predictions immediately
+        # Context should end with space to signal "predict next word, not complete current"
+        context_for_prediction = self._context_buffer
+        _logger.info("Context for next-word prediction: '%s' (ends_with_space=%s)", 
+                     context_for_prediction, context_for_prediction.endswith(" "))
+        
+        next_preds = self._predictor.predict(context_for_prediction, n=5)
+        _logger.info("Next-word predictions: %s", next_preds)
+        
+        # Update with next-word predictions
+        self._predictions = next_preds
+        self.predictionsChanged.emit(next_preds)
+        self._add_debug_log(f"Next-word after '{word}': {next_preds}")
 
     # --- Properties for QML ---
 
@@ -468,6 +491,54 @@ class KeyboardBridge(QObject):
             self._debug_log = self._debug_log[-100:]
         self.debugLogChanged.emit(self._debug_log)
     
+    # --- Accessibility Profile Management ---
+    
+    @Slot(result=list)
+    def getAccessibilityProfiles(self) -> List[str]:
+        """Get list of available accessibility profile names."""
+        return self._predictor.get_accessibility_profiles()
+    
+    @Slot(result=str)
+    def getCurrentProfile(self) -> str:
+        """Get current accessibility profile name."""
+        return self._predictor.get_current_profile()
+    
+    @Slot(str, result=bool)
+    def setAccessibilityProfile(self, profile_name: str) -> bool:
+        """
+        Set accessibility profile for fuzzy recognition.
+        
+        Profiles: precise, normal, mild_tremor, moderate_tremor, 
+                  severe_tremor, limited_mobility
+        """
+        result = self._predictor.set_accessibility_profile(profile_name)
+        if result:
+            self._add_debug_log(f"Accessibility profile: {profile_name}")
+        return result
+    
+    @Slot(str, result=str)
+    def checkAutocorrect(self, typed_word: str) -> str:
+        """
+        Check if a word should be autocorrected.
+        
+        Returns corrected word or empty string if no correction.
+        """
+        correction = self._predictor.check_autocorrect(typed_word, self._context_buffer)
+        if correction:
+            self._add_debug_log(f"Autocorrect: {typed_word} -> {correction}")
+            return correction
+        return ""
+    
+    @Slot(str, result=list)
+    def getKeyAlternatives(self, key: str) -> list:
+        """
+        Get probability distribution over intended keys.
+        
+        Returns list of [key, probability] pairs.
+        """
+        probs = self._predictor.get_key_alternatives(key)
+        return [[k, v] for k, v in sorted(probs.items(), key=lambda x: -x[1])[:5]]
+    
     # --- Prediction Properties ---
     
     def _get_predictions(self) -> List[str]:
@@ -481,6 +552,9 @@ class KeyboardBridge(QObject):
     
     def _get_prediction_count(self) -> int:
         return getattr(self, '_prediction_count', 5)
+    
+    def _get_current_profile(self) -> str:
+        return self._predictor.get_current_profile()
     
     predictions = Property(list, _get_predictions, notify=predictionsChanged)
     llmEnabled = Property(bool, _get_llm_enabled, notify=llmEnabledChanged)

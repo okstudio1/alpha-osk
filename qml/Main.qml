@@ -35,6 +35,7 @@ Window {
     property bool compactMode: false
     property bool showSettings: false
     property bool showPredictionSettings: false
+    property bool showAccessibility: false
     
     // Prediction settings
     property bool llmEnabled: keyboard ? keyboard.llmEnabled : true
@@ -51,6 +52,59 @@ Window {
     property real keyW: compactMode ? 50 : 56
     property real keyH: compactMode ? 44 : 50
     property real keySpacing: 3
+    
+    // ===== Color Theme System =====
+    property string currentTheme: "dark"  // "dark", "light", "blue", "green", "purple"
+    
+    // Theme colors (computed based on currentTheme)
+    property color themeBackground: {
+        switch(currentTheme) {
+            case "light": return "#e8e8e8"
+            case "blue": return "#1a2a3a"
+            case "green": return "#1a2a1a"
+            case "purple": return "#2a1a3a"
+            default: return "#1a1a1a"  // dark
+        }
+    }
+    property color themeKeyColor: {
+        switch(currentTheme) {
+            case "light": return "#ffffff"
+            case "blue": return "#2a4a6a"
+            case "green": return "#2a4a2a"
+            case "purple": return "#4a2a5a"
+            default: return "#3a3a3a"
+        }
+    }
+    property color themeKeyPressed: {
+        switch(currentTheme) {
+            case "light": return "#d0d0d0"
+            case "blue": return "#3a6a9a"
+            case "green": return "#3a6a3a"
+            case "purple": return "#6a3a7a"
+            default: return "#5a5a5a"
+        }
+    }
+    property color themeTextColor: {
+        switch(currentTheme) {
+            case "light": return "#1a1a1a"
+            default: return "#e0e0e0"
+        }
+    }
+    property color themeAccent: {
+        switch(currentTheme) {
+            case "light": return "#0078d4"
+            case "blue": return "#4a9eff"
+            case "green": return "#4aff4a"
+            case "purple": return "#bb66ff"
+            default: return "#4a9eff"
+        }
+    }
+    property color themeBorder: {
+        switch(currentTheme) {
+            case "light": return "#c0c0c0"
+            default: return "#505050"
+        }
+    }
 
     // Update state when bridge emits signals
     Connections {
@@ -78,9 +132,11 @@ Window {
         id: background
         anchors.fill: parent
         radius: 10
-        color: "#1a1a1a"
-        border.color: "#333333"
+        color: root.themeBackground
+        border.color: root.themeBorder
         border.width: 1
+        
+        Behavior on color { ColorAnimation { duration: 200 } }
 
         // Shadow
         Rectangle {
@@ -152,25 +208,38 @@ Window {
                 // ===== Prediction Bar =====
                 Row {
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.bottomMargin: 2
-                    spacing: 6
+                    Layout.bottomMargin: 4
+                    spacing: 8
 
                     Repeater {
                         model: root.predictions.length > 0 ? root.predictions.slice(0, 5) : []
                         delegate: Rectangle {
-                            width: Math.max(70, predText.implicitWidth + 20)
-                            height: 28
-                            radius: 5
-                            color: predMouse.containsMouse ? "#3a3a3a" : "#252525"
-                            border.color: "#4a9eff"
-                            border.width: 1
+                            width: Math.max(80, predText.implicitWidth + 28)
+                            height: 36
+                            radius: 8
+                            color: predMouse.containsMouse ? "#3d4d5d" : "#2a3a4a"
+                            border.color: predMouse.containsMouse ? "#6ab4ff" : "#4a9eff"
+                            border.width: predMouse.containsMouse ? 2 : 1
+                            
+                            // Subtle gradient for depth
+                            Rectangle {
+                                anchors.fill: parent
+                                anchors.margins: 1
+                                radius: parent.radius - 1
+                                gradient: Gradient {
+                                    GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.08) }
+                                    GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.05) }
+                                }
+                            }
 
                             Text {
                                 id: predText
                                 anchors.centerIn: parent
                                 text: modelData
-                                color: "#e0e0e0"
-                                font.pixelSize: 12
+                                color: predMouse.containsMouse ? "#ffffff" : "#f0f0f0"
+                                font.pixelSize: 15
+                                font.weight: Font.Medium
+                                font.family: "Ubuntu, Noto Sans, sans-serif"
                             }
 
                             MouseArea {
@@ -180,6 +249,10 @@ Window {
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: keyboard.pressPrediction(modelData)
                             }
+                            
+                            // Smooth hover animation
+                            Behavior on color { ColorAnimation { duration: 100 } }
+                            Behavior on border.color { ColorAnimation { duration: 100 } }
                         }
                     }
                     
@@ -208,6 +281,29 @@ Window {
                                     background.refreshPredictionStats()
                                 }
                             }
+                        }
+                    }
+
+                    // Accessibility settings button
+                    Rectangle {
+                        width: 28
+                        height: 28
+                        radius: 5
+                        color: accessMouse.containsMouse ? "#3a3a3a" : "#252525"
+                        border.color: root.showAccessibility ? "#5a8a5a" : "#444"
+                        
+                        Text {
+                            anchors.centerIn: parent
+                            text: "♿"
+                            color: root.showAccessibility ? "#5a8a5a" : "#888"
+                            font.pixelSize: 14
+                        }
+                        
+                        MouseArea {
+                            id: accessMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: root.showAccessibility = !root.showAccessibility
                         }
                     }
 
@@ -666,12 +762,14 @@ Window {
             showNavigation: root.showNavigation
             showNumpad: root.showNumpad
             compactMode: root.compactMode
+            currentTheme: root.currentTheme
             
             onSettingChanged: function(setting, value) {
                 if (setting === "functionRow") root.showFunctionRow = value
                 else if (setting === "navigation") root.showNavigation = value
                 else if (setting === "numpad") root.showNumpad = value
                 else if (setting === "compact") root.compactMode = value
+                else if (setting === "theme") root.currentTheme = value
             }
             
             onCloseRequested: root.showSettings = false
@@ -723,6 +821,21 @@ Window {
             }
             
             onCloseRequested: root.showPredictionSettings = false
+        }
+        
+        // Accessibility Panel (overlay)
+        Comp.AccessibilityPanel {
+            id: accessibilityPanel
+            visible: root.showAccessibility
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
+            anchors.margins: 8
+            
+            onProfileChanged: function(profileName) {
+                console.log("Accessibility profile changed to:", profileName)
+            }
+            
+            onCloseRequested: root.showAccessibility = false
         }
         
         // Debug Panel

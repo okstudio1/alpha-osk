@@ -77,18 +77,25 @@ class NgramPredictor:
         Returns:
             List of predicted words, most likely first
         """
-        context = context.lower().strip()
-        if not context:
+        # IMPORTANT: Check for trailing space BEFORE stripping
+        # Trailing space = user finished word, predict NEXT word
+        # No trailing space = user typing, complete CURRENT word
+        ends_with_space = context.endswith(" ")
+        
+        context_clean = context.lower().strip()
+        if not context_clean:
             return self._top_unigrams(n)
         
         # Split into words
-        words = self._tokenize(context)
+        words = self._tokenize(context_clean)
         
-        # Check if user is mid-word (no trailing space)
+        # Check if user is mid-word (no trailing space in original)
         partial_word = ""
-        if context and not context.endswith(" "):
-            partial_word = words[-1] if words else ""
+        if not ends_with_space and words:
+            # User is typing a partial word - complete it
+            partial_word = words[-1]
             words = words[:-1]
+        # else: User finished word (space at end) - predict next word
         
         # Get candidates
         candidates: Dict[str, float] = {}

@@ -47,20 +47,26 @@ alpha-osk/
 ├── run.py                 # Smart launcher (venv + deps + launch)
 ├── src/
 │   ├── keyboard_app.py    # QML engine setup, window flags
-│   ├── keyboard_bridge.py # Python↔QML bridge (key synthesis, modifiers)
+│   ├── keyboard_bridge.py # Python↔QML bridge (key synthesis, modifiers, predictions)
 │   └── prediction/
-│       ├── ngram_predictor.py      # Fast n-gram predictions (<10ms)
-│       ├── transformer_predictor.py # LLM re-ranking (DistilGPT-2)
-│       └── hybrid_predictor.py     # Combines both, emits Qt signals
+│       ├── ngram_predictor.py       # Word-level frequency prediction (<10ms)
+│       ├── ppm_predictor.py         # Character-level PPM (Dasher algorithm)
+│       ├── fuzzy_recognizer.py      # Spatial error correction + 6 accessibility profiles
+│       ├── transformer_predictor.py # Optional LLM re-ranking (disabled by default)
+│       └── hybrid_predictor.py      # Orchestrates all predictors, emits Qt signals
 ├── qml/
 │   ├── Main.qml           # Main keyboard window (modular layout)
 │   └── components/
-│       ├── KeyButton.qml      # Reusable key with animations
-│       ├── NavigationPanel.qml # Insert/Delete/Home/End/PgUp/PgDn/Arrows
-│       ├── NumpadPanel.qml    # Number pad
-│       ├── FunctionRow.qml    # F1-F12 keys
-│       ├── SettingsPanel.qml  # Toggle panels
-│       └── SettingsToggle.qml # Toggle switch component
+│       ├── KeyButton.qml         # Reusable key with animations
+│       ├── AccessibilityPanel.qml # Motor control profile selector (♿)
+│       ├── NavigationPanel.qml   # Insert/Delete/Home/End/PgUp/PgDn/Arrows
+│       ├── NumpadPanel.qml       # Number pad
+│       ├── FunctionRow.qml       # F1-F12 keys
+│       ├── SettingsPanel.qml     # Toggle panels
+│       └── PredictionSettingsPanel.qml # Prediction engine settings
+├── data/
+│   ├── base_dictionary.txt  # Common English words
+│   └── training_corpus.txt  # Pre-loaded phrases for PPM training
 └── templates/             # Project dashboard (HTML)
 ```
 
@@ -71,8 +77,30 @@ alpha-osk/
 - **Language:** Python 3.9+
 - **UI Framework:** PySide6 + QML6 (Qt Quick)
 - **Key Synthesis:** xdotool (X11) / ydotool (Wayland)
-- **Prediction:** Hybrid n-gram + transformer (DistilGPT-2)
-- **Dashboard:** HTML served via Python http.server
+- **Prediction:** Hybrid engine (n-gram + PPM + fuzzy recognition)
+- **No AI/LLM required** — Transformer disabled by default (can re-enable if desired)
+
+### Prediction Architecture
+
+```
+User types key → Fuzzy Recognition (spatial correction)
+                      ↓
+              ┌───────┴───────┐
+              ↓               ↓
+           N-gram           PPM
+         (word freq)    (char context)
+              ↓               ↓
+              └───────┬───────┘
+                      ↓
+              Weighted Merge
+                      ↓
+              Final Predictions
+```
+
+**Why no AI?** N-gram + PPM + Fuzzy provides excellent predictions without:
+- 300MB model download
+- 10-second startup delay
+- GPU/memory overhead
 
 ---
 
@@ -82,7 +110,10 @@ alpha-osk/
 |------|---------|
 | `run.py` | Launcher — creates venv, installs deps, runs keyboard |
 | `src/keyboard_bridge.py` | Python↔QML bridge — modifiers, key synthesis, predictions |
-| `src/prediction/hybrid_predictor.py` | Prediction engine combining n-gram + LLM |
+| `src/prediction/hybrid_predictor.py` | Orchestrates all predictors, Qt signals |
+| `src/prediction/ppm_predictor.py` | Character-level PPM (Dasher algorithm) |
+| `src/prediction/fuzzy_recognizer.py` | Spatial error correction + accessibility profiles |
+| `qml/components/AccessibilityPanel.qml` | Motor control profile selector UI |
 | `qml/Main.qml` | Main UI — modular with toggleable panels |
 | `docs/PREDICTION_OPTIONS.md` | Comparison of prediction approaches |
 
@@ -95,11 +126,18 @@ alpha-osk/
 - ✅ Toggleable panels: Function row, Navigation, Numpad
 - ✅ Settings panel with layout toggles
 - ✅ Compact mode option
-- ✅ Hybrid prediction (n-gram instant + LLM refined)
-- ✅ Next-word prediction after selecting a word
-- ✅ Key hold/repeat for continuous typing
+- ✅ **Hybrid prediction** (n-gram + PPM + fuzzy recognition)
+- ✅ **PPM Language Model** — Character-level prediction (Dasher algorithm)
+- ✅ **Fuzzy/Spatial Recognition** — Corrects mistypes based on key proximity
+- ✅ **6 Accessibility Profiles** — Precise, Normal, Mild/Moderate/Severe Tremor, Limited Mobility
+- ✅ **Next-word prediction** — After selecting a word, suggests likely follow-ups
+- ✅ **Training corpus** — Pre-loaded common phrases for better predictions
+- ✅ Key hold/repeat for continuous typing (including backspace)
 - ✅ Draggable window, stays on top, doesn't steal focus
-- ✅ Dark theme with press animations
+- ✅ **5 Color Themes** — Dark, Light, Blue, Green, Purple (⚙ Settings)
+- ✅ **Smart punctuation** — Removes space before ? ! . , ; :
+- ✅ Accessibility settings panel (♿ button)
+- ✅ Modern prediction bar with improved readability
 
 ---
 
@@ -123,11 +161,10 @@ The keyboard has toggleable sections (via Settings ⚙ button):
 sudo apt install xdotool
 
 # Run the keyboard (auto-creates venv, installs PySide6)
-python run.py
-
-# Optional: Install LLM for better predictions
-./venv/bin/pip install transformers torch
+python3 run.py
 ```
+
+That's it! No AI/LLM download required. Predictions work out of the box with n-gram + PPM + fuzzy recognition.
 
 ---
 

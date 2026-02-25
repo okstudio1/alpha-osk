@@ -9,8 +9,9 @@ Item {
     property bool showNavigation: false
     property bool showNumpad: false
     property bool compactMode: false
+    property string currentTheme: "dark"
     
-    signal settingChanged(string setting, bool value)
+    signal settingChanged(string setting, var value)
     signal closeRequested()
     
     implicitWidth: 200
@@ -116,6 +117,59 @@ Item {
                 text: "Compact Mode"
                 checked: settingsPanel.compactMode
                 onToggled: function(checked) { settingsPanel.settingChanged("compact", checked) }
+            }
+            
+            Rectangle {
+                Layout.fillWidth: true
+                height: 1
+                color: "#444444"
+            }
+            
+            // Theme options
+            Text {
+                text: "Color Theme"
+                color: "#888888"
+                font.pixelSize: 11
+            }
+            
+            // Theme selector row
+            Row {
+                Layout.fillWidth: true
+                spacing: 6
+                
+                Repeater {
+                    model: [
+                        { name: "dark", color: "#1a1a1a", border: "#4a9eff" },
+                        { name: "light", color: "#e8e8e8", border: "#0078d4" },
+                        { name: "blue", color: "#1a2a3a", border: "#4a9eff" },
+                        { name: "green", color: "#1a2a1a", border: "#4aff4a" },
+                        { name: "purple", color: "#2a1a3a", border: "#bb66ff" }
+                    ]
+                    
+                    Rectangle {
+                        width: 28
+                        height: 28
+                        radius: 6
+                        color: modelData.color
+                        border.color: settingsPanel.currentTheme === modelData.name ? modelData.border : "#555"
+                        border.width: settingsPanel.currentTheme === modelData.name ? 2 : 1
+                        
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: settingsPanel.settingChanged("theme", modelData.name)
+                        }
+                        
+                        // Checkmark for selected theme
+                        Text {
+                            anchors.centerIn: parent
+                            text: settingsPanel.currentTheme === modelData.name ? "✓" : ""
+                            color: modelData.name === "light" ? "#333" : "#fff"
+                            font.pixelSize: 12
+                            font.bold: true
+                        }
+                    }
+                }
             }
             
             Item { Layout.fillHeight: true }

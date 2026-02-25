@@ -105,12 +105,14 @@ See [`../PHILOSOPHY.md`](../PHILOSOPHY.md) for full references.
 ```
 PHILOSOPHY.md
     ↓ (inspires)
-TECHNICAL_INNOVATIONS.md
+TECHNICAL_INNOVATIONS.md + MOBILE_KEYBOARD_INNOVATIONS.md
     ↓ (implements)
 src/prediction/
-    ├── ngram_predictor.py
-    ├── transformer_predictor.py
-    └── hybrid_predictor.py
+    ├── ngram_predictor.py      # Word-level frequency prediction
+    ├── ppm_predictor.py        # Character-level PPM (Dasher algorithm)
+    ├── fuzzy_recognizer.py     # Spatial error correction + accessibility profiles
+    ├── transformer_predictor.py # Optional LLM re-ranking (disabled by default)
+    └── hybrid_predictor.py     # Orchestrates all predictors
 ```
 
 **Philosophy → Technical Design → Implementation**
@@ -121,21 +123,45 @@ src/prediction/
 
 ### Completed ✅
 - Core keyboard with QWERTY layout
-- Hybrid prediction (n-gram + transformer)
-- Sticky modifiers
-- Toggleable panels
-- Dark theme with animations
+- Hybrid prediction engine (n-gram + PPM + fuzzy)
+- **PPM Language Model** - Character-level prediction (Dasher algorithm)
+- **Fuzzy/Spatial Recognition** - Motor challenge support
+- **6 Accessibility Profiles** - Precise, Normal, Mild/Moderate/Severe Tremor, Limited Mobility
+- **Next-word Prediction** - Suggests words after clicking a prediction
+- **Training Corpus** - Pre-loaded with common phrases
+- **5 Color Themes** - Dark, Light, Blue, Green, Purple
+- **Smart Punctuation** - Auto-removes space before ? ! . , ; :
+- **Key Repeat** - Hold backspace/delete to repeat
+- Sticky modifiers (Shift, Ctrl, Alt, Win)
+- Toggleable panels (Function keys, Navigation, Numpad)
+- Accessibility settings panel (♿ button)
+- Modern prediction bar with improved readability
 
-### In Progress 🔄
-- PPM language model
-- Adaptive learning system
-- Multi-language alphabet support
+### Architecture Decision: No Transformer/LLM ✂️
+We **removed** the transformer model (DistilGPT-2) from the default configuration:
+- **Reason:** Overkill for a keyboard - adds 300MB download + startup delay
+- **Alternative:** N-gram + PPM + Fuzzy provides excellent predictions without AI overhead
+- **Option:** Can be re-enabled via settings if desired
+
+### Current State: Prediction Quality 🔧
+The prediction system is functional but still learning:
+- **Next-word prediction works** - Suggests words after clicking a prediction
+- **Training corpus is small** - Only 5,859 characters (needs expansion)
+- **N-gram dominates** - Word-level predictions weighted 3x over character-level
+- **PPM is learning** - Character-level model adapts as you type
+- **Improving with use** - System learns from your selections
+
+**To improve predictions:**
+1. Use the keyboard regularly - it learns from your typing
+2. Import text files via Prediction Settings (⚡ button)
+3. Expand `data/training_corpus.txt` with domain-specific text
 
 ### Planned 📋
 - Switch scanning mode
-- AT-SPI direct input
-- Domain-specific models
-- Eye-tracking support
+- AT-SPI direct input (bypass xdotool)
+- Multi-language alphabet support
+- Eye-tracking integration
+- Gesture typing (swipe)
 
 See [`TECHNICAL_INNOVATIONS.md`](TECHNICAL_INNOVATIONS.md) for detailed roadmap.
 

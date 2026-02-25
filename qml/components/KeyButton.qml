@@ -101,7 +101,9 @@ Item {
         
         onPressed: {
             keyRoot.keyPressed()
-            if (keyRoot.enableRepeat && !keyRoot.isSpecial) {
+            // Enable repeat based on enableRepeat property (not isSpecial)
+            // Backspace, Delete, Arrow keys should repeat
+            if (keyRoot.enableRepeat) {
                 repeatTimer.interval = keyRoot.repeatDelay
                 repeatTimer.repeat = false
                 repeatTimer.start()

@@ -15,28 +15,37 @@ from __future__ import annotations
 import logging
 import threading
 from pathlib import Path
-from typing import List, Optional, Callable
+from typing import Dict, List, Optional, Callable
 
 from PySide6.QtCore import QObject, Signal
 
 from .ngram_predictor import NgramPredictor
 from .transformer_predictor import TransformerPredictor
+from .ppm_predictor import PPMPredictor, PPMWordPredictor
+from .fuzzy_recognizer import FuzzyRecognizer, AccessibilityProfile, PROFILES
 
 _logger = logging.getLogger("HybridPredictor")
 
 
 class HybridPredictor(QObject):
     """
-    Hybrid prediction engine combining n-gram speed with LLM accuracy.
+    Hybrid prediction engine combining multiple approaches:
+    
+    1. N-gram: Instant word-level predictions (<10ms)
+    2. PPM: Character-level context modeling (Dasher algorithm)
+    3. Fuzzy: Spatial error correction for motor challenges
+    4. Transformer: LLM re-ranking for accuracy (~100ms)
     
     Emits Qt signals for integration with QML UI.
     """
 
     # Signals for QML integration
-    predictionsReady = Signal(list)      # Instant n-gram predictions
+    predictionsReady = Signal(list)      # Instant predictions
     predictionsRefined = Signal(list)    # LLM-refined predictions
     modelLoading = Signal(bool)          # True when LLM is loading
     llmAvailableChanged = Signal(bool)   # LLM availability changed
+    profileChanged = Signal(str)         # Accessibility profile changed
+    autocorrectSuggested = Signal(str, str)  # (typed, correction)
 
     def __init__(
         self,
@@ -67,6 +76,24 @@ class HybridPredictor(QObject):
         # Load base dictionary for better initial predictions
         self._ngram.load_base_dictionary()
         _logger.info("N-gram predictor initialized")
+        
+        # Initialize PPM predictor (character-level, Dasher algorithm)
+        ppm_path = self._model_dir / "ppm_model.json"
+        self._ppm = PPMPredictor(model_path=ppm_path if ppm_path.exists() else None)
+        self._ppm_word = PPMWordPredictor(ppm=self._ppm)
+        self._enable_ppm = True
+        _logger.info("PPM predictor initialized")
+        
+        # Initialize fuzzy recognizer (spatial error correction)
+        self._fuzzy = FuzzyRecognizer()
+        self._fuzzy.load_dictionary(
+            Path(__file__).parent.parent.parent / "data" / "base_dictionary.txt"
+        )
+        _logger.info("Fuzzy recognizer initialized with profile: %s", 
+                     self._fuzzy.get_current_profile().name)
+        
+        # Load training corpus for better predictions
+        self._load_training_corpus()
         
         # Initialize transformer predictor (lazy loaded)
         self._enable_llm = enable_llm
@@ -105,7 +132,7 @@ class HybridPredictor(QObject):
 
     def predict(self, context: str, n: int = 5) -> List[str]:
         """
-        Get instant predictions (n-gram only, synchronous).
+        Get instant predictions combining n-gram, PPM, and fuzzy.
         
         Args:
             context: Text typed so far
@@ -115,8 +142,83 @@ class HybridPredictor(QObject):
             List of predicted words
         """
         self._current_context = context
-        predictions = self._ngram.predict(context, n)
+        
+        # Get predictions from multiple sources
+        ngram_preds = self._ngram.predict(context, n)
+        
+        # Add PPM predictions if enabled
+        ppm_preds = []
+        if self._enable_ppm:
+            ppm_preds = self._ppm_word.predict(context, n)
+        
+        # Add fuzzy candidates for current word
+        fuzzy_preds = []
+        fuzzy_candidates = self._fuzzy.get_fuzzy_predictions(context, n)
+        fuzzy_preds = [word for word, _ in fuzzy_candidates]
+        
+        # Merge predictions with weighted scoring
+        predictions = self._merge_predictions(
+            ngram_preds, ppm_preds, fuzzy_preds, n
+        )
+        
         return predictions
+    
+    def _merge_predictions(
+        self,
+        ngram: List[str],
+        ppm: List[str],
+        fuzzy: List[str],
+        n: int
+    ) -> List[str]:
+        """
+        Merge predictions from multiple sources with weighted scoring.
+        
+        For next-word prediction (context ends with space), heavily favor
+        n-gram word predictions over PPM character fragments.
+        """
+        scores: Dict[str, float] = {}
+        
+        # Check if we're predicting next word (context ends with space)
+        is_next_word = self._current_context.endswith(" ")
+        
+        # N-gram predictions (weight: 3.0 for next-word, 1.0 for completion)
+        ngram_weight = 3.0 if is_next_word else 1.0
+        for i, word in enumerate(ngram):
+            # Filter out fragments in next-word mode
+            if is_next_word and len(word) <= 2:
+                continue
+            score = ngram_weight / (i + 1)
+            scores[word] = scores.get(word, 0) + score
+        
+        # PPM predictions (weight: 0.3 for next-word, 0.8 for completion)
+        # PPM is better for completing partial words, not predicting next words
+        ppm_weight = 0.3 if is_next_word else 0.8
+        for i, word in enumerate(ppm):
+            # Filter out single-char fragments in next-word mode
+            if is_next_word and len(word) <= 2:
+                continue
+            score = ppm_weight / (i + 1)
+            scores[word] = scores.get(word, 0) + score
+        
+        # Fuzzy predictions (weight based on profile)
+        fuzzy_weight = self._fuzzy.profile.prediction_weight
+        for i, word in enumerate(fuzzy):
+            score = fuzzy_weight / (i + 1)
+            scores[word] = scores.get(word, 0) + score
+        
+        # Sort by combined score
+        sorted_words = sorted(scores.items(), key=lambda x: -x[1])
+        
+        # Return top n, filtering out any remaining fragments
+        results = []
+        for word, _ in sorted_words:
+            if is_next_word and len(word) <= 2:
+                continue  # Skip fragments in next-word mode
+            results.append(word)
+            if len(results) >= n:
+                break
+        
+        return results
 
     def predict_with_refinement(self, context: str, n: int = 5) -> List[str]:
         """
@@ -130,12 +232,12 @@ class HybridPredictor(QObject):
             n: Number of predictions
             
         Returns:
-            Instant n-gram predictions
+            Instant hybrid predictions (n-gram + PPM + fuzzy)
         """
         self._current_context = context
         
-        # Get instant n-gram predictions
-        predictions = self._ngram.predict(context, n)
+        # Get instant hybrid predictions (n-gram + PPM + fuzzy)
+        predictions = self.predict(context, n)
         self.predictionsReady.emit(predictions)
         
         # Trigger async LLM refinement if available
@@ -169,6 +271,11 @@ class HybridPredictor(QObject):
             text: Text to learn from
         """
         self._ngram.learn(text)
+        
+        # Also train PPM model
+        if self._enable_ppm:
+            self._ppm.learn_text(text)
+            self._ppm_word.learn(text)
 
     def learn_word(self, word: str) -> None:
         """Learn a single word (e.g., when user types it)."""
@@ -192,10 +299,40 @@ class HybridPredictor(QObject):
         self._ngram.learn(full_text)
 
     def save(self) -> None:
-        """Save the model to disk."""
+        """Save all models to disk."""
         ngram_path = self._model_dir / "ngram_model.json"
         self._ngram.save(ngram_path)
-        _logger.info("Model saved")
+        
+        # Save PPM model
+        if self._enable_ppm:
+            ppm_path = self._model_dir / "ppm_model.json"
+            self._ppm.save(ppm_path)
+        
+        _logger.info("Models saved")
+
+    def _load_training_corpus(self) -> None:
+        """Load default training corpus for better predictions."""
+        corpus_path = Path(__file__).parent.parent.parent / "data" / "training_corpus.txt"
+        
+        if not corpus_path.exists():
+            _logger.info("No training corpus found at %s", corpus_path)
+            return
+        
+        try:
+            text = corpus_path.read_text(encoding="utf-8", errors="ignore")
+            # Filter out comments
+            lines = [line for line in text.split('\n') 
+                     if line.strip() and not line.startswith('#')]
+            clean_text = '\n'.join(lines)
+            
+            # Train both n-gram and PPM
+            self._ngram.load_corpus(clean_text)
+            if self._enable_ppm:
+                self._ppm.train(clean_text)
+            
+            _logger.info("Training corpus loaded: %d characters", len(clean_text))
+        except Exception as e:
+            _logger.error("Failed to load training corpus: %s", e)
 
     def load_corpus(self, corpus_path: Path) -> None:
         """
@@ -210,6 +347,11 @@ class HybridPredictor(QObject):
         
         text = corpus_path.read_text(encoding="utf-8", errors="ignore")
         self._ngram.load_corpus(text)
+        
+        # Also train PPM
+        if self._enable_ppm:
+            self._ppm.train(text)
+        
         self.save()
 
     @property
@@ -234,7 +376,91 @@ class HybridPredictor(QObject):
         stats = self._ngram.get_stats()
         stats["llm_enabled"] = self._enable_llm
         stats["llm_available"] = self._llm_available
+        stats["ppm_enabled"] = self._enable_ppm
+        stats["ppm"] = self._ppm.get_stats()
+        stats["fuzzy"] = self._fuzzy.get_stats()
         return stats
+    
+    # --- Accessibility Profile Management ---
+    
+    def set_accessibility_profile(self, profile_name: str) -> bool:
+        """
+        Set accessibility profile for fuzzy recognition.
+        
+        Args:
+            profile_name: Name of profile (e.g., "normal", "mild_tremor")
+            
+        Returns:
+            True if profile found and set
+        """
+        if self._fuzzy.set_profile(profile_name):
+            self.profileChanged.emit(profile_name)
+            return True
+        return False
+    
+    def get_accessibility_profiles(self) -> List[str]:
+        """Get list of available accessibility profile names."""
+        return self._fuzzy.get_profile_names()
+    
+    def get_current_profile(self) -> str:
+        """Get current accessibility profile name."""
+        return self._fuzzy.get_current_profile().name.lower().replace(" ", "_")
+    
+    # --- PPM Control ---
+    
+    @property
+    def enable_ppm(self) -> bool:
+        """Check if PPM is enabled."""
+        return self._enable_ppm
+    
+    @enable_ppm.setter
+    def enable_ppm(self, value: bool) -> None:
+        """Enable/disable PPM predictions."""
+        self._enable_ppm = value
+    
+    def load_ppm_training_text(self, path: Path) -> bool:
+        """
+        Load training text for PPM model.
+        
+        Args:
+            path: Path to text file
+            
+        Returns:
+            True if loaded successfully
+        """
+        return self._ppm.load_training_text(path)
+    
+    # --- Fuzzy Recognition ---
+    
+    def check_autocorrect(self, typed_word: str, context: str = "") -> Optional[str]:
+        """
+        Check if a word should be autocorrected.
+        
+        Args:
+            typed_word: Word as typed
+            context: Previous context
+            
+        Returns:
+            Corrected word if should autocorrect, None otherwise
+        """
+        correction = self._fuzzy.should_autocorrect(typed_word, context)
+        if correction:
+            self.autocorrectSuggested.emit(typed_word, correction)
+        return correction
+    
+    def get_key_alternatives(self, key: str) -> Dict[str, float]:
+        """
+        Get probability distribution over intended keys.
+        
+        Useful for debugging or advanced UI feedback.
+        
+        Args:
+            key: Pressed key
+            
+        Returns:
+            Dict mapping key -> probability
+        """
+        return self._fuzzy.get_key_alternatives(key)
 
     def clear_user_data(self) -> None:
         """Clear user-learned vocabulary."""

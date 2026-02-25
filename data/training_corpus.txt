@@ -1,0 +1,327 @@
+# Alpha-OSK Training Corpus
+# Common English phrases and sentences for PPM model training
+# This corpus helps the keyboard predict natural language patterns
+
+# Greetings and Common Phrases
+hello how are you doing today
+hi there how is everything going
+good morning how did you sleep
+good afternoon hope you are having a nice day
+good evening how was your day
+hey what is up
+nice to meet you
+it was nice talking to you
+have a great day
+see you later
+take care
+goodbye for now
+thanks so much for your help
+thank you very much
+you are welcome
+no problem at all
+sorry about that
+excuse me
+please and thank you
+
+# Questions
+how are you
+what are you doing
+where are you going
+when will you be back
+why did that happen
+who is there
+what time is it
+can you help me
+would you like to
+do you want to
+are you sure
+is everything okay
+what do you think
+how does that work
+where is the
+when is the meeting
+why is that important
+who can help me with this
+
+# Common Responses
+I am doing well thank you
+I am fine thanks for asking
+that sounds great
+I think so too
+I agree with you
+I understand what you mean
+that makes sense
+I will do that
+I can help you
+let me know if you need anything
+I will get back to you
+I am not sure about that
+I need to think about it
+I will check on that
+sounds good to me
+that works for me
+I appreciate your help
+no worries at all
+
+# Daily Activities
+I am going to work
+I am working from home today
+I need to go to the store
+I am making dinner
+I am eating lunch
+I am taking a break
+I am going to bed
+I just woke up
+I am getting ready
+I am on my way
+I will be there soon
+I am running late
+I am almost done
+I finished the task
+I need to call someone
+I am sending an email
+I am in a meeting
+I have an appointment
+
+# Technology and Computing
+I am using my computer
+I need to restart my laptop
+the internet is not working
+can you check the wifi
+I am downloading a file
+I am uploading a document
+the software needs an update
+I am installing a program
+the application crashed
+I need to save my work
+I am backing up my files
+I need technical support
+the system is slow today
+I am logging in now
+I forgot my password
+I need to change my settings
+the screen is frozen
+I am running a program
+
+# Accessibility and Assistance
+I need some help please
+can you assist me with this
+I am having trouble with
+this is difficult for me
+can you repeat that
+can you speak slower
+I did not understand that
+can you show me how
+I need more time
+please be patient with me
+I appreciate your understanding
+thank you for your patience
+I am doing my best
+this is very helpful
+you are making a difference
+
+# Work and Professional
+I am in a meeting right now
+I have a deadline tomorrow
+I need to finish this project
+the report is due today
+I am working on the presentation
+I sent you an email about this
+please review the document
+I have a question about
+can we schedule a call
+I will follow up on that
+the meeting is at three
+I am available this afternoon
+let me check my calendar
+I will send you the details
+please confirm the appointment
+I need your approval on this
+the project is on track
+we are making good progress
+
+# Social and Casual
+how was your weekend
+what did you do yesterday
+are you free this weekend
+do you want to hang out
+let us get together soon
+I had a great time
+it was so much fun
+I really enjoyed that
+we should do this again
+I am looking forward to it
+that sounds like fun
+I would love to join
+count me in
+I cannot make it today
+maybe next time
+I will let you know
+sounds like a plan
+I am excited about this
+
+# Health and Wellbeing
+I am feeling well today
+I am a bit tired
+I need to rest
+I am taking my medicine
+I have a doctor appointment
+I am feeling better now
+I need to take it easy
+I am staying hydrated
+I went for a walk
+I am trying to stay active
+I am feeling under the weather
+I hope you feel better soon
+take care of yourself
+get some rest
+stay healthy
+
+# Family and Relationships
+my family is doing well
+I am spending time with my kids
+my parents are visiting
+I talked to my sister today
+my brother helped me out
+I am going to see my friends
+I miss my family
+we had a family dinner
+I am proud of my kids
+my spouse is wonderful
+I love my family
+we are very close
+I appreciate my loved ones
+
+# Emotions and Feelings
+I am happy today
+I am feeling grateful
+I am excited about this
+I am a little nervous
+I am worried about something
+I am feeling confident
+I am proud of myself
+I am hopeful for the future
+I am feeling peaceful
+I am content with life
+I am feeling motivated
+I am inspired by you
+I am thankful for everything
+I am blessed to have you
+
+# Planning and Future
+I am planning to do that
+I will work on it tomorrow
+I am going to try that
+I hope to see you soon
+I am looking forward to the weekend
+I plan to finish this week
+I am saving up for something
+I am setting goals for myself
+I want to achieve more
+I am making progress every day
+the future looks bright
+I am optimistic about things
+I believe in myself
+I can do this
+
+# Common Sentence Starters
+I think that
+I believe that
+I hope that
+I know that
+I feel that
+I want to
+I need to
+I have to
+I should
+I would like to
+I am going to
+I will be
+I was just
+I have been
+I am trying to
+I am learning to
+I am working on
+I am waiting for
+
+# Conversational Fillers
+you know what I mean
+by the way
+speaking of which
+on the other hand
+in other words
+for example
+in my opinion
+as far as I know
+to be honest
+actually
+basically
+essentially
+generally speaking
+more or less
+sort of
+kind of
+I suppose
+I guess
+
+# Polite Expressions
+would you mind
+if you do not mind
+I would appreciate it if
+could you please
+may I ask
+I was wondering if
+would it be possible
+I hate to bother you but
+I do not mean to interrupt
+excuse me for asking
+I hope this is not too much trouble
+thank you for understanding
+I am sorry to hear that
+my apologies for any inconvenience
+please let me know
+feel free to reach out
+do not hesitate to ask
+
+# Time Related
+right now
+at the moment
+currently
+today
+tomorrow
+yesterday
+this morning
+this afternoon
+this evening
+tonight
+next week
+last week
+this month
+next month
+soon
+later
+eventually
+in a while
+in a moment
+just a minute
+one second
+
+# Agreement and Disagreement
+I agree
+I disagree
+that is correct
+that is not right
+you are right
+I think you are wrong
+I see your point
+I understand but
+I respectfully disagree
+we are on the same page
+I could not agree more
+that is exactly right
+not quite
+almost
+close enough
+fair enough
+good point
+I had not thought of that
