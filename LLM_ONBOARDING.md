@@ -55,15 +55,16 @@ alpha-osk/
 │       ├── transformer_predictor.py # Optional LLM re-ranking (disabled by default)
 │       └── hybrid_predictor.py      # Orchestrates all predictors, emits Qt signals
 ├── qml/
-│   ├── Main.qml           # Main keyboard window (modular layout)
+│   ├── Main.qml           # Main keyboard window (title bar, resize handles)
 │   └── components/
-│       ├── KeyButton.qml         # Reusable key with animations
-│       ├── AccessibilityPanel.qml # Motor control profile selector (♿)
-│       ├── NavigationPanel.qml   # Insert/Delete/Home/End/PgUp/PgDn/Arrows
-│       ├── NumpadPanel.qml       # Number pad
-│       ├── FunctionRow.qml       # F1-F12 keys
-│       ├── SettingsPanel.qml     # Toggle panels
-│       └── PredictionSettingsPanel.qml # Prediction engine settings
+│       ├── KeyButton.qml           # Reusable key with animations
+│       ├── UnifiedSettingsPanel.qml # All settings in one scrollable panel
+│       ├── SettingsSection.qml     # Section container for settings
+│       ├── SettingsToggle.qml      # Toggle switch component
+│       ├── NavigationPanel.qml     # Insert/Delete/Home/End/PgUp/PgDn/Arrows
+│       ├── NumpadPanel.qml         # Number pad
+│       ├── FunctionRow.qml         # F1-F12 keys
+│       └── DebugPanel.qml          # Prediction debugging
 ├── data/
 │   ├── base_dictionary.txt  # Common English words
 │   └── training_corpus.txt  # Pre-loaded phrases for PPM training
@@ -121,23 +122,33 @@ User types key → Fuzzy Recognition (spatial correction)
 
 ## Current Features
 
+### UI & Window
+- ✅ **Title bar** with drag handle, minimize, close buttons
+- ✅ **Resizable window** — Drag bottom/right edges or corner grip
+- ✅ **Unified settings panel** — All settings in one scrollable menu (⚙ button)
+- ✅ **5 Color Themes** — Dark, Light, Blue, Green, Purple
+- ✅ Draggable window, stays on top, doesn't steal focus
+- ✅ Modern prediction bar with improved readability
+
+### Keyboard Layout
 - ✅ Full QWERTY layout with all symbols
 - ✅ Modifiers: Shift, Caps, Ctrl, Alt, Win/Super (sticky)
-- ✅ Toggleable panels: Function row, Navigation, Numpad
-- ✅ Settings panel with layout toggles
+- ✅ **Keyboard shortcuts** — Ctrl+C, Ctrl+V, Ctrl+Z, etc. work correctly
+- ✅ Toggleable panels: Function row, Navigation (arrows), Numpad
 - ✅ Compact mode option
+- ✅ Key hold/repeat for continuous typing (including backspace)
+
+### Prediction
 - ✅ **Hybrid prediction** (n-gram + PPM + fuzzy recognition)
 - ✅ **PPM Language Model** — Character-level prediction (Dasher algorithm)
 - ✅ **Fuzzy/Spatial Recognition** — Corrects mistypes based on key proximity
-- ✅ **6 Accessibility Profiles** — Precise, Normal, Mild/Moderate/Severe Tremor, Limited Mobility
 - ✅ **Next-word prediction** — After selecting a word, suggests likely follow-ups
 - ✅ **Training corpus** — Pre-loaded common phrases for better predictions
-- ✅ Key hold/repeat for continuous typing (including backspace)
-- ✅ Draggable window, stays on top, doesn't steal focus
-- ✅ **5 Color Themes** — Dark, Light, Blue, Green, Purple (⚙ Settings)
 - ✅ **Smart punctuation** — Removes space before ? ! . , ; :
-- ✅ Accessibility settings panel (♿ button)
-- ✅ Modern prediction bar with improved readability
+
+### Accessibility
+- ✅ **6 Accessibility Profiles** — Precise, Normal, Mild/Moderate/Severe Tremor, Limited Mobility
+- ✅ All settings accessible from single unified panel
 
 ---
 

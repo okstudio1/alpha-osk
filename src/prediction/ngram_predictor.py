@@ -45,26 +45,57 @@ class NgramPredictor:
         # User-specific vocabulary boost
         self.user_vocab: Dict[str, int] = defaultdict(int)
         
-        # Common words to always include
-        self._common_words = [
-            "the", "be", "to", "of", "and", "a", "in", "that", "have", "I",
-            "it", "for", "not", "on", "with", "he", "as", "you", "do", "at",
-            "this", "but", "his", "by", "from", "they", "we", "say", "her", "she",
-            "or", "an", "will", "my", "one", "all", "would", "there", "their", "what",
-            "so", "up", "out", "if", "about", "who", "get", "which", "go", "me",
-            "is", "are", "was", "were", "been", "being", "am", "can", "could", "may",
-            "might", "must", "shall", "should", "will", "would", "need", "want", "like",
-            "hello", "hi", "thanks", "thank", "please", "yes", "no", "okay", "ok",
-        ]
+        # Load Google 10K wordlist (frequency-ranked) if available
+        self._load_frequency_wordlist()
         
-        # Initialize with common words
-        for word in self._common_words:
-            self.unigrams[word] = 100  # Base frequency
-        self.total_words = len(self._common_words) * 100
+        # Fallback common words if wordlist not available
+        if self.total_words == 0:
+            self._common_words = [
+                "the", "be", "to", "of", "and", "a", "in", "that", "have", "I",
+                "it", "for", "not", "on", "with", "he", "as", "you", "do", "at",
+                "this", "but", "his", "by", "from", "they", "we", "say", "her", "she",
+                "or", "an", "will", "my", "one", "all", "would", "there", "their", "what",
+                "so", "up", "out", "if", "about", "who", "get", "which", "go", "me",
+                "is", "are", "was", "were", "been", "being", "am", "can", "could", "may",
+                "might", "must", "shall", "should", "will", "would", "need", "want", "like",
+                "hello", "hi", "thanks", "thank", "please", "yes", "no", "okay", "ok",
+            ]
+            for word in self._common_words:
+                self.unigrams[word] = 100
+            self.total_words = len(self._common_words) * 100
         
         # Load saved model if provided
         if model_path and model_path.exists():
             self.load(model_path)
+
+    def _load_frequency_wordlist(self) -> None:
+        """
+        Load Google 10K wordlist as frequency-ranked vocabulary.
+        
+        Words are ranked by frequency in Google's Trillion Word Corpus.
+        Position in file = frequency rank (line 1 = most common word).
+        """
+        wordlist_path = Path(__file__).parent.parent.parent / "data" / "google-10000-english-usa-no-swears.txt"
+        
+        if not wordlist_path.exists():
+            _logger.debug("Google 10K wordlist not found: %s", wordlist_path)
+            return
+        
+        try:
+            with open(wordlist_path, "r") as f:
+                words = [line.strip().lower() for line in f if line.strip()]
+            
+            # Assign frequency based on position (higher = more common)
+            # Top word gets 10000, second gets 9999, etc.
+            max_freq = len(words)
+            for rank, word in enumerate(words):
+                frequency = max_freq - rank
+                self.unigrams[word] = frequency
+                self.total_words += frequency
+            
+            _logger.info("Google 10K wordlist loaded: %d words", len(words))
+        except Exception as e:
+            _logger.warning("Failed to load Google 10K wordlist: %s", e)
 
     def predict(self, context: str, n: int = 5) -> List[str]:
         """
@@ -260,6 +291,43 @@ class NgramPredictor:
             return True
         except Exception as e:
             _logger.error("Failed to load base dictionary: %s", e)
+            return False
+
+    def load_common_bigrams(self, bigrams_path: Optional[Path] = None) -> bool:
+        """
+        Load common word pairs for better next-word prediction.
+        
+        Args:
+            bigrams_path: Path to bigrams file. If None, uses default location.
+            
+        Returns:
+            True if loaded successfully
+        """
+        if bigrams_path is None:
+            bigrams_path = Path(__file__).parent.parent.parent / "data" / "common_bigrams.txt"
+        
+        if not bigrams_path.exists():
+            _logger.debug("Common bigrams file not found: %s", bigrams_path)
+            return False
+        
+        try:
+            count = 0
+            with open(bigrams_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        word1, word2 = parts[0].lower(), parts[1].lower()
+                        # High weight for curated bigrams
+                        self.bigrams[word1][word2] += 50
+                        count += 1
+            
+            _logger.info("Common bigrams loaded: %d pairs", count)
+            return True
+        except Exception as e:
+            _logger.warning("Failed to load common bigrams: %s", e)
             return False
 
     def clear_user_data(self) -> None:

@@ -75,6 +75,8 @@ class HybridPredictor(QObject):
         
         # Load base dictionary for better initial predictions
         self._ngram.load_base_dictionary()
+        # Load common bigrams for next-word prediction
+        self._ngram.load_common_bigrams()
         _logger.info("N-gram predictor initialized")
         
         # Initialize PPM predictor (character-level, Dasher algorithm)
@@ -142,27 +144,46 @@ class HybridPredictor(QObject):
             List of predicted words
         """
         self._current_context = context
+        is_next_word = context.endswith(" ")
         
         # Get predictions from multiple sources
-        ngram_preds = self._ngram.predict(context, n)
+        ngram_preds = self._ngram.predict(context, n * 2)  # Get more for filtering
+        _logger.debug("N-GRAM preds (next=%s): %s", is_next_word, ngram_preds[:5])
         
         # Add PPM predictions if enabled
         ppm_preds = []
         if self._enable_ppm:
-            ppm_preds = self._ppm_word.predict(context, n)
+            ppm_preds = self._ppm_word.predict(context, n * 2)
+            _logger.debug("PPM preds: %s", ppm_preds[:5])
         
         # Add fuzzy candidates for current word
         fuzzy_preds = []
         fuzzy_candidates = self._fuzzy.get_fuzzy_predictions(context, n)
         fuzzy_preds = [word for word, _ in fuzzy_candidates]
+        if fuzzy_preds:
+            _logger.debug("FUZZY preds: %s", fuzzy_preds[:5])
         
         # Merge predictions with weighted scoring
         predictions = self._merge_predictions(
             ngram_preds, ppm_preds, fuzzy_preds, n
         )
         
+        _logger.debug("MERGED result: %s", predictions)
         return predictions
     
+    def _is_valid_word(self, word: str) -> bool:
+        """Check if word is in our vocabulary (real word, not fragment)."""
+        word_lower = word.lower()
+        # Check n-gram vocabulary (includes Google 10K)
+        if word_lower in self._ngram.unigrams:
+            return True
+        # Check if it's a common short word (pronouns, articles, etc.)
+        if word_lower in {"i", "a", "an", "am", "as", "at", "be", "by", "do", 
+                          "go", "he", "if", "in", "is", "it", "me", "my", "no",
+                          "of", "on", "or", "so", "to", "up", "us", "we"}:
+            return True
+        return False
+
     def _merge_predictions(
         self,
         ngram: List[str],
@@ -175,8 +196,10 @@ class HybridPredictor(QObject):
         
         For next-word prediction (context ends with space), heavily favor
         n-gram word predictions over PPM character fragments.
+        Only include words that exist in our vocabulary.
         """
         scores: Dict[str, float] = {}
+        sources: Dict[str, List[str]] = {}  # Track where each word came from
         
         # Check if we're predicting next word (context ends with space)
         is_next_word = self._current_context.endswith(" ")
@@ -184,37 +207,48 @@ class HybridPredictor(QObject):
         # N-gram predictions (weight: 3.0 for next-word, 1.0 for completion)
         ngram_weight = 3.0 if is_next_word else 1.0
         for i, word in enumerate(ngram):
-            # Filter out fragments in next-word mode
             if is_next_word and len(word) <= 2:
+                continue
+            # Validate word exists in vocabulary
+            if not self._is_valid_word(word):
                 continue
             score = ngram_weight / (i + 1)
             scores[word] = scores.get(word, 0) + score
+            sources.setdefault(word, []).append("ng")
         
         # PPM predictions (weight: 0.3 for next-word, 0.8 for completion)
-        # PPM is better for completing partial words, not predicting next words
         ppm_weight = 0.3 if is_next_word else 0.8
         for i, word in enumerate(ppm):
-            # Filter out single-char fragments in next-word mode
             if is_next_word and len(word) <= 2:
+                continue
+            # Validate word exists in vocabulary
+            if not self._is_valid_word(word):
                 continue
             score = ppm_weight / (i + 1)
             scores[word] = scores.get(word, 0) + score
+            sources.setdefault(word, []).append("ppm")
         
         # Fuzzy predictions (weight based on profile)
         fuzzy_weight = self._fuzzy.profile.prediction_weight
         for i, word in enumerate(fuzzy):
+            if not self._is_valid_word(word):
+                continue
             score = fuzzy_weight / (i + 1)
             scores[word] = scores.get(word, 0) + score
+            sources.setdefault(word, []).append("fz")
         
         # Sort by combined score
         sorted_words = sorted(scores.items(), key=lambda x: -x[1])
         
-        # Return top n, filtering out any remaining fragments
+        # Return top n valid words
         results = []
-        for word, _ in sorted_words:
+        for word, score in sorted_words:
             if is_next_word and len(word) <= 2:
-                continue  # Skip fragments in next-word mode
+                continue
             results.append(word)
+            # Log source for debugging
+            src = "+".join(sources.get(word, ["?"]))
+            _logger.debug("  %s (%.2f) [%s]", word, score, src)
             if len(results) >= n:
                 break
         

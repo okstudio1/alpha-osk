@@ -35,6 +35,8 @@ def main() -> int:
         level=logging.INFO,
         format="[%(name)s] %(levelname)s: %(message)s",
     )
+    # Enable debug logging for prediction to see sources
+    logging.getLogger("HybridPredictor").setLevel(logging.DEBUG)
 
     # Set environment hints for proper OSK behavior on X11
     os.environ.setdefault("QT_QPA_PLATFORM", "xcb")

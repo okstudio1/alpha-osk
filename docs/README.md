@@ -122,20 +122,32 @@ src/prediction/
 ## 🚀 Implementation Status
 
 ### Completed ✅
+
+**UI & Window:**
+- **Title bar** with drag handle, minimize, close buttons
+- **Resizable window** - Drag bottom/right edges or corner grip (uses screen coordinates)
+- **Unified settings panel** - All settings in one scrollable menu (⚙ button)
+- **5 Color Themes** - Dark, Light, Blue, Green, Purple
+- Modern prediction bar with improved readability
+
+**Keyboard Layout:**
 - Core keyboard with QWERTY layout
+- **Keyboard shortcuts** - Ctrl+C, Ctrl+V, Ctrl+Z, etc. work correctly
+- Sticky modifiers (Shift, Ctrl, Alt, Win)
+- Toggleable panels (Function keys, Navigation, Numpad)
+- **Key Repeat** - Hold backspace/delete to repeat
+
+**Prediction:**
 - Hybrid prediction engine (n-gram + PPM + fuzzy)
 - **PPM Language Model** - Character-level prediction (Dasher algorithm)
 - **Fuzzy/Spatial Recognition** - Motor challenge support
-- **6 Accessibility Profiles** - Precise, Normal, Mild/Moderate/Severe Tremor, Limited Mobility
 - **Next-word Prediction** - Suggests words after clicking a prediction
 - **Training Corpus** - Pre-loaded with common phrases
-- **5 Color Themes** - Dark, Light, Blue, Green, Purple
 - **Smart Punctuation** - Auto-removes space before ? ! . , ; :
-- **Key Repeat** - Hold backspace/delete to repeat
-- Sticky modifiers (Shift, Ctrl, Alt, Win)
-- Toggleable panels (Function keys, Navigation, Numpad)
-- Accessibility settings panel (♿ button)
-- Modern prediction bar with improved readability
+
+**Accessibility:**
+- **6 Accessibility Profiles** - Precise, Normal, Mild/Moderate/Severe Tremor, Limited Mobility
+- All settings accessible from single unified panel
 
 ### Architecture Decision: No Transformer/LLM ✂️
 We **removed** the transformer model (DistilGPT-2) from the default configuration:

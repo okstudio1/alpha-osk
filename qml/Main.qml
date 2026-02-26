@@ -8,7 +8,7 @@ Window {
     id: root
     visible: true
     width: mainLayout.implicitWidth + 24
-    height: mainLayout.implicitHeight + 24
+    height: mainLayout.implicitHeight + 44  // Extra height for title bar
     x: (Screen.width - width) / 2
     y: Screen.height - height - 40
     color: "transparent"
@@ -149,38 +149,141 @@ Window {
             z: -1
         }
 
-        // Drag handle
-        MouseArea {
-            id: dragArea
+        // Title bar with drag, settings, minimize, close
+        Rectangle {
+            id: titleBar
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            height: 8
-            cursorShape: Qt.SizeAllCursor
+            height: 28
+            color: Qt.darker(root.themeBackground, 1.1)
+            radius: 10
             
-            property point dragStartPos
-            property point windowStartPos
-            
-            onPressed: function(mouse) {
-                dragStartPos = Qt.point(mouse.x, mouse.y)
-                windowStartPos = Qt.point(root.x, root.y)
+            // Only round top corners
+            Rectangle {
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: 14
+                color: parent.color
             }
             
-            onPositionChanged: function(mouse) {
-                if (pressed) {
-                    var dx = mouse.x - dragStartPos.x
-                    var dy = mouse.y - dragStartPos.y
-                    root.x = windowStartPos.x + dx
-                    root.y = windowStartPos.y + dy
+            // Drag area (most of title bar)
+            MouseArea {
+                id: dragArea
+                anchors.fill: parent
+                anchors.rightMargin: 120  // Leave space for buttons
+                cursorShape: Qt.SizeAllCursor
+                
+                property real startMouseX
+                property real startMouseY
+                property real startWinX
+                property real startWinY
+                
+                onPressed: function(mouse) {
+                    var global = mapToGlobal(mouse.x, mouse.y)
+                    startMouseX = global.x
+                    startMouseY = global.y
+                    startWinX = root.x
+                    startWinY = root.y
+                }
+                
+                onPositionChanged: function(mouse) {
+                    if (pressed) {
+                        var global = mapToGlobal(mouse.x, mouse.y)
+                        root.x = startWinX + (global.x - startMouseX)
+                        root.y = startWinY + (global.y - startMouseY)
+                    }
                 }
             }
             
+            // Drag indicator dots
             Row {
-                anchors.centerIn: parent
-                spacing: 4
+                anchors.left: parent.left
+                anchors.leftMargin: 12
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 3
                 Repeater {
                     model: 5
-                    Rectangle { width: 3; height: 3; radius: 1.5; color: "#444" }
+                    Rectangle { width: 3; height: 3; radius: 1.5; color: "#555" }
+                }
+            }
+            
+            // Title bar buttons (right side)
+            Row {
+                anchors.right: parent.right
+                anchors.rightMargin: 8
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 6
+                
+                // Settings button (gear icon) - opens unified settings
+                Rectangle {
+                    width: 28
+                    height: 24
+                    radius: 4
+                    color: settingsBtn.containsMouse ? "#444" : "transparent"
+                    
+                    Text {
+                        anchors.centerIn: parent
+                        text: "⚙"
+                        font.pixelSize: 16
+                        color: root.showSettings ? "#4a9eff" : "#999"
+                    }
+                    
+                    MouseArea {
+                        id: settingsBtn
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.showSettings = !root.showSettings
+                    }
+                }
+                
+                // Minimize button
+                Rectangle {
+                    width: 28
+                    height: 24
+                    radius: 4
+                    color: minBtn.containsMouse ? "#444" : "transparent"
+                    
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 12
+                        height: 2
+                        radius: 1
+                        color: "#999"
+                    }
+                    
+                    MouseArea {
+                        id: minBtn
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.visibility = Window.Minimized
+                    }
+                }
+                
+                // Close button
+                Rectangle {
+                    width: 28
+                    height: 24
+                    radius: 4
+                    color: closeBtn.containsMouse ? "#c33" : "transparent"
+                    
+                    Text {
+                        anchors.centerIn: parent
+                        text: "✕"
+                        font.pixelSize: 13
+                        color: closeBtn.containsMouse ? "#fff" : "#999"
+                    }
+                    
+                    MouseArea {
+                        id: closeBtn
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: Qt.quit()
+                    }
                 }
             }
         }
@@ -189,7 +292,7 @@ Window {
             id: mainLayout
             anchors.fill: parent
             anchors.margins: 8
-            anchors.topMargin: 12
+            anchors.topMargin: 32  // Account for title bar
             spacing: 6
 
             // ===== Main Keyboard Section =====
@@ -670,54 +773,6 @@ Window {
                         keyColor: "#333"
                         onKeyPressed: keyboard.toggleCtrl()
                     }
-
-                    // Compact arrow keys
-                    Row {
-                        spacing: 1
-                        Comp.KeyButton {
-                            keyText: "left"
-                            displayText: "◀"
-                            keyWidth: root.keyW * 0.8
-                            keyHeight: root.keyH
-                            fontSize: 12
-                            isSpecial: true
-                            keyColor: "#333"
-                            onKeyPressed: keyboard.pressSpecialKey("left")
-                        }
-                        Column {
-                            spacing: 1
-                            Comp.KeyButton {
-                                keyText: "up"
-                                displayText: "▲"
-                                keyWidth: root.keyW * 0.8
-                                keyHeight: root.keyH / 2 - 1
-                                fontSize: 10
-                                isSpecial: true
-                                keyColor: "#333"
-                                onKeyPressed: keyboard.pressSpecialKey("up")
-                            }
-                            Comp.KeyButton {
-                                keyText: "down"
-                                displayText: "▼"
-                                keyWidth: root.keyW * 0.8
-                                keyHeight: root.keyH / 2 - 1
-                                fontSize: 10
-                                isSpecial: true
-                                keyColor: "#333"
-                                onKeyPressed: keyboard.pressSpecialKey("down")
-                            }
-                        }
-                        Comp.KeyButton {
-                            keyText: "right"
-                            displayText: "▶"
-                            keyWidth: root.keyW * 0.8
-                            keyHeight: root.keyH
-                            fontSize: 12
-                            isSpecial: true
-                            keyColor: "#333"
-                            onKeyPressed: keyboard.pressSpecialKey("right")
-                        }
-                    }
                 }
             }
 
@@ -750,39 +805,23 @@ Window {
             }
         }
 
-        // Settings Panel (overlay)
-        Comp.SettingsPanel {
-            id: settingsPanel
+        // Unified Settings Panel (single panel with all settings)
+        Comp.UnifiedSettingsPanel {
+            id: unifiedSettingsPanel
             visible: root.showSettings
             anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.margins: 8
+            anchors.top: titleBar.bottom
+            anchors.rightMargin: 8
+            anchors.topMargin: 4
             
+            // Layout settings
             showFunctionRow: root.showFunctionRow
             showNavigation: root.showNavigation
             showNumpad: root.showNumpad
             compactMode: root.compactMode
             currentTheme: root.currentTheme
             
-            onSettingChanged: function(setting, value) {
-                if (setting === "functionRow") root.showFunctionRow = value
-                else if (setting === "navigation") root.showNavigation = value
-                else if (setting === "numpad") root.showNumpad = value
-                else if (setting === "compact") root.compactMode = value
-                else if (setting === "theme") root.currentTheme = value
-            }
-            
-            onCloseRequested: root.showSettings = false
-        }
-        
-        // Prediction Settings Panel (overlay)
-        Comp.PredictionSettingsPanel {
-            id: predictionSettingsPanel
-            visible: root.showPredictionSettings
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.margins: 8
-            
+            // Prediction settings
             llmEnabled: root.llmEnabled
             llmAvailable: root.llmAvailable
             predictionCount: root.predictionCount
@@ -792,50 +831,28 @@ Window {
             debugMode: root.showDebugPanel
             
             onSettingChanged: function(setting, value) {
-                if (setting === "llmEnabled" && keyboard) {
+                // Layout settings
+                if (setting === "functionRow") root.showFunctionRow = value
+                else if (setting === "navigation") root.showNavigation = value
+                else if (setting === "numpad") root.showNumpad = value
+                else if (setting === "compact") root.compactMode = value
+                else if (setting === "theme") root.currentTheme = value
+                // Prediction settings
+                else if (setting === "llmEnabled" && keyboard) {
                     keyboard.setLlmEnabled(value)
                     root.llmEnabled = value
-                } else if (setting === "predictionCount" && keyboard) {
-                    keyboard.setPredictionCount(value)
-                    root.predictionCount = value
-                } else if (setting === "save" && keyboard) {
-                    keyboard.savePredictionModel()
-                } else if (setting === "reload" && keyboard) {
-                    keyboard.reloadDictionary()
-                    background.refreshPredictionStats()
-                } else if (setting === "clearUserData" && keyboard) {
-                    keyboard.clearUserData()
-                    background.refreshPredictionStats()
-                } else if (setting === "importFile" && keyboard) {
-                    var path = value.replace("~", "/home/owen")
-                    keyboard.importTextFile(path)
-                    background.refreshPredictionStats()
-                } else if (setting === "importFolder" && keyboard) {
-                    var folderPath = value.replace("~", "/home/owen")
-                    keyboard.importFolder(folderPath)
-                    background.refreshPredictionStats()
-                } else if (setting === "debug") {
+                }
+                else if (setting === "debugMode") {
                     root.showDebugPanel = value
                     if (keyboard) keyboard.setDebugMode(value)
                 }
+                // Accessibility settings
+                else if (setting === "profile" && keyboard) {
+                    keyboard.setAccessibilityProfile(value)
+                }
             }
             
-            onCloseRequested: root.showPredictionSettings = false
-        }
-        
-        // Accessibility Panel (overlay)
-        Comp.AccessibilityPanel {
-            id: accessibilityPanel
-            visible: root.showAccessibility
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: parent.top
-            anchors.margins: 8
-            
-            onProfileChanged: function(profileName) {
-                console.log("Accessibility profile changed to:", profileName)
-            }
-            
-            onCloseRequested: root.showAccessibility = false
+            onCloseRequested: root.showSettings = false
         }
         
         // Debug Panel
@@ -885,6 +902,117 @@ Window {
                 text: "xdotool not found"
                 color: "#ffaa44"
                 font.pixelSize: 9
+            }
+        }
+        
+        // Resize handle (bottom-right corner)
+        MouseArea {
+            id: resizeHandle
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            width: 24
+            height: 24
+            cursorShape: Qt.SizeFDiagCursor
+            
+            property real startX
+            property real startY
+            property real startW
+            property real startH
+            
+            onPressed: function(mouse) {
+                var global = mapToGlobal(mouse.x, mouse.y)
+                startX = global.x
+                startY = global.y
+                startW = root.width
+                startH = root.height
+            }
+            
+            onPositionChanged: function(mouse) {
+                if (pressed) {
+                    var global = mapToGlobal(mouse.x, mouse.y)
+                    var dw = global.x - startX
+                    var dh = global.y - startY
+                    root.width = Math.max(500, startW + dw)
+                    root.height = Math.max(250, startH + dh)
+                }
+            }
+            
+            // Visual indicator (grip lines)
+            Column {
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.margins: 4
+                spacing: 2
+                Repeater {
+                    model: 3
+                    Row {
+                        spacing: 2
+                        Repeater {
+                            model: 3 - index
+                            Rectangle {
+                                width: 3
+                                height: 3
+                                radius: 1
+                                color: "#555"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Resize handle (bottom edge)
+        MouseArea {
+            id: bottomResize
+            anchors.bottom: parent.bottom
+            anchors.left: parent.left
+            anchors.right: resizeHandle.left
+            anchors.leftMargin: 10
+            height: 8
+            cursorShape: Qt.SizeVerCursor
+            
+            property real startY
+            property real startH
+            
+            onPressed: function(mouse) {
+                var global = mapToGlobal(mouse.x, mouse.y)
+                startY = global.y
+                startH = root.height
+            }
+            
+            onPositionChanged: function(mouse) {
+                if (pressed) {
+                    var global = mapToGlobal(mouse.x, mouse.y)
+                    var dh = global.y - startY
+                    root.height = Math.max(250, startH + dh)
+                }
+            }
+        }
+        
+        // Resize handle (right edge)
+        MouseArea {
+            id: rightResize
+            anchors.right: parent.right
+            anchors.top: titleBar.bottom
+            anchors.bottom: resizeHandle.top
+            width: 8
+            cursorShape: Qt.SizeHorCursor
+            
+            property real startX
+            property real startW
+            
+            onPressed: function(mouse) {
+                var global = mapToGlobal(mouse.x, mouse.y)
+                startX = global.x
+                startW = root.width
+            }
+            
+            onPositionChanged: function(mouse) {
+                if (pressed) {
+                    var global = mapToGlobal(mouse.x, mouse.y)
+                    var dw = global.x - startX
+                    root.width = Math.max(500, startW + dw)
+                }
             }
         }
     }

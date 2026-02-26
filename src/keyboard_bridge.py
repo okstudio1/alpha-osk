@@ -164,7 +164,11 @@ class KeyboardBridge(QObject):
             self._context_buffer = self._context_buffer[:-1]
             _logger.info("Removed space before '%s'", char)
 
-        self._send_text(char)
+        # Use _send_key for modifier combos (Ctrl+C, Ctrl+V, etc.)
+        if self._ctrl_active or self._alt_active or self._win_active:
+            self._send_key(char)
+        else:
+            self._send_text(char)
         
         # Update context and get predictions
         self._current_word += char
