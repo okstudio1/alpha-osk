@@ -7,8 +7,8 @@ Quick reference for AI assistants working on Alpha-OSK.
 ## Project Overview
 
 **Name:** Alpha-OSK  
-**Purpose:** AI-powered on-screen keyboard for **Linux** accessibility  
-**Status:** 🚀 Active Development — Core keyboard working, AI prediction integrated
+**Purpose:** AI-powered on-screen keyboard for **Linux & Windows** accessibility  
+**Status:** 🚀 Active Development — Core keyboard working, AI prediction integrated, Windows port complete
 
 ---
 
@@ -35,7 +35,7 @@ I'm Owen — a wheelchair user with muscular dystrophy.
 
 - **Typing is hard** — Be proactive. Make decisions. Don't ask for confirmation on small things.
 - **Offer A/B/C choices** — I can type one letter instead of explaining.
-- **Linux environment** — Use bash syntax. This is a Linux project.
+- **Cross-platform** — Linux and Windows. Use platform-appropriate syntax.
 - **Accessibility matters** — This is a tool I actually need.
 
 ---
@@ -44,10 +44,15 @@ I'm Owen — a wheelchair user with muscular dystrophy.
 
 ```
 alpha-osk/
-├── run.py                 # Smart launcher (venv + deps + launch)
+├── run.py                 # Cross-platform launcher (venv + deps + launch)
 ├── src/
-│   ├── keyboard_app.py    # QML engine setup, window flags
-│   ├── keyboard_bridge.py # Python↔QML bridge (key synthesis, modifiers, predictions)
+│   ├── keyboard_app.py    # QML engine setup, window flags (cross-platform)
+│   ├── keyboard_bridge.py # Python↔QML bridge (platform-agnostic)
+│   ├── platform/          # ★ Platform abstraction layer
+│   │   ├── __init__.py    #   Factory, detection, config paths
+│   │   ├── base.py        #   Abstract KeySynthesizerBase interface
+│   │   ├── linux.py       #   Linux: xdotool (X11) / ydotool (Wayland)
+│   │   └── windows.py     #   Windows: SendInput API via ctypes
 │   └── prediction/
 │       ├── ngram_predictor.py       # Word-level frequency prediction (<10ms)
 │       ├── ppm_predictor.py         # Character-level PPM (Dasher algorithm)
@@ -65,6 +70,9 @@ alpha-osk/
 │       ├── NumpadPanel.qml         # Number pad
 │       ├── FunctionRow.qml         # F1-F12 keys
 │       └── DebugPanel.qml          # Prediction debugging
+├── build/                 # ★ Windows build configuration
+│   ├── alpha-osk.exe.manifest  # UIAccess manifest (EV signing)
+│   └── alpha-osk.spec    # PyInstaller build specification
 ├── data/
 │   ├── base_dictionary.txt  # Common English words
 │   └── training_corpus.txt  # Pre-loaded phrases for PPM training
@@ -77,9 +85,12 @@ alpha-osk/
 
 - **Language:** Python 3.9+
 - **UI Framework:** PySide6 + QML6 (Qt Quick)
-- **Key Synthesis:** xdotool (X11) / ydotool (Wayland)
+- **Key Synthesis:**
+  - **Linux:** xdotool (X11) / ydotool (Wayland) via subprocess
+  - **Windows:** Win32 SendInput API via ctypes (zero external deps)
 - **Prediction:** Hybrid engine (n-gram + PPM + fuzzy recognition)
 - **No AI/LLM required** — Transformer disabled by default (can re-enable if desired)
+- **Windows Build:** PyInstaller + UIAccess manifest + EV code signing
 
 ### Prediction Architecture
 
@@ -109,14 +120,24 @@ User types key → Fuzzy Recognition (spatial correction)
 
 | File | Purpose |
 |------|---------|
-| `run.py` | Launcher — creates venv, installs deps, runs keyboard |
+| `run.py` | Cross-platform launcher — creates venv, installs deps, runs keyboard |
 | `src/keyboard_bridge.py` | Python↔QML bridge — modifiers, key synthesis, predictions |
+| `src/platform/__init__.py` | Platform detection, factory, config/model dir paths |
+| `src/platform/base.py` | Abstract `KeySynthesizerBase` interface |
+| `src/platform/linux.py` | Linux backend: xdotool / ydotool |
+| `src/platform/windows.py` | Windows backend: SendInput via ctypes |
+| `src/keyboard_app.py` | QML engine setup, cross-platform window flags |
 | `src/prediction/hybrid_predictor.py` | Orchestrates all predictors, Qt signals |
 | `src/prediction/ppm_predictor.py` | Character-level PPM (Dasher algorithm) |
 | `src/prediction/fuzzy_recognizer.py` | Spatial error correction + accessibility profiles |
-| `qml/components/AccessibilityPanel.qml` | Motor control profile selector UI |
 | `qml/Main.qml` | Main UI — modular with toggleable panels |
-| `docs/PREDICTION_OPTIONS.md` | Comparison of prediction approaches |
+| `build/alpha-osk.exe.manifest` | Windows UIAccess manifest for EV signing |
+| `build/alpha-osk.spec` | PyInstaller build specification |
+| `build/build_windows.py` | Full build pipeline: PyInstaller → Sign → NSIS → Verify |
+| `build/sign.py` | Code signing with retry logic (matches gitconnect pattern) |
+| `build/installer.nsh` | NSIS installer macros (shortcuts, cleanup) |
+| `docs/WINDOWS.md` | Windows setup, signing, and deployment guide |
+| `docs/PLATFORM_ARCHITECTURE.md` | Cross-platform design rationale and decisions |
 
 ---
 
@@ -124,7 +145,7 @@ User types key → Fuzzy Recognition (spatial correction)
 
 ### UI & Window
 - ✅ **Title bar** with drag handle, minimize, close buttons
-- ✅ **Resizable window** — Drag bottom/right edges or corner grip
+- ✅ **Resizable window** — Keys scale dynamically with window width
 - ✅ **Unified settings panel** — All settings in one scrollable menu (⚙ button)
 - ✅ **5 Color Themes** — Dark, Light, Blue, Green, Purple
 - ✅ Draggable window, stays on top, doesn't steal focus
@@ -135,6 +156,7 @@ User types key → Fuzzy Recognition (spatial correction)
 - ✅ Modifiers: Shift, Caps, Ctrl, Alt, Win/Super (sticky)
 - ✅ **Keyboard shortcuts** — Ctrl+C, Ctrl+V, Ctrl+Z, etc. work correctly
 - ✅ Toggleable panels: Function row, Navigation (arrows), Numpad
+- ✅ **Side panels auto-expand** — Window grows when Nav/Numpad toggled on
 - ✅ Compact mode option
 - ✅ Key hold/repeat for continuous typing (including backspace)
 
@@ -167,15 +189,25 @@ The keyboard has toggleable sections (via Settings ⚙ button):
 
 ## Quick Start
 
+### Linux
 ```bash
-# Install system dependency
-sudo apt install xdotool
+sudo apt install xdotool   # System dependency for key synthesis
+python3 run.py              # Auto-creates venv, installs PySide6
+```
 
-# Run the keyboard (auto-creates venv, installs PySide6)
-python3 run.py
+### Windows
+```powershell
+python run.py               # No system deps needed — SendInput is built-in
 ```
 
 That's it! No AI/LLM download required. Predictions work out of the box with n-gram + PPM + fuzzy recognition.
+
+### Building a Windows .exe (with UIAccess)
+```powershell
+pip install pyinstaller
+pyinstaller build/alpha-osk.spec
+# Then EV code-sign and install to Program Files — see docs/WINDOWS.md
+```
 
 ---
 

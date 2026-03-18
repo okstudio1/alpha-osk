@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  Alpha-OSK Windows Application Manifest
+  =======================================
+
+  This manifest enables UIAccess for the Alpha-OSK on-screen keyboard.
+
+  What UIAccess Does
+  ==================
+  When uiAccess="true" is set AND the binary is properly signed:
+
+  1. The keyboard can send keystrokes to ELEVATED windows (e.g. an
+     admin Command Prompt, Task Manager, or Registry Editor).
+  2. The keyboard can appear ABOVE the Secure Desktop (Ctrl+Alt+Del
+     screen, UAC consent prompts, Windows login screen).
+  3. The keyboard can interact with windows at ALL integrity levels.
+
+  Without UIAccess, SendInput() silently fails when the target window
+  runs at a higher integrity level than Alpha-OSK.
+
+  Requirements for UIAccess
+  =========================
+  ALL THREE conditions must be met:
+
+  1. This manifest must be embedded in the .exe (PyInstaller does this
+     automatically when you specify the manifest in the .spec file).
+  2. The .exe must be signed with an EV (Extended Validation) code
+     signing certificate.  Standard OV certificates are NOT sufficient.
+  3. The .exe must be installed in a "secure location":
+     - C:\Program Files\
+     - C:\Program Files (x86)\
+     - C:\Windows\System32\
+
+  If ANY condition is not met, Windows ignores uiAccess="true" and
+  launches the process with standard privileges (keyboard still works,
+  but cannot send input to elevated windows).
+
+  How to Sign
+  ===========
+  See docs/WINDOWS.md for full signing instructions.  Quick summary:
+
+    signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 ^
+      /f your-ev-cert.pfx /p YOUR_PASSWORD alpha-osk.exe
+
+  Testing UIAccess
+  ================
+  After signing and installing to Program Files:
+
+    1. Launch alpha-osk.exe
+    2. Open an elevated Command Prompt (Run as Administrator)
+    3. Click keys on Alpha-OSK — they should appear in the admin prompt
+    4. If they don't appear, UIAccess is not active (check signing & path)
+
+  See Also
+  ========
+  - https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-securityoverview
+  - https://learn.microsoft.com/en-us/windows/security/application-security/application-control/user-account-control/how-it-works
+  - docs/WINDOWS.md
+-->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+
+  <!-- Application identity -->
+  <assemblyIdentity
+    type="win32"
+    name="AlphaOSK.OnScreenKeyboard"
+    version="1.0.0.0"
+    processorArchitecture="*"
+  />
+
+  <description>Alpha-OSK — AI-Powered On-Screen Keyboard</description>
+
+  <!-- Request UIAccess privileges -->
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+    <security>
+      <requestedPrivileges>
+        <!--
+          level="asInvoker": Do NOT request elevation (no UAC prompt).
+          uiAccess="true":   Request UI Automation access to send input
+                             to windows at higher integrity levels.
+        -->
+        <requestedExecutionLevel
+          level="asInvoker"
+          uiAccess="true"
+        />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+
+  <!-- DPI awareness: per-monitor V2 for crisp rendering at any scale -->
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">
+        PerMonitorV2
+      </dpiAwareness>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">
+        true/pm
+      </dpiAware>
+    </windowsSettings>
+  </application>
+
+  <!-- Common Controls v6 (modern visual styles) -->
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity
+        type="win32"
+        name="Microsoft.Windows.Common-Controls"
+        version="6.0.0.0"
+        processorArchitecture="*"
+        publicKeyToken="6595b64144ccf1df"
+        language="*"
+      />
+    </dependentAssembly>
+  </dependency>
+
+</assembly>

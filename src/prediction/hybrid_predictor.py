@@ -63,9 +63,10 @@ class HybridPredictor(QObject):
         """
         super().__init__(parent)
         
-        # Set up model directory
+        # Set up model directory (cross-platform: AppData on Windows, .config on Linux)
         if model_dir is None:
-            model_dir = Path.home() / ".config" / "alpha-osk" / "models"
+            from ..platform import get_model_dir
+            model_dir = get_model_dir()
         self._model_dir = model_dir
         self._model_dir.mkdir(parents=True, exist_ok=True)
         

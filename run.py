@@ -1,13 +1,29 @@
 #!/usr/bin/env python3
 """
 Alpha-OSK Launcher
+==================
 
-Handles virtual environment setup, dependency checking, and launches the
-on-screen keyboard application. Can also launch the project dashboard.
+Cross-platform launcher that handles virtual environment setup, dependency
+checking, and application startup for both **Linux** and **Windows**.
 
-Usage:
+Usage::
+
     python run.py              # Launch the on-screen keyboard
     python run.py --dashboard  # Launch the project dashboard
+
+What it does:
+
+1. Detects the current platform (Linux / Windows).
+2. Creates a Python virtual environment (``venv/``) if it doesn't exist.
+3. Installs PySide6 and other dependencies from ``requirements.txt``.
+4. Checks for platform-specific system dependencies:
+   - **Linux**: ``xdotool`` (X11) or ``ydotool`` (Wayland).
+   - **Windows**: No external tools needed — uses Win32 ``SendInput``.
+5. Launches ``src.keyboard_app`` inside the virtual environment.
+
+See Also:
+    - ``docs/WINDOWS.md`` — Windows-specific setup guide.
+    - ``docs/PLATFORM_ARCHITECTURE.md`` — cross-platform design.
 """
 
 import sys
@@ -19,9 +35,13 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
 
+# Platform detection
+IS_WINDOWS = sys.platform == "win32"
+IS_LINUX = sys.platform.startswith("linux")
+
 
 def check_python_version():
-    """Check if Python version is compatible."""
+    """Check if Python version is compatible (3.9+)."""
     if sys.version_info < (3, 9):
         print("ERROR: Python 3.9 or higher is required")
         print(f"Current version: {sys.version}")
@@ -30,14 +50,34 @@ def check_python_version():
 
 
 def check_system_deps():
-    """Check for system-level dependencies."""
+    """
+    Check for platform-specific system-level dependencies.
+
+    - **Linux**: Warns if neither xdotool nor ydotool are found.
+    - **Windows**: No external dependencies needed (SendInput is built-in).
+
+    Returns:
+        List of warning strings (empty if all deps are satisfied).
+    """
     warnings = []
-    if not shutil.which("xdotool") and not shutil.which("ydotool"):
+
+    if IS_LINUX:
+        if not shutil.which("xdotool") and not shutil.which("ydotool"):
+            warnings.append(
+                "  WARNING: Neither xdotool nor ydotool found.\n"
+                "  Key synthesis won't work. Install with:\n"
+                "    sudo apt install xdotool"
+            )
+    elif IS_WINDOWS:
+        # SendInput is always available via ctypes — no external deps.
+        # But warn if running from a non-standard location without UIAccess.
+        pass
+    else:
         warnings.append(
-            "  WARNING: Neither xdotool nor ydotool found.\n"
-            "  Key synthesis won't work. Install with:\n"
-            "    sudo apt install xdotool"
+            f"  WARNING: Unsupported platform ({sys.platform}). "
+            "Alpha-OSK supports Linux and Windows."
         )
+
     return warnings
 
 
@@ -58,16 +98,24 @@ def setup_virtual_environment():
 
 
 def get_venv_python():
-    """Get the path to Python executable in virtual environment."""
+    """
+    Get the path to the Python executable inside the virtual environment.
+
+    - **Linux**: ``venv/bin/python``
+    - **Windows**: ``venv/Scripts/python.exe``
+    """
+    if IS_WINDOWS:
+        return SCRIPT_DIR / "venv" / "Scripts" / "python.exe"
     return SCRIPT_DIR / "venv" / "bin" / "python"
 
 
 def check_dependencies():
-    """Check if required packages are installed in virtual environment."""
+    """Check if required packages are installed; install if missing."""
     venv_python = get_venv_python()
 
     if not venv_python.exists():
         print("ERROR: Virtual environment Python not found")
+        print(f"  Expected at: {venv_python}")
         return False
 
     # Check if PySide6 is importable
@@ -153,8 +201,9 @@ def run_dashboard():
 
 def main():
     """Main launcher function."""
+    platform_name = "Windows" if IS_WINDOWS else "Linux" if IS_LINUX else sys.platform
     print("=" * 50)
-    print("  Alpha-OSK — On-Screen Keyboard for Linux")
+    print(f"  Alpha-OSK — On-Screen Keyboard for {platform_name}")
     print("=" * 50)
     print()
 

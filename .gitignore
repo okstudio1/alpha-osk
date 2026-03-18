@@ -25,5 +25,17 @@ _draft_*
 .DS_Store
 Thumbs.db
 
+# Build artifacts (PyInstaller)
+dist/
+build/__pycache__/
+build/_alpha-osk-installer.nsi
+*.spec.bak
+
+# Windows release output (NSIS installers)
+release/
+
+# PyInstaller temp
+*.manifest.bak
+
 # Project specific
 *.log

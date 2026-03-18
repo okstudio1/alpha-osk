@@ -27,9 +27,13 @@ Item {
                 color: "#c0c0c0"
                 font.pixelSize: 12
                 Layout.fillWidth: true
+                elide: Text.ElideRight
             }
             
             Rectangle {
+                Layout.preferredWidth: 36
+                Layout.minimumWidth: 36
+                Layout.preferredHeight: 18
                 width: 36
                 height: 18
                 radius: 9

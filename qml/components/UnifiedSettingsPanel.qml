@@ -94,6 +94,7 @@ Item {
             
             // Scrollable content
             ScrollView {
+                id: scrollArea
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
@@ -103,7 +104,7 @@ Item {
                 
                 ColumnLayout {
                     id: contentColumn
-                    width: parent.width - 12
+                    width: scrollArea.availableWidth
                     spacing: 12
                     
                     // ===== LAYOUT SECTION =====

@@ -2,18 +2,25 @@
 Keyboard Bridge - Python backend exposed to QML.
 
 Handles key synthesis (sending keystrokes to the focused application)
-using xdotool on X11 or ydotool on Wayland.
+using the platform abstraction layer:
+
+- **Linux**: xdotool (X11) or ydotool (Wayland) via subprocess.
+- **Windows**: Win32 SendInput API via ctypes, with optional UIAccess
+  for elevated-window support (requires EV code-signed binary).
+
+The bridge is platform-agnostic — all OS-specific logic lives in
+``src/platform/``.  See ``docs/PLATFORM_ARCHITECTURE.md``.
 """
 
 from __future__ import annotations
 
-import subprocess
-import shutil
 import logging
 from typing import Optional, List
 
 from PySide6.QtCore import QObject, Slot, Signal, Property
 
+from .platform import create_key_synthesizer
+from .platform.base import KeySynthesizerBase
 from .prediction import HybridPredictor
 
 _logger = logging.getLogger("KeyboardBridge")
@@ -21,8 +28,18 @@ _logger = logging.getLogger("KeyboardBridge")
 
 class KeyboardBridge(QObject):
     """
-    QObject bridge that connects QML keyboard UI to Linux key synthesis.
-    Exposed to QML as context property "keyboard" in keyboard_app.py.
+    QObject bridge that connects QML keyboard UI to platform key synthesis.
+
+    This class is exposed to QML as the context property ``"keyboard"``
+    (see ``keyboard_app.py``).  It translates UI events into:
+
+    1. **Key synthesis** — delegated to the platform layer
+       (``src/platform/``) which handles Linux xdotool/ydotool or
+       Windows SendInput transparently.
+    2. **Prediction updates** — delegated to the hybrid prediction
+       engine (``src/prediction/``).
+    3. **Modifier state management** — Shift, Caps, Ctrl, Alt, Win
+       with sticky/auto-release behaviour.
     """
 
     shiftActiveChanged = Signal(bool)
@@ -54,12 +71,16 @@ class KeyboardBridge(QObject):
         self._win_active = False
         self._current_layer = "lower"  # "lower", "upper", "numbers", "symbols"
 
-        # Detect available key synthesis tool
-        self._synth_tool = self._detect_synth_tool()
-        if self._synth_tool:
-            _logger.info("Key synthesis tool: %s", self._synth_tool)
+        # Create platform-appropriate key synthesizer
+        self._synth: KeySynthesizerBase = create_key_synthesizer()
+        if self._synth.is_available():
+            _logger.info("Key synthesis backend: %s", self._synth.backend_name())
         else:
-            _logger.warning("No key synthesis tool found (xdotool or ydotool)")
+            _logger.warning(
+                "Key synthesis not available (%s). "
+                "Keystrokes will not be sent to other applications.",
+                self._synth.backend_name(),
+            )
         
         # Initialize prediction engine (LLM disabled by default - overkill for keyboard)
         self._predictor = HybridPredictor(enable_llm=False, parent=self)
@@ -79,70 +100,29 @@ class KeyboardBridge(QObject):
         self._current_word = ""
         self._predictions: List[str] = []
 
-    # --- Key synthesis detection ---
-
-    @staticmethod
-    def _detect_synth_tool() -> Optional[str]:
-        """Detect which key synthesis tool is available."""
-        if shutil.which("xdotool"):
-            return "xdotool"
-        if shutil.which("ydotool"):
-            return "ydotool"
-        return None
-
-    # --- Key synthesis ---
+    # --- Key synthesis (delegated to platform layer) ---
 
     def _send_key(self, key_name: str) -> None:
-        """Send a single key event via xdotool/ydotool."""
-        if not self._synth_tool:
-            _logger.warning("No synth tool available, cannot send key: %s", key_name)
-            return
+        """
+        Send a single key event via the platform synthesizer.
 
-        try:
-            if self._synth_tool == "xdotool":
-                # Build modifier prefix
-                modifiers = []
-                if self._ctrl_active:
-                    modifiers.append("ctrl")
-                if self._alt_active:
-                    modifiers.append("alt")
-                if self._win_active:
-                    modifiers.append("super")
-                if modifiers:
-                    combo = "+".join(modifiers + [key_name])
-                    subprocess.Popen(
-                        ["xdotool", "key", "--clearmodifiers", combo],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-                else:
-                    subprocess.Popen(
-                        ["xdotool", "key", "--clearmodifiers", key_name],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-            elif self._synth_tool == "ydotool":
-                subprocess.Popen(
-                    ["ydotool", "key", key_name],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-        except Exception as e:
-            _logger.error("Failed to send key %s: %s", key_name, e)
+        Automatically attaches any active sticky modifiers (Ctrl, Alt, Win)
+        to the keystroke.
+        """
+        # Gather active modifiers
+        modifiers = []
+        if self._ctrl_active:
+            modifiers.append("ctrl")
+        if self._alt_active:
+            modifiers.append("alt")
+        if self._win_active:
+            modifiers.append("win")
+
+        self._synth.send_key(key_name, modifiers=modifiers if modifiers else None)
 
     def _send_text(self, text: str) -> None:
-        """Send a string of text via xdotool type."""
-        if not self._synth_tool:
-            return
-        try:
-            if self._synth_tool == "xdotool":
-                subprocess.Popen(
-                    ["xdotool", "type", "--clearmodifiers", text],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-        except Exception as e:
-            _logger.error("Failed to type text: %s", e)
+        """Send a string of text via the platform synthesizer."""
+        self._synth.send_text(text)
 
     # --- QML Slots ---
 
@@ -357,7 +337,7 @@ class KeyboardBridge(QObject):
         return self._current_layer
 
     def _get_synth_available(self) -> bool:
-        return self._synth_tool is not None
+        return self._synth.is_available()
 
     shiftActive = Property(bool, _get_shift_active, notify=shiftActiveChanged)
     capsLockActive = Property(bool, _get_caps_lock_active, notify=capsLockActiveChanged)

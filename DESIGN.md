@@ -247,8 +247,9 @@ For limited screen space or one-handed use:
 - **Voice transcription**: < 500ms (streaming, planned)
 
 ### Compatibility
-- Linux (X11 and Wayland)
-- Works with all standard applications
+- **Linux** (X11 and Wayland) via xdotool / ydotool
+- **Windows** via Win32 SendInput API (with UIAccess for elevated windows)
+- Works with all standard applications on both platforms
 - Compatible with other AT software (screen readers, switch interfaces)
 
 ### Resource Usage
@@ -261,8 +262,11 @@ For limited screen space or one-handed use:
 ### Architecture
 - **Framework**: PySide6 + QML6 (Qt Quick)
 - **Bridge Pattern**: Python QObject exposed to QML as context property
-- **Key Synthesis**: xdotool (X11) / ydotool (Wayland) via subprocess
+- **Platform Layer**: `src/platform/` abstracts OS-specific key synthesis
+  - **Linux**: xdotool (X11) / ydotool (Wayland) via subprocess
+  - **Windows**: Win32 SendInput API via ctypes (+ UIAccess for elevated windows)
 - **Window Flags**: WindowStaysOnTopHint, Tool, FramelessWindowHint, WindowDoesNotAcceptFocus
+  - **Windows extra**: WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW via SetWindowLongW
 
 ### Implemented Features
 - ✅ QWERTY layout (adaptive, matches design spec)
@@ -274,12 +278,15 @@ For limited screen space or one-handed use:
 - ✅ Dark theme with gradients and press animations
 - ✅ Draggable via top handle
 - ✅ Special keys: Backspace, Enter, Tab, Arrows, Space
+- ✅ Responsive key scaling — keys resize dynamically when window is dragged
+- ✅ Side panels (Navigation, Numpad) — window auto-expands when toggled on
+- ✅ Function row (F1-F12, Esc, PrtSc, etc.)
+- ✅ Compact mode toggle
 
 ### Pending Features
 - ⏳ AI prediction engine (see docs/PREDICTION_OPTIONS.md)
 - ⏳ Dwell-click mode
 - ⏳ Scanning mode
-- ⏳ Adjustable key sizes
 - ⏳ High-contrast themes
 - ⏳ Voice dictation
 

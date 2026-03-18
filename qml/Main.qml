@@ -7,12 +7,25 @@ import "components" as Comp
 Window {
     id: root
     visible: true
-    width: mainLayout.implicitWidth + 24
+    // Default size gives keyW ≈ 56px; user can freely resize and keys scale
+    width: 832
     height: mainLayout.implicitHeight + 44  // Extra height for title bar
-    x: (Screen.width - width) / 2
-    y: Screen.height - height - 40
+    minimumWidth: 530  // keyW ≈ 34px — smallest usable touch target
+    minimumHeight: 200
     color: "transparent"
     title: "Alpha-OSK"
+
+    // Position once at startup — do NOT bind x/y to width/height or resize
+    // will feel inverted (window re-centers on every pixel change)
+    Component.onCompleted: {
+        root.x = (Screen.width - root.width) / 2
+        root.y = Screen.height - root.height - 40
+    }
+
+    // When side panels toggle, grow/shrink from the right edge (left stays put)
+    onCompactModeChanged: root.width = compactMode ? 660 : 832
+    onShowNavigationChanged: root.width += showNavigation ? 160 : -160
+    onShowNumpadChanged: root.width += showNumpad ? 200 : -200
 
     // Keyboard state from Python bridge
     property bool shiftOn: keyboard ? keyboard.shiftActive : false
@@ -48,10 +61,18 @@ Window {
     property var debugLog: []
     property string debugContext: ""
 
-    // Sizing
-    property real keyW: compactMode ? 50 : 56
-    property real keyH: compactMode ? 44 : 50
+    // Sizing — keys scale dynamically with window width
+    // Number row (widest): backtick + 10 digits + minus + backspace(1.5x) = 13.5 key-widths + 12 gaps
     property real keySpacing: 3
+
+    // Side panel extra width (fixed estimates to avoid circular binding with keyW)
+    // Nav panel: 3 keys × ~46px + gaps + separator ≈ 160px
+    // Numpad:    4 keys × ~44px + gaps + separator ≈ 200px
+    property real sidePanelExtra: (showNavigation ? 160 : 0) + (showNumpad ? 200 : 0)
+
+    property real availableKeyboardWidth: root.width - 40 - sidePanelExtra
+    property real keyW: Math.max(30, (availableKeyboardWidth - keySpacing * 12) / 13.5)
+    property real keyH: Math.max(34, keyW * 0.89)  // maintain aspect ratio
     
     // ===== Color Theme System =====
     property string currentTheme: "dark"  // "dark", "light", "blue", "green", "purple"
@@ -811,8 +832,11 @@ Window {
             visible: root.showSettings
             anchors.right: parent.right
             anchors.top: titleBar.bottom
+            anchors.bottom: parent.bottom
             anchors.rightMargin: 8
             anchors.topMargin: 4
+            anchors.bottomMargin: 8
+            width: Math.min(320, parent.width * 0.45)
             
             // Layout settings
             showFunctionRow: root.showFunctionRow
