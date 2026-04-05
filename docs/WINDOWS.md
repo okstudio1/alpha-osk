@@ -14,6 +14,7 @@ Complete guide to running, building, and deploying Alpha-OSK on Windows.
 - [Building a Standalone Executable](#building-a-standalone-executable)
 - [Code Signing Walkthrough](#code-signing-walkthrough)
 - [Installation for UIAccess](#installation-for-uiaccess)
+- [Security Notes](#security-notes)
 - [Troubleshooting](#troubleshooting)
 - [Differences from the Linux Version](#differences-from-the-linux-version)
 - [Architecture Reference](#architecture-reference)
@@ -440,6 +441,44 @@ remove_from_startup()              # Remove from Startup
 
 ---
 
+## Security Notes
+
+### Administrator Privileges and UIPI
+
+Alpha-OSK requests administrator privileges on Windows so that `SendInput` can
+reach windows running at a higher integrity level (e.g. an elevated Command
+Prompt).  If the UAC prompt is declined, the keyboard falls back to standard
+privileges and logs a warning — it will still work for most applications.
+
+The privilege re-launch in `run.py` passes only the same command-line arguments
+the user already supplied; no new arguments are constructed or injected.
+
+### Shortcut Creation
+
+The `create_shortcut` helper in `src/platform/windows.py` constructs a
+PowerShell script to create `.lnk` files.  All string values passed to the
+script (paths, description, icon path) have `"` characters escaped as `""`
+before interpolation, preventing PowerShell string-literal breakout if a path
+contains embedded quotes.
+
+### File Import (Training Data)
+
+`importTextFile` and `importFolder` in `src/keyboard_bridge.py` accept
+user-supplied paths to read text files for training the prediction model.
+These functions are intended to be driven by the user via the file picker UI
+and operate entirely within the user's own filesystem permissions — no
+server-side or cross-user data access is possible.
+
+### UIAccess vs. Always-Admin
+
+Alpha-OSK prefers the UIAccess mechanism (EV code signing + `Program Files`
+install) over requiring permanent administrator rights.  UIAccess grants only
+the specific capability needed for an on-screen keyboard (injecting input into
+higher-integrity windows) without granting broad admin access.  See the
+[UIAccess and EV Code Signing](#uiaccess-and-ev-code-signing) section above.
+
+---
+
 ## Troubleshooting
 
 ### Keystrokes Not Reaching Target Application
@@ -546,4 +585,4 @@ Or check the startup log output:
 
 ---
 
-*Last updated: March 2026*
+*Last updated: April 2026*

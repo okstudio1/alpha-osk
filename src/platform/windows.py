@@ -631,15 +631,19 @@ def create_shortcut(
 
     # Try PowerShell (always available, no extra deps)
     try:
+        # Escape double quotes for PowerShell double-quoted strings ("" = literal ")
+        def _ps_escape(s: str) -> str:
+            return s.replace('"', '""')
+
         ps_script = (
             f'$ws = New-Object -ComObject WScript.Shell; '
-            f'$sc = $ws.CreateShortcut("{shortcut_path}"); '
-            f'$sc.TargetPath = "{target_path}"; '
+            f'$sc = $ws.CreateShortcut("{_ps_escape(shortcut_path)}"); '
+            f'$sc.TargetPath = "{_ps_escape(target_path)}"; '
         )
         if description:
-            ps_script += f'$sc.Description = "{description}"; '
+            ps_script += f'$sc.Description = "{_ps_escape(description)}"; '
         if icon_path:
-            ps_script += f'$sc.IconLocation = "{icon_path}"; '
+            ps_script += f'$sc.IconLocation = "{_ps_escape(icon_path)}"; '
         ps_script += '$sc.Save()'
 
         import subprocess
