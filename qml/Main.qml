@@ -9,7 +9,7 @@ Window {
     visible: true
     // Default size gives keyW ≈ 56px; user can freely resize and keys scale
     width: 832
-    height: mainLayout.implicitHeight + 44  // Extra height for title bar
+    height: mainLayout.implicitHeight + 60  // Extra height for title bar + bottom padding
     minimumWidth: 530  // keyW ≈ 34px — smallest usable touch target
     minimumHeight: 200
     color: "transparent"
@@ -22,10 +22,14 @@ Window {
         root.y = Screen.height - root.height - 40
     }
 
+    // Width added when the settings panel is visible
+    readonly property real settingsPanelWidth: 340
+
     // When side panels toggle, grow/shrink from the right edge (left stays put)
     onCompactModeChanged: root.width = compactMode ? 660 : 832
     onShowNavigationChanged: root.width += showNavigation ? 160 : -160
     onShowNumpadChanged: root.width += showNumpad ? 200 : -200
+    onShowSettingsChanged: root.width += showSettings ? root.settingsPanelWidth : -root.settingsPanelWidth
 
     // Keyboard state from Python bridge
     property bool shiftOn: keyboard ? keyboard.shiftActive : false
@@ -68,7 +72,7 @@ Window {
     // Side panel extra width (fixed estimates to avoid circular binding with keyW)
     // Nav panel: 3 keys × ~46px + gaps + separator ≈ 160px
     // Numpad:    4 keys × ~44px + gaps + separator ≈ 200px
-    property real sidePanelExtra: (showNavigation ? 160 : 0) + (showNumpad ? 200 : 0)
+    property real sidePanelExtra: (showNavigation ? 160 : 0) + (showNumpad ? 200 : 0) + (showSettings ? settingsPanelWidth : 0)
 
     property real availableKeyboardWidth: root.width - 40 - sidePanelExtra
     property real keyW: Math.max(30, (availableKeyboardWidth - keySpacing * 12) / 13.5)
@@ -380,102 +384,6 @@ Window {
                         }
                     }
                     
-                    // Prediction settings button
-                    Rectangle {
-                        width: 28
-                        height: 28
-                        radius: 5
-                        color: predSettingsMouse.containsMouse ? "#3a3a3a" : "#252525"
-                        border.color: root.showPredictionSettings ? "#4a9eff" : "#444"
-                        
-                        Text {
-                            anchors.centerIn: parent
-                            text: "⚡"
-                            color: root.showPredictionSettings ? "#4a9eff" : "#888"
-                            font.pixelSize: 14
-                        }
-                        
-                        MouseArea {
-                            id: predSettingsMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: {
-                                root.showPredictionSettings = !root.showPredictionSettings
-                                if (root.showPredictionSettings) {
-                                    background.refreshPredictionStats()
-                                }
-                            }
-                        }
-                    }
-
-                    // Accessibility settings button
-                    Rectangle {
-                        width: 28
-                        height: 28
-                        radius: 5
-                        color: accessMouse.containsMouse ? "#3a3a3a" : "#252525"
-                        border.color: root.showAccessibility ? "#5a8a5a" : "#444"
-                        
-                        Text {
-                            anchors.centerIn: parent
-                            text: "♿"
-                            color: root.showAccessibility ? "#5a8a5a" : "#888"
-                            font.pixelSize: 14
-                        }
-                        
-                        MouseArea {
-                            id: accessMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: root.showAccessibility = !root.showAccessibility
-                        }
-                    }
-
-                    // Layout settings button
-                    Rectangle {
-                        width: 28
-                        height: 28
-                        radius: 5
-                        color: settingsMouse.containsMouse ? "#3a3a3a" : "#252525"
-                        border.color: root.showSettings ? "#4a9eff" : "#444"
-                        
-                        Text {
-                            anchors.centerIn: parent
-                            text: "⚙"
-                            color: root.showSettings ? "#4a9eff" : "#888"
-                            font.pixelSize: 14
-                        }
-                        
-                        MouseArea {
-                            id: settingsMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: root.showSettings = !root.showSettings
-                        }
-                    }
-
-                    // Close button
-                    Rectangle {
-                        width: 28
-                        height: 28
-                        radius: 5
-                        color: closeMouse.containsMouse ? "#5a2020" : "#252525"
-                        border.color: "#444"
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "✕"
-                            color: closeMouse.containsMouse ? "#ff6666" : "#888"
-                            font.pixelSize: 12
-                        }
-
-                        MouseArea {
-                            id: closeMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: Qt.quit()
-                        }
-                    }
                 }
 
                 // ===== Number Row =====
@@ -836,7 +744,7 @@ Window {
             anchors.rightMargin: 8
             anchors.topMargin: 4
             anchors.bottomMargin: 8
-            width: Math.min(320, parent.width * 0.45)
+            width: root.settingsPanelWidth - 20
             
             // Layout settings
             showFunctionRow: root.showFunctionRow

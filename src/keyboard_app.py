@@ -130,6 +130,20 @@ def _apply_windows_extended_styles(root) -> None:
         new_style = current | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST
         user32.SetWindowLongW(hwnd, GWL_EXSTYLE, new_style)
 
+        # SetWindowPos with SWP_FRAMECHANGED forces the system to re-read the
+        # extended style we just set.  Without this, WS_EX_NOACTIVATE may not
+        # take effect and clicks on key buttons will steal focus before
+        # SendInput fires.
+        SWP_NOSIZE = 0x0001
+        SWP_NOMOVE = 0x0002
+        SWP_NOZORDER = 0x0004
+        SWP_NOACTIVATE = 0x0010
+        SWP_FRAMECHANGED = 0x0020
+        user32.SetWindowPos(
+            hwnd, 0, 0, 0, 0, 0,
+            SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+        )
+
         _logger.info(
             "Applied Windows extended styles: "
             "WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST"

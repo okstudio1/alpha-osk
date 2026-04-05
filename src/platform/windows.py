@@ -162,10 +162,21 @@ class KEYBDINPUT(ctypes.Structure):
 
 
 class _INPUT_UNION(ctypes.Union):
-    """Union inside INPUT; we only use the keyboard member."""
+    """
+    Union inside INPUT.
+
+    On 64-bit Windows the union must be exactly 28 bytes — the size of
+    MOUSEINPUT (the largest member).  If we omit MOUSEINPUT the union is
+    only 20 bytes (KEYBDINPUT), making ctypes.sizeof(INPUT) = 32 instead
+    of the required 40.  SendInput rejects every call when cbSize is wrong,
+    returning 0 events injected with GetLastError() == 0 (silent failure).
+
+    The _padding field forces the union to 28 bytes so the full INPUT
+    struct rounds to 40 bytes on 64-bit, matching what Windows expects.
+    """
     _fields_ = [
         ("ki", KEYBDINPUT),
-        # Mouse and hardware input omitted — not needed for OSK.
+        ("_padding", ctypes.c_byte * 28),  # sizeof(MOUSEINPUT) on 64-bit
     ]
 
 
@@ -260,8 +271,9 @@ class WindowsKeySynthesizer(KeySynthesizerBase):
     """
 
     def __init__(self) -> None:
-        # Bind SendInput from user32.dll
-        self._user32 = ctypes.windll.user32
+        # Use use_last_error=True so ctypes.get_last_error() captures the real
+        # Win32 error code after each SendInput call (windll doesn't do this by default).
+        self._user32 = ctypes.WinDLL("user32", use_last_error=True)
         self._send_input = self._user32.SendInput
         self._send_input.argtypes = [
             wintypes.UINT,                      # nInputs

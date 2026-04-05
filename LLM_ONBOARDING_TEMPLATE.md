@@ -41,6 +41,16 @@ I'm Owen — a wheelchair user with muscular dystrophy.
 
 ---
 
+## AI Collaboration (Sequential Handoffs)
+
+I frequently switch between AI assistants (like Antigravity and Claude) on the **same exact local repository** when I run out of credits on one tool. When picking up a task:
+- **Assume a Dirty State:** The previous AI may have been cut off mid-task. Immediately run `git status` and `git diff` to understand where it left off before making any new changes.
+- **Handle Stale Git Locks:** If you encounter a `.git/index.lock` error, the previous AI might have ended abruptly during a Git operation. If the lock is stale, ask me for permission to delete it so you can proceed.
+- **Troubleshooting Agent Unresponsiveness:** If Antigravity becomes completely unresponsive or fails to read the Git repository, it is likely crashing internally due to an unsupported Git extension left behind. Run `git config --local --unset extensions.worktreeConfig` to fix it.
+- **Prepare for Handoffs:** If I tell you we are switching tools, or if you complete a meaningful chunk of work, use `git add -A` and `git commit -m "wip: [description]"` so the next agent has a clean checkpoint.
+
+---
+
 ## Git Commits
 
 Use conventional commits:

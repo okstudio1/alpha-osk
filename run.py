@@ -199,6 +199,36 @@ def run_dashboard():
     return 0
 
 
+def ensure_admin_windows():
+    """
+    On Windows, re-launch the process with administrator privileges if needed.
+
+    SendInput is blocked by UIPI when the keyboard process runs at a lower
+    integrity level than the focused window.  Running as admin bypasses UIPI
+    for all standard applications.  (Full elevated-window + UAC-screen support
+    still requires an EV-signed UIAccess binary — see docs/WINDOWS.md.)
+
+    If already admin, returns immediately.  Otherwise, triggers a UAC prompt
+    and re-launches; the original process then exits.
+    """
+    if not IS_WINDOWS:
+        return
+    try:
+        import ctypes
+        if ctypes.windll.shell32.IsUserAnAdmin():
+            return  # Already elevated
+        print("Re-launching with administrator privileges (required for keystroke injection)...")
+        args = " ".join(f'"{a}"' for a in sys.argv)
+        ret = ctypes.windll.shell32.ShellExecuteW(
+            None, "runas", sys.executable, args, str(SCRIPT_DIR), 1
+        )
+        if ret > 32:
+            sys.exit(0)  # Elevated process launched successfully; exit this one
+        print("WARNING: Could not obtain admin rights. Keystroke injection may not work.")
+    except Exception as e:
+        print(f"WARNING: Admin check failed ({e}). Keystroke injection may not work.")
+
+
 def main():
     """Main launcher function."""
     platform_name = "Windows" if IS_WINDOWS else "Linux" if IS_LINUX else sys.platform
@@ -206,6 +236,10 @@ def main():
     print(f"  Alpha-OSK — On-Screen Keyboard for {platform_name}")
     print("=" * 50)
     print()
+
+    # Windows: elevate before doing anything else so the keyboard process
+    # inherits admin rights and SendInput can reach all windows.
+    ensure_admin_windows()
 
     os.chdir(SCRIPT_DIR)
 
