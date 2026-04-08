@@ -1,327 +1,603 @@
 # Alpha-OSK Training Corpus
-# Common English phrases and sentences for PPM model training
-# This corpus helps the keyboard predict natural language patterns
+# Natural English sentences for PPM and n-gram training.
+# Each line is one sentence — the model learns character sequences,
+# word bigrams, and trigrams from these.
+#
+# Guidelines for adding sentences:
+# - Write naturally, as if texting or chatting
+# - Mix formal and casual registers
+# - Include contractions, fragments, and varied punctuation
+# - Cover diverse topics the user might type about
+# - Keep each line as one complete thought
 
-# Greetings and Common Phrases
-hello how are you doing today
-hi there how is everything going
-good morning how did you sleep
-good afternoon hope you are having a nice day
-good evening how was your day
-hey what is up
-nice to meet you
-it was nice talking to you
-have a great day
-see you later
-take care
-goodbye for now
-thanks so much for your help
-thank you very much
-you are welcome
-no problem at all
-sorry about that
-excuse me
-please and thank you
+# === Greetings and small talk ===
+hello how are you
+hi there
+hey what's up
+good morning
+good afternoon
+good evening
+how are you doing
+how's it going
+how have you been
+I'm doing well thanks
+I'm good how about you
+not bad thanks for asking
+pretty good actually
+could be better honestly
+I'm alright
+long time no see
+nice to see you again
+great to hear from you
+what's new with you
+nothing much just the usual
+same old same old
+hey it's been a while
 
-# Questions
-how are you
-what are you doing
-where are you going
-when will you be back
-why did that happen
-who is there
-what time is it
-can you help me
-would you like to
-do you want to
-are you sure
-is everything okay
-what do you think
-how does that work
-where is the
-when is the meeting
-why is that important
-who can help me with this
-
-# Common Responses
-I am doing well thank you
-I am fine thanks for asking
+# === Casual conversation ===
 that sounds great
-I think so too
-I agree with you
-I understand what you mean
-that makes sense
-I will do that
-I can help you
-let me know if you need anything
-I will get back to you
-I am not sure about that
-I need to think about it
-I will check on that
-sounds good to me
-that works for me
-I appreciate your help
-no worries at all
-
-# Daily Activities
-I am going to work
-I am working from home today
-I need to go to the store
-I am making dinner
-I am eating lunch
-I am taking a break
-I am going to bed
-I just woke up
-I am getting ready
-I am on my way
-I will be there soon
-I am running late
-I am almost done
-I finished the task
-I need to call someone
-I am sending an email
-I am in a meeting
-I have an appointment
-
-# Technology and Computing
-I am using my computer
-I need to restart my laptop
-the internet is not working
-can you check the wifi
-I am downloading a file
-I am uploading a document
-the software needs an update
-I am installing a program
-the application crashed
-I need to save my work
-I am backing up my files
-I need technical support
-the system is slow today
-I am logging in now
-I forgot my password
-I need to change my settings
-the screen is frozen
-I am running a program
-
-# Accessibility and Assistance
-I need some help please
-can you assist me with this
-I am having trouble with
-this is difficult for me
-can you repeat that
-can you speak slower
-I did not understand that
-can you show me how
-I need more time
-please be patient with me
-I appreciate your understanding
-thank you for your patience
-I am doing my best
-this is very helpful
-you are making a difference
-
-# Work and Professional
-I am in a meeting right now
-I have a deadline tomorrow
-I need to finish this project
-the report is due today
-I am working on the presentation
-I sent you an email about this
-please review the document
-I have a question about
-can we schedule a call
-I will follow up on that
-the meeting is at three
-I am available this afternoon
-let me check my calendar
-I will send you the details
-please confirm the appointment
-I need your approval on this
-the project is on track
-we are making good progress
-
-# Social and Casual
-how was your weekend
-what did you do yesterday
-are you free this weekend
-do you want to hang out
-let us get together soon
-I had a great time
-it was so much fun
-I really enjoyed that
-we should do this again
-I am looking forward to it
-that sounds like fun
-I would love to join
-count me in
-I cannot make it today
-maybe next time
-I will let you know
-sounds like a plan
-I am excited about this
-
-# Health and Wellbeing
-I am feeling well today
-I am a bit tired
-I need to rest
-I am taking my medicine
-I have a doctor appointment
-I am feeling better now
-I need to take it easy
-I am staying hydrated
-I went for a walk
-I am trying to stay active
-I am feeling under the weather
-I hope you feel better soon
-take care of yourself
-get some rest
-stay healthy
-
-# Family and Relationships
-my family is doing well
-I am spending time with my kids
-my parents are visiting
-I talked to my sister today
-my brother helped me out
-I am going to see my friends
-I miss my family
-we had a family dinner
-I am proud of my kids
-my spouse is wonderful
-I love my family
-we are very close
-I appreciate my loved ones
-
-# Emotions and Feelings
-I am happy today
-I am feeling grateful
-I am excited about this
-I am a little nervous
-I am worried about something
-I am feeling confident
-I am proud of myself
-I am hopeful for the future
-I am feeling peaceful
-I am content with life
-I am feeling motivated
-I am inspired by you
-I am thankful for everything
-I am blessed to have you
-
-# Planning and Future
-I am planning to do that
-I will work on it tomorrow
-I am going to try that
-I hope to see you soon
-I am looking forward to the weekend
-I plan to finish this week
-I am saving up for something
-I am setting goals for myself
-I want to achieve more
-I am making progress every day
-the future looks bright
-I am optimistic about things
-I believe in myself
-I can do this
-
-# Common Sentence Starters
-I think that
-I believe that
-I hope that
-I know that
-I feel that
-I want to
-I need to
-I have to
-I should
-I would like to
-I am going to
-I will be
-I was just
-I have been
-I am trying to
-I am learning to
-I am working on
-I am waiting for
-
-# Conversational Fillers
-you know what I mean
-by the way
-speaking of which
-on the other hand
-in other words
-for example
-in my opinion
-as far as I know
-to be honest
-actually
-basically
-essentially
-generally speaking
-more or less
-sort of
-kind of
-I suppose
-I guess
-
-# Polite Expressions
-would you mind
-if you do not mind
-I would appreciate it if
-could you please
-may I ask
-I was wondering if
-would it be possible
-I hate to bother you but
-I do not mean to interrupt
-excuse me for asking
-I hope this is not too much trouble
-thank you for understanding
-I am sorry to hear that
-my apologies for any inconvenience
-please let me know
-feel free to reach out
-do not hesitate to ask
-
-# Time Related
-right now
-at the moment
-currently
-today
-tomorrow
-yesterday
-this morning
-this afternoon
-this evening
-tonight
-next week
-last week
-this month
-next month
-soon
-later
-eventually
-in a while
-in a moment
-just a minute
-one second
-
-# Agreement and Disagreement
-I agree
-I disagree
-that is correct
-that is not right
-you are right
-I think you are wrong
-I see your point
-I understand but
-I respectfully disagree
-we are on the same page
-I could not agree more
-that is exactly right
-not quite
-almost
-close enough
+oh really that's interesting
+no way are you serious
+I can't believe that
+that's so cool
+I know right
+yeah totally
+for sure
+makes sense
+I didn't know that
+wait what happened
+tell me more about it
+that's hilarious
+you're kidding me
+I had no idea
+wow that's amazing
+that's kind of weird
+I thought so too
+exactly what I was thinking
+oh I see what you mean
 fair enough
 good point
-I had not thought of that
+I never thought of it that way
+huh that's a good question
+
+# === Questions ===
+what are you up to
+where are you going
+when will you be back
+how long will that take
+what time is it
+what time does it start
+where should we meet
+who else is coming
+do you want to come
+are you free later
+can you help me with something
+do you know what I mean
+what do you think about this
+have you ever tried that
+how do you do that
+is that the right one
+which one do you want
+where did you put it
+when did you find out
+why did they change it
+how much does it cost
+how many people are coming
+what happened after that
+do you remember when
+can I ask you something
+is everything okay
+what's the plan for today
+where is the nearest one
+how far is it from here
+did you get my message
+
+# === Responses and agreement ===
+yes that works for me
+no I don't think so
+maybe I'm not sure yet
+I think so
+I don't think that's right
+I agree with you on that
+I see your point but
+that's exactly what I mean
+you're absolutely right
+I completely understand
+I'll think about it
+let me get back to you on that
+sounds good to me
+that works
+I'm fine with either one
+whatever you think is best
+it doesn't matter to me
+I'll go with your suggestion
+okay let's do that
+sure thing
+no problem
+of course
+absolutely
+definitely not
+I'd rather not
+that's not going to work
+I appreciate the offer though
+
+# === Making plans ===
+let's meet up later
+what time works for you
+I'm free after three
+how about tomorrow instead
+can we reschedule
+I have something at noon
+let me check my calendar
+I'll be there at five
+are we still on for tonight
+something came up actually
+I might be a little late
+I'll let you know when I'm leaving
+should we invite anyone else
+where do you want to go
+let's try that new place
+I'll make a reservation
+I can pick you up
+just text me when you're ready
+I'm on my way now
+I'll be there in ten minutes
+running about five minutes late
+I just got here
+where are you
+I'm waiting outside
+meet me at the front
+
+# === Daily life ===
+I need to go to the store
+I'm making dinner tonight
+what should we have for lunch
+I already ate
+I'm not very hungry
+can you grab some milk
+we're out of coffee
+I need to do laundry
+the house is a mess
+I'll clean up later
+I'm so tired today
+I didn't sleep well last night
+I woke up really early
+I'm going to take a nap
+I need some fresh air
+I'm going for a walk
+the weather is really nice today
+it's raining again
+it's freezing outside
+I should probably get going
+I have a lot to do today
+I'm running some errands
+I'll be back in an hour
+I just got home
+what a long day
+
+# === Work and professional ===
+I'm heading to work
+I'm working from home today
+I have a meeting at ten
+the meeting got moved to two
+can you send me that file
+I'll email it to you
+did you see my message
+I need to finish this report
+the deadline is tomorrow
+I'm almost done with it
+can we push the deadline back
+I need more time on this
+let me review it first
+looks good to me
+I have a few changes
+can you take a look at this
+I'll update the document
+the project is going well
+we need to discuss something
+I'll set up a call
+are you available at three
+I'm in a meeting right now
+I'll be free in twenty minutes
+let me know when you're ready
+I'll follow up on that tomorrow
+thanks for the update
+good work on this
+I appreciate your help with that
+please send me the details
+I'll handle it
+who is the contact for this
+I need approval before I can proceed
+the client wants changes
+we should probably loop in the team
+I'll add it to the agenda
+can you take notes
+I'll share the minutes after
+just checking in on the status
+everything is on track
+we're a bit behind schedule
+
+# === Technology ===
+my phone is almost dead
+I need to charge my laptop
+the wifi isn't working
+can you check the connection
+I'm having trouble logging in
+I forgot my password again
+the app keeps crashing
+I need to update my software
+my computer is running slow
+I'll restart it and see
+can you hear me now
+you're breaking up a bit
+let me try calling again
+I'll send you the link
+did you get the file I sent
+it won't let me download it
+try clearing your browser cache
+have you tried turning it off and on
+the screen is frozen
+I lost my work because it crashed
+I should have saved more often
+I need to back up my files
+which browser are you using
+it works fine on my end
+let me share my screen
+can you see it now
+
+# === Accessibility and health ===
+I need some help please
+can you assist me with this
+I'm having trouble reaching that
+this is difficult for me
+can you repeat that
+could you speak a bit slower
+I didn't catch what you said
+can you show me how to do this
+I need a bit more time
+please be patient
+thank you for understanding
+I appreciate your patience
+I'm doing my best
+this keyboard is really helpful
+the predictions are getting better
+I like the larger keys
+the autocorrect fixed that for me
+I need to adjust the settings
+can you make the text bigger
+I prefer the high contrast mode
+I have a doctor's appointment
+I need to take my medication
+I'm feeling better today
+I'm a bit sore but okay
+physical therapy went well
+I need to rest for a while
+I'll take it easy today
+thanks for checking on me
+
+# === Texting and messaging style ===
+hey are you there
+yeah I'm here
+ok cool
+one sec
+brb
+lol that's funny
+haha yeah
+omg really
+idk what to do
+tbh I'm not sure
+btw did you see that
+nvm I figured it out
+gonna be late sorry
+np don't worry about it
+thx appreciate it
+k sounds good
+ya for sure
+nah I'm good
+yep that works
+lmk when you're done
+wya
+otw now
+eta about fifteen min
+can't talk rn
+I'll call you later
+just saw this
+my bad
+all good
+same here
+right
+
+# === Emotions and personal ===
+I'm really happy about this
+I'm so excited
+I can't wait
+this makes me so happy
+I'm a little worried about it
+I'm nervous about tomorrow
+I'm feeling stressed out
+that really bothered me
+I'm sorry to hear that
+I hope things get better
+everything will be okay
+I believe in you
+you've got this
+don't give up
+I'm proud of what you did
+that means a lot to me
+thank you for being there
+I really appreciate you
+you always know what to say
+I'm grateful for your help
+I miss you
+I love you
+take care of yourself
+I hope you feel better
+sending good vibes your way
+hang in there
+it's going to be fine
+one day at a time
+I'm here if you need me
+you can always talk to me
+
+# === Shopping and errands ===
+I need to pick up a few things
+do we need anything from the store
+I'll grab groceries on my way home
+how much was it
+that's a good deal
+it was on sale
+I'm looking for a birthday gift
+what size do you wear
+do they have it in blue
+I'll order it online
+the package should arrive tomorrow
+I need to return something
+where's the receipt
+I'll check if they have it in stock
+let me compare prices first
+that's more than I wanted to spend
+I'll think about it
+just add it to the cart
+did the order ship yet
+it says it's out for delivery
+
+# === Food and cooking ===
+what do you want for dinner
+I'm thinking pizza
+let's order something
+I don't feel like cooking
+I'll make pasta it's easy
+do we have any leftovers
+I'm craving something sweet
+can we get ice cream
+what's in the fridge
+I need to go grocery shopping
+this is really good
+the food was amazing
+I'm so full
+do you want the rest of mine
+I'll save some for later
+try this it's delicious
+what's the recipe
+I found it online
+it only takes thirty minutes
+I burned it again
+let's just order takeout
+
+# === Entertainment ===
+what do you want to watch
+have you seen this show
+I just started watching it
+no spoilers please
+that movie was so good
+I didn't like the ending though
+have you read that book
+I'm almost done with it
+what are you listening to
+this song is stuck in my head
+let's play a game
+I'm bored
+what should we do
+let's go somewhere
+I don't want to go out tonight
+let's just stay in
+we could watch a movie
+I'll pick something on Netflix
+have you played this game
+it's really addictive
+I've been playing it all day
+
+# === Weather and environment ===
+it's beautiful outside
+the sun is finally out
+I love this weather
+it's supposed to rain later
+bring an umbrella just in case
+it's getting cold out there
+I need a jacket
+it's way too hot today
+when does it cool down
+the forecast says snow tomorrow
+I hope it doesn't storm
+the wind is crazy today
+perfect day to stay inside
+let's enjoy the nice weather while it lasts
+I can't believe how warm it is for this time of year
+
+# === Family and relationships ===
+how's your family doing
+everyone is doing well thanks
+my parents are coming to visit
+I talked to my sister today
+my brother is moving next month
+the kids are doing great
+I'm spending time with the family this weekend
+we had a really nice dinner together
+I miss seeing everyone
+we should plan a get together
+it's been too long since we all hung out
+tell everyone I said hi
+give my love to your family
+I'm proud of my kids
+family means everything to me
+
+# === Apologies and sympathy ===
+I'm sorry about that
+my apologies
+I didn't mean to
+it won't happen again
+I feel bad about what happened
+don't worry about it
+it's not your fault
+these things happen
+no need to apologize
+I forgive you
+I'm sorry for your loss
+that must be really hard
+if there's anything I can do
+you're in my thoughts
+I'm here for you
+let me know how I can help
+take all the time you need
+
+# === Directions and places ===
+where is it located
+it's on the corner of Main Street
+do you know how to get there
+just follow the signs
+take the second left
+it's about ten minutes from here
+I'll send you the address
+let me pull up the map
+are we going the right way
+I think we're lost
+the GPS says to turn right
+it's right across the street
+you can't miss it
+park in the back
+I'll meet you at the entrance
+
+# === Requests and instructions ===
+can you please pass me that
+could you hold this for a second
+would you mind helping me
+I need you to do something for me
+please don't forget
+make sure to lock the door
+don't leave without your keys
+remember to turn off the lights
+let me know when it's done
+just follow the instructions
+press the green button
+scroll down to the bottom
+click on the link
+enter your email address
+select the option you want
+save it before you close
+don't close the window yet
+
+# === Opinions and preferences ===
+I think that's a great idea
+in my opinion it's better this way
+I prefer the other one
+it depends on the situation
+I'm not a fan of that
+I really like this one
+that's my favorite
+I'd go with the blue one
+honestly I don't care either way
+I have strong feelings about this
+it's a matter of preference
+I see both sides of it
+I lean towards the first option
+I've changed my mind actually
+on second thought let's not
+I'd rather do something else
+that's not really my thing
+
+# === Encouragement and motivation ===
+you can do this
+keep going you're almost there
+don't give up now
+I believe in you
+you're doing amazing
+great job on that
+well done
+I'm impressed
+that turned out really well
+you should be proud of yourself
+every little bit counts
+one step at a time
+progress not perfection
+you've come so far
+keep up the good work
+I knew you could do it
+that's a huge accomplishment
+celebrate the small wins too
+
+# === Common sentence starters (for trigram building) ===
+I want to go home
+I want to try that
+I want to know more
+I need to leave soon
+I need to think about it
+I need to call them
+I have to finish this
+I have to go now
+I have to tell you something
+I would like to help
+I would like to know
+I would like to try
+I used to live there
+I used to work there
+I used to think that
+I'm going to be late
+I'm going to try harder
+I'm going to call them
+I'm trying to figure it out
+I'm trying to be patient
+I'm trying to learn this
+do you want to come with me
+do you want to get dinner
+do you want to hear something funny
+are you going to be there
+are you going to finish that
+are you going to tell them
+can you help me with this
+can you tell me where
+can you show me how
+we should probably leave soon
+we should probably talk about it
+we should probably wait
+I don't think that's right
+I don't think we should
+I don't think it matters
+I don't know what to do
+I don't know where it is
+I don't know how to explain it
+it would be nice to
+it would be great if
+it would be better to wait
+let me know if you need anything
+let me know when you get there
+let me know what you think
+thank you for your help
+thank you for letting me know
+thank you for being patient
+I'm looking forward to it
+I'm looking forward to seeing you
+I'm looking forward to the weekend
+that's what I was thinking
+that's what I was going to say
+that's what I was afraid of
+the thing is I'm not sure
+the thing is it's complicated
+the problem is we don't have time
+as far as I know it's fine
+as far as I can tell
+to be honest I'm not sure
+to be honest I don't care
+I was wondering if you could
+I was wondering if you knew
+I was hoping you could help
+I was hoping to see you there

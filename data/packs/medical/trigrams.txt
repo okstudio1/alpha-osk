@@ -1,0 +1,105 @@
+# Alpha-OSK Medical & Health Trigrams
+# Three words per line, space-separated
+# Common medical three-word phrases for next-word prediction
+
+# --- Conditions ---
+cerebral palsy diagnosis
+multiple sclerosis treatment
+spinal cord injury
+traumatic brain injury
+chronic pain syndrome
+chronic fatigue syndrome
+high blood pressure
+low blood pressure
+blood sugar level
+congestive heart failure
+range of motion
+
+# --- Therapy ---
+physical therapy session
+occupational therapy session
+speech therapy session
+physical therapy appointment
+occupational therapy exercises
+range of motion
+plan of care
+activities of daily
+of daily living
+return to work
+quality of life
+
+# --- Medications ---
+side effects of
+side effect of
+over the counter
+pain medication for
+I take my
+need my medication
+refill my prescription
+milligrams per day
+twice a day
+three times daily
+once a day
+as needed for
+time to take
+
+# --- Equipment ---
+power wheelchair repair
+wheelchair accessible entrance
+durable medical equipment
+assistive technology device
+
+# --- Medical visits ---
+primary care doctor
+primary care physician
+see the doctor
+go to hospital
+emergency room visit
+make an appointment
+schedule an appointment
+cancel my appointment
+follow up appointment
+follow up visit
+waiting room is
+prior authorization for
+out of pocket
+
+# --- Symptoms and descriptions ---
+I am feeling
+I am having
+I have been
+pain level is
+my pain is
+it hurts when
+I feel like
+I need help
+I need my
+I need to
+I want to
+I can not
+I am in
+having trouble with
+hard to breathe
+hard to swallow
+hard to walk
+hard to sleep
+getting worse today
+not feeling well
+feeling much better
+worse than yesterday
+better than yesterday
+same as yesterday
+on a scale
+
+# --- Requests ---
+can you help
+please call my
+please help me
+talk to my
+I would like
+need to see
+need to call
+need to go
+as soon as
+right away please
+when is my

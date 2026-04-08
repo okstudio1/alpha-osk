@@ -1,0 +1,104 @@
+# Academic & Scientific Trigrams
+# Common three-word academic phrases
+
+# --- Connective Phrases ---
+in order to
+on the other
+as well as
+in addition to
+with respect to
+in terms of
+on the basis
+in the context
+as a result
+due to the
+in contrast to
+in relation to
+in accordance with
+in the case
+in the field
+in the form
+in the presence
+in the absence
+at the same
+for the purpose
+with regard to
+in response to
+in comparison to
+in conjunction with
+as opposed to
+
+# --- Research Phrases ---
+in this study
+the results suggest
+the findings indicate
+the data show
+the present study
+the current study
+the aim of
+the purpose of
+the results of
+the effect of
+the role of
+the impact of
+the nature of
+the extent to
+a number of
+a variety of
+the majority of
+a significant difference
+no significant difference
+a positive correlation
+a negative correlation
+the relationship between
+the difference between
+the comparison between
+
+# --- Methodology Phrases ---
+was used to
+were used to
+was found to
+were found to
+was determined by
+were collected from
+was measured by
+were analyzed using
+was conducted to
+were compared with
+has been shown
+have been reported
+has been suggested
+have been studied
+can be used
+may be due
+should be noted
+it was found
+it is important
+it is necessary
+it should be
+there is a
+there are several
+based on the
+according to the
+
+# --- Academic Writing Phrases ---
+the fact that
+it is clear
+it is possible
+it is likely
+it has been
+this suggests that
+this indicates that
+these results suggest
+these findings indicate
+this is consistent
+this study aims
+this paper presents
+this research examines
+we found that
+we observed that
+the analysis revealed
+further research is
+future studies should
+more research is
+taken into account

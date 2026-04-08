@@ -1,0 +1,127 @@
+# Academic & Scientific Bigrams
+# Common two-word academic phrases
+
+# --- Research & Methodology ---
+peer review
+research paper
+data analysis
+case study
+literature review
+control group
+sample size
+research question
+null hypothesis
+dependent variable
+independent variable
+research design
+data collection
+field study
+pilot study
+clinical trial
+blind study
+random sample
+statistical analysis
+content analysis
+factor analysis
+regression analysis
+cluster analysis
+variance analysis
+effect size
+confidence interval
+standard deviation
+margin error
+response rate
+attrition rate
+
+# --- Academic Writing ---
+academic writing
+scholarly article
+research findings
+empirical evidence
+theoretical framework
+conceptual framework
+primary source
+secondary source
+peer reviewed
+open access
+impact factor
+citation index
+works cited
+reference list
+annotated bibliography
+et al
+in vitro
+in vivo
+de novo
+ad hoc
+
+# --- Results & Discussion ---
+significant difference
+positive correlation
+negative correlation
+causal relationship
+inverse relationship
+linear relationship
+statistically significant
+highly significant
+strongly correlated
+well established
+widely accepted
+commonly used
+previously reported
+recently published
+further research
+future research
+current study
+present study
+previous studies
+existing literature
+
+# --- Scientific Terms ---
+scientific method
+double blind
+controlled experiment
+natural selection
+cell division
+gene expression
+amino acid
+nucleic acid
+periodic table
+chemical reaction
+atomic number
+molecular weight
+boiling point
+melting point
+surface tension
+kinetic energy
+potential energy
+electromagnetic radiation
+wave function
+quantum mechanics
+
+# --- Academic Context ---
+higher education
+graduate school
+doctoral program
+academic journal
+tenure track
+research grant
+funding agency
+institutional review
+ethics committee
+informed consent
+intellectual property
+academic integrity
+academic dishonesty
+knowledge gap
+paradigm shift
+working hypothesis
+alternative hypothesis
+operational definition
+systematic review
+meta analysis
+cross sectional
+mixed methods
+grounded theory
+action research
+longitudinal study

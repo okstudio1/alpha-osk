@@ -1,5 +1,7 @@
 # Alpha-OSK
 
+[![CI](https://github.com/owenpkent/alpha-osk/actions/workflows/ci.yml/badge.svg)](https://github.com/owenpkent/alpha-osk/actions/workflows/ci.yml)
+
 **AI-Powered On-Screen Keyboard for Linux & Windows**
 
 An accessible on-screen keyboard designed for users with motor disabilities, featuring AI-enabled predictive text, voice dictation, and federated learning for personalized adaptation. Runs natively on both **Linux** (X11/Wayland) and **Windows** (with optional UIAccess for elevated-window support via EV code signing).
@@ -13,7 +15,8 @@ An accessible on-screen keyboard designed for users with motor disabilities, fea
 | Area | Status |
 |------|--------|
 | Core Keyboard | ✅ Complete |
-| AI Prediction | 🚧 In Progress |
+| AI Prediction | ✅ Smart learning, trigrams, vocabulary packs |
+| Test Suite | ✅ 266 tests passing |
 | Voice Dictation | ⏳ Planned |
 | Federated Learning | ⏳ Planned |
 | Collaboration Features | ⏳ Planned |
@@ -70,7 +73,8 @@ Current on-screen keyboards on Linux (GNOME On-Board) and Windows (built-in OSK)
 - ✅ **Key synthesis** via xdotool/ydotool (Linux) or SendInput (Windows)
 - ✅ **Dark theme** with press animations
 - ✅ **Draggable window** — stays on top, doesn't steal focus
-- ✅ **Prediction bar** — UI ready, engine in development
+- ✅ **Prediction bar** — hybrid n-gram/PPM/fuzzy engine with smart learning
+- ✅ **Vocabulary packs** — medical, programming, academic, gaming, business (enable/disable at runtime)
 
 ## Inspiration
 
@@ -95,6 +99,31 @@ Alpha-OSK combines the best of accessibility-first design with modern AI.
   - Flower for federated learning
 - **Dashboard:** HTML/CSS (served via Python)
 - **Windows Build:** PyInstaller + EV code signing for UIAccess
+
+---
+
+## Development
+
+### Running Tests
+
+```bash
+# Install dev dependencies
+pip install -r requirements-dev.txt
+
+# Run the full test suite
+python -m pytest
+
+# Run with verbose output
+python -m pytest -v
+
+# Run a specific test file
+python -m pytest tests/test_ngram_predictor.py
+
+# Run with coverage
+python -m pytest --cov=src --cov-report=term-missing
+```
+
+See [ROADMAP.md](ROADMAP.md) for the phased improvement plan.
 
 ---
 
@@ -137,10 +166,13 @@ Dashboard opens at `http://localhost:8080`
 ```
 alpha-osk/
 ├── README.md              # This file
+├── ROADMAP.md             # Phased improvement plan
 ├── TODO.md                # Task tracking
 ├── DESIGN.md              # Layout and UX specifications
 ├── run.py                 # Cross-platform launcher (venv + deps)
 ├── requirements.txt       # Python dependencies
+├── requirements-dev.txt   # Dev/test dependencies
+├── pyproject.toml         # pytest, ruff, mypy config
 ├── src/
 │   ├── keyboard_app.py    # QML engine setup and window config
 │   ├── keyboard_bridge.py # Python↔QML bridge (platform-agnostic)
@@ -155,13 +187,26 @@ alpha-osk/
 │   │   ├── ppm_predictor.py
 │   │   └── fuzzy_recognizer.py
 │   └── __init__.py
+├── tests/                 # ★ Automated test suite (pytest)
+│   ├── conftest.py        #   Shared fixtures
+│   ├── test_ngram_predictor.py
+│   ├── test_ppm_predictor.py
+│   ├── test_fuzzy_recognizer.py
+│   ├── test_hybrid_predictor.py
+│   ├── test_platform.py
+│   └── test_keyboard_bridge.py
 ├── qml/
 │   ├── Main.qml           # Main keyboard window
 │   └── components/        # Reusable QML components
 ├── build/                 # ★ Windows build configuration
 │   ├── alpha-osk.exe.manifest  # UIAccess manifest (EV signing)
 │   └── alpha-osk.spec    # PyInstaller build spec
-├── data/                  # Dictionaries and training data
+├── data/                  # ★ Training data (see data/README.md)
+│   ├── base_dictionary.txt        # Unigram vocabulary (one word/line)
+│   ├── common_bigrams.txt         # Word pairs for prediction
+│   ├── common_trigrams.txt        # Word triples for prediction
+│   ├── training_corpus.txt        # Natural sentences for training
+│   └── google-10000-english-usa-no-swears.txt
 ├── templates/             # Project dashboard (HTML)
 └── docs/                  # Extended documentation
     ├── WINDOWS.md         # ★ Windows setup & signing guide

@@ -15,14 +15,15 @@ from __future__ import annotations
 import logging
 import threading
 from pathlib import Path
-from typing import Dict, List, Optional, Callable
+from typing import Dict, List, Optional
 
 from PySide6.QtCore import QObject, Signal
 
+from .fuzzy_recognizer import FuzzyRecognizer
 from .ngram_predictor import NgramPredictor
-from .transformer_predictor import TransformerPredictor
 from .ppm_predictor import PPMPredictor, PPMWordPredictor
-from .fuzzy_recognizer import FuzzyRecognizer, AccessibilityProfile, PROFILES
+from .transformer_predictor import TransformerPredictor
+from .vocabulary_pack import PackManager
 
 _logger = logging.getLogger("HybridPredictor")
 
@@ -30,12 +31,12 @@ _logger = logging.getLogger("HybridPredictor")
 class HybridPredictor(QObject):
     """
     Hybrid prediction engine combining multiple approaches:
-    
+
     1. N-gram: Instant word-level predictions (<10ms)
     2. PPM: Character-level context modeling (Dasher algorithm)
     3. Fuzzy: Spatial error correction for motor challenges
     4. Transformer: LLM re-ranking for accuracy (~100ms)
-    
+
     Emits Qt signals for integration with QML UI.
     """
 
@@ -46,6 +47,7 @@ class HybridPredictor(QObject):
     llmAvailableChanged = Signal(bool)   # LLM availability changed
     profileChanged = Signal(str)         # Accessibility profile changed
     autocorrectSuggested = Signal(str, str)  # (typed, correction)
+    packsChanged = Signal()              # Vocabulary packs enabled/disabled
 
     def __init__(
         self,
@@ -55,58 +57,66 @@ class HybridPredictor(QObject):
     ):
         """
         Initialize the hybrid predictor.
-        
+
         Args:
             model_dir: Directory for storing model files
             enable_llm: Whether to enable LLM re-ranking (can disable for speed)
             parent: Qt parent object
         """
         super().__init__(parent)
-        
+
         # Set up model directory (cross-platform: AppData on Windows, .config on Linux)
         if model_dir is None:
             from ..platform import get_model_dir
             model_dir = get_model_dir()
         self._model_dir = model_dir
         self._model_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Initialize n-gram predictor (always available)
         ngram_path = self._model_dir / "ngram_model.json"
         self._ngram = NgramPredictor(ngram_path if ngram_path.exists() else None)
-        
+
         # Load base dictionary for better initial predictions
         self._ngram.load_base_dictionary()
-        # Load common bigrams for next-word prediction
+        # Load common bigrams and trigrams for next-word prediction
         self._ngram.load_common_bigrams()
+        self._ngram.load_common_trigrams()
         _logger.info("N-gram predictor initialized")
-        
+
         # Initialize PPM predictor (character-level, Dasher algorithm)
         ppm_path = self._model_dir / "ppm_model.json"
         self._ppm = PPMPredictor(model_path=ppm_path if ppm_path.exists() else None)
         self._ppm_word = PPMWordPredictor(ppm=self._ppm)
         self._enable_ppm = True
         _logger.info("PPM predictor initialized")
-        
+
         # Initialize fuzzy recognizer (spatial error correction)
         self._fuzzy = FuzzyRecognizer()
         self._fuzzy.load_dictionary(
             Path(__file__).parent.parent.parent / "data" / "base_dictionary.txt"
         )
-        _logger.info("Fuzzy recognizer initialized with profile: %s", 
+        _logger.info("Fuzzy recognizer initialized with profile: %s",
                      self._fuzzy.get_current_profile().name)
-        
+
         # Load training corpus for better predictions
         self._load_training_corpus()
-        
+
+        # Initialize vocabulary pack manager
+        self._pack_manager = PackManager()
+        _logger.info(
+            "Pack manager initialized: %d packs available",
+            len(self._pack_manager.get_available_packs()),
+        )
+
         # Initialize transformer predictor (lazy loaded)
         self._enable_llm = enable_llm
         self._transformer: Optional[TransformerPredictor] = None
         self._llm_available = False
-        
+
         if enable_llm:
             # Load LLM in background
             self._load_llm_async()
-        
+
         # Current context for tracking
         self._current_context = ""
         self._pending_refinement = False
@@ -129,49 +139,49 @@ class HybridPredictor(QObject):
                 self.modelLoading.emit(False)
                 # Notify QML of availability change
                 self.llmAvailableChanged.emit(self._llm_available)
-        
+
         thread = threading.Thread(target=loader, daemon=True)
         thread.start()
 
     def predict(self, context: str, n: int = 5) -> List[str]:
         """
-        Get instant predictions combining n-gram, PPM, and fuzzy.
-        
+        Get instant predictions combining n-gram, PPM, fuzzy, and vocabulary packs.
+
         Args:
             context: Text typed so far
             n: Number of predictions
-            
+
         Returns:
             List of predicted words
         """
         self._current_context = context
         is_next_word = context.endswith(" ")
-        
+
         # Get predictions from multiple sources
         ngram_preds = self._ngram.predict(context, n * 2)  # Get more for filtering
         _logger.debug("N-GRAM preds (next=%s): %s", is_next_word, ngram_preds[:5])
-        
+
         # Add PPM predictions if enabled
         ppm_preds = []
         if self._enable_ppm:
             ppm_preds = self._ppm_word.predict(context, n * 2)
             _logger.debug("PPM preds: %s", ppm_preds[:5])
-        
+
         # Add fuzzy candidates for current word
         fuzzy_preds = []
         fuzzy_candidates = self._fuzzy.get_fuzzy_predictions(context, n)
         fuzzy_preds = [word for word, _ in fuzzy_candidates]
         if fuzzy_preds:
             _logger.debug("FUZZY preds: %s", fuzzy_preds[:5])
-        
+
         # Merge predictions with weighted scoring
         predictions = self._merge_predictions(
             ngram_preds, ppm_preds, fuzzy_preds, n
         )
-        
+
         _logger.debug("MERGED result: %s", predictions)
         return predictions
-    
+
     def _is_valid_word(self, word: str) -> bool:
         """Check if word is in our vocabulary (real word, not fragment)."""
         word_lower = word.lower()
@@ -179,7 +189,7 @@ class HybridPredictor(QObject):
         if word_lower in self._ngram.unigrams:
             return True
         # Check if it's a common short word (pronouns, articles, etc.)
-        if word_lower in {"i", "a", "an", "am", "as", "at", "be", "by", "do", 
+        if word_lower in {"i", "a", "an", "am", "as", "at", "be", "by", "do",
                           "go", "he", "if", "in", "is", "it", "me", "my", "no",
                           "of", "on", "or", "so", "to", "up", "us", "we"}:
             return True
@@ -194,17 +204,17 @@ class HybridPredictor(QObject):
     ) -> List[str]:
         """
         Merge predictions from multiple sources with weighted scoring.
-        
+
         For next-word prediction (context ends with space), heavily favor
         n-gram word predictions over PPM character fragments.
         Only include words that exist in our vocabulary.
         """
         scores: Dict[str, float] = {}
         sources: Dict[str, List[str]] = {}  # Track where each word came from
-        
+
         # Check if we're predicting next word (context ends with space)
         is_next_word = self._current_context.endswith(" ")
-        
+
         # N-gram predictions (weight: 3.0 for next-word, 1.0 for completion)
         ngram_weight = 3.0 if is_next_word else 1.0
         for i, word in enumerate(ngram):
@@ -216,7 +226,7 @@ class HybridPredictor(QObject):
             score = ngram_weight / (i + 1)
             scores[word] = scores.get(word, 0) + score
             sources.setdefault(word, []).append("ng")
-        
+
         # PPM predictions (weight: 0.3 for next-word, 0.8 for completion)
         ppm_weight = 0.3 if is_next_word else 0.8
         for i, word in enumerate(ppm):
@@ -228,7 +238,7 @@ class HybridPredictor(QObject):
             score = ppm_weight / (i + 1)
             scores[word] = scores.get(word, 0) + score
             sources.setdefault(word, []).append("ppm")
-        
+
         # Fuzzy predictions (weight based on profile)
         fuzzy_weight = self._fuzzy.profile.prediction_weight
         for i, word in enumerate(fuzzy):
@@ -237,10 +247,10 @@ class HybridPredictor(QObject):
             score = fuzzy_weight / (i + 1)
             scores[word] = scores.get(word, 0) + score
             sources.setdefault(word, []).append("fz")
-        
+
         # Sort by combined score
         sorted_words = sorted(scores.items(), key=lambda x: -x[1])
-        
+
         # Return top n valid words
         results = []
         for word, score in sorted_words:
@@ -252,48 +262,48 @@ class HybridPredictor(QObject):
             _logger.debug("  %s (%.2f) [%s]", word, score, src)
             if len(results) >= n:
                 break
-        
+
         return results
 
     def predict_with_refinement(self, context: str, n: int = 5) -> List[str]:
         """
         Get instant predictions and trigger async LLM refinement.
-        
+
         Emits predictionsReady immediately, then predictionsRefined
         when LLM finishes.
-        
+
         Args:
             context: Text typed so far
             n: Number of predictions
-            
+
         Returns:
             Instant hybrid predictions (n-gram + PPM + fuzzy)
         """
         self._current_context = context
-        
+
         # Get instant hybrid predictions (n-gram + PPM + fuzzy)
         predictions = self.predict(context, n)
         self.predictionsReady.emit(predictions)
-        
+
         # Trigger async LLM refinement if available
         if self._llm_available and self._transformer and len(context) > 3:
             self._refine_async(context, predictions, n)
-        
+
         return predictions
 
     def _refine_async(self, context: str, candidates: List[str], n: int) -> None:
         """Trigger async LLM re-ranking."""
         if self._pending_refinement:
             return  # Don't queue multiple refinements
-        
+
         self._pending_refinement = True
-        
+
         def on_refined(refined: List[str]):
             self._pending_refinement = False
             # Only emit if context hasn't changed
             if context == self._current_context and refined:
                 self.predictionsRefined.emit(refined)
-        
+
         # Get more candidates for re-ranking
         extended_candidates = self._ngram.predict(context, n * 3)
         self._transformer.rerank_async(context, extended_candidates, on_refined, n)
@@ -301,12 +311,12 @@ class HybridPredictor(QObject):
     def learn(self, text: str) -> None:
         """
         Learn from user's text to improve predictions.
-        
+
         Args:
             text: Text to learn from
         """
         self._ngram.learn(text)
-        
+
         # Also train PPM model
         if self._enable_ppm:
             self._ppm.learn_text(text)
@@ -319,16 +329,16 @@ class HybridPredictor(QObject):
     def learn_from_selection(self, context: str, selected_word: str) -> None:
         """
         Learn when user selects a prediction.
-        
+
         This helps the model understand which predictions are useful.
-        
+
         Args:
             context: The context when prediction was made
             selected_word: The word the user selected
         """
         # Boost the selected word
         self._ngram.learn_word(selected_word)
-        
+
         # Learn the context -> word association
         full_text = f"{context} {selected_word}"
         self._ngram.learn(full_text)
@@ -337,34 +347,34 @@ class HybridPredictor(QObject):
         """Save all models to disk."""
         ngram_path = self._model_dir / "ngram_model.json"
         self._ngram.save(ngram_path)
-        
+
         # Save PPM model
         if self._enable_ppm:
             ppm_path = self._model_dir / "ppm_model.json"
             self._ppm.save(ppm_path)
-        
+
         _logger.info("Models saved")
 
     def _load_training_corpus(self) -> None:
         """Load default training corpus for better predictions."""
         corpus_path = Path(__file__).parent.parent.parent / "data" / "training_corpus.txt"
-        
+
         if not corpus_path.exists():
             _logger.info("No training corpus found at %s", corpus_path)
             return
-        
+
         try:
             text = corpus_path.read_text(encoding="utf-8", errors="ignore")
             # Filter out comments
-            lines = [line for line in text.split('\n') 
+            lines = [line for line in text.split('\n')
                      if line.strip() and not line.startswith('#')]
             clean_text = '\n'.join(lines)
-            
+
             # Train both n-gram and PPM
             self._ngram.load_corpus(clean_text)
             if self._enable_ppm:
                 self._ppm.train(clean_text)
-            
+
             _logger.info("Training corpus loaded: %d characters", len(clean_text))
         except Exception as e:
             _logger.error("Failed to load training corpus: %s", e)
@@ -372,21 +382,21 @@ class HybridPredictor(QObject):
     def load_corpus(self, corpus_path: Path) -> None:
         """
         Load a text corpus for initial training.
-        
+
         Args:
             corpus_path: Path to text file
         """
         if not corpus_path.exists():
             _logger.warning("Corpus not found: %s", corpus_path)
             return
-        
+
         text = corpus_path.read_text(encoding="utf-8", errors="ignore")
         self._ngram.load_corpus(text)
-        
+
         # Also train PPM
         if self._enable_ppm:
             self._ppm.train(text)
-        
+
         self.save()
 
     @property
@@ -415,16 +425,16 @@ class HybridPredictor(QObject):
         stats["ppm"] = self._ppm.get_stats()
         stats["fuzzy"] = self._fuzzy.get_stats()
         return stats
-    
+
     # --- Accessibility Profile Management ---
-    
+
     def set_accessibility_profile(self, profile_name: str) -> bool:
         """
         Set accessibility profile for fuzzy recognition.
-        
+
         Args:
             profile_name: Name of profile (e.g., "normal", "mild_tremor")
-            
+
         Returns:
             True if profile found and set
         """
@@ -432,49 +442,49 @@ class HybridPredictor(QObject):
             self.profileChanged.emit(profile_name)
             return True
         return False
-    
+
     def get_accessibility_profiles(self) -> List[str]:
         """Get list of available accessibility profile names."""
         return self._fuzzy.get_profile_names()
-    
+
     def get_current_profile(self) -> str:
         """Get current accessibility profile name."""
         return self._fuzzy.get_current_profile().name.lower().replace(" ", "_")
-    
+
     # --- PPM Control ---
-    
+
     @property
     def enable_ppm(self) -> bool:
         """Check if PPM is enabled."""
         return self._enable_ppm
-    
+
     @enable_ppm.setter
     def enable_ppm(self, value: bool) -> None:
         """Enable/disable PPM predictions."""
         self._enable_ppm = value
-    
+
     def load_ppm_training_text(self, path: Path) -> bool:
         """
         Load training text for PPM model.
-        
+
         Args:
             path: Path to text file
-            
+
         Returns:
             True if loaded successfully
         """
         return self._ppm.load_training_text(path)
-    
+
     # --- Fuzzy Recognition ---
-    
+
     def check_autocorrect(self, typed_word: str, context: str = "") -> Optional[str]:
         """
         Check if a word should be autocorrected.
-        
+
         Args:
             typed_word: Word as typed
             context: Previous context
-            
+
         Returns:
             Corrected word if should autocorrect, None otherwise
         """
@@ -482,16 +492,16 @@ class HybridPredictor(QObject):
         if correction:
             self.autocorrectSuggested.emit(typed_word, correction)
         return correction
-    
+
     def get_key_alternatives(self, key: str) -> Dict[str, float]:
         """
         Get probability distribution over intended keys.
-        
+
         Useful for debugging or advanced UI feedback.
-        
+
         Args:
             key: Pressed key
-            
+
         Returns:
             Dict mapping key -> probability
         """
@@ -506,3 +516,49 @@ class HybridPredictor(QObject):
     def reload_dictionary(self) -> bool:
         """Reload the base dictionary."""
         return self._ngram.load_base_dictionary()
+
+    # --- Vocabulary Packs ---
+
+    def get_available_packs(self) -> List[dict]:
+        """Get metadata for all available vocabulary packs."""
+        return self._pack_manager.get_all_pack_info()
+
+    def get_enabled_packs(self) -> List[str]:
+        """Get list of enabled pack IDs."""
+        return self._pack_manager.get_enabled_packs()
+
+    def enable_vocabulary_pack(self, pack_id: str) -> bool:
+        """
+        Enable a vocabulary pack and inject its vocabulary.
+
+        Args:
+            pack_id: Pack directory name (e.g., "medical", "programming")
+
+        Returns:
+            True if pack was found and enabled
+        """
+        if self._pack_manager.enable_pack(pack_id):
+            self._pack_manager.apply_to_predictor(self._ngram)
+            self.packsChanged.emit()
+            _logger.info("Vocabulary pack enabled: %s", pack_id)
+            return True
+        return False
+
+    def disable_vocabulary_pack(self, pack_id: str) -> bool:
+        """
+        Disable a vocabulary pack.
+
+        Note: Vocabulary already injected remains in the n-gram model
+        for this session. It will not be re-injected on next predict.
+
+        Args:
+            pack_id: Pack directory name
+
+        Returns:
+            True if pack was found and disabled
+        """
+        if self._pack_manager.disable_pack(pack_id):
+            self.packsChanged.emit()
+            _logger.info("Vocabulary pack disabled: %s", pack_id)
+            return True
+        return False

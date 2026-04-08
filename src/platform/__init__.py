@@ -38,8 +38,9 @@ See also: ``docs/PLATFORM_ARCHITECTURE.md`` for detailed design rationale.
 
 from __future__ import annotations
 
-import sys
 import logging
+import sys
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -114,14 +115,13 @@ def get_platform_info() -> dict:
         info["xdotool"] = shutil.which("xdotool") is not None
         info["ydotool"] = shutil.which("ydotool") is not None
     elif CURRENT_PLATFORM == "windows":
-        import ctypes
         info["ui_access"] = _check_ui_access()
         info["windows_version"] = sys.getwindowsversion().major
 
     return info
 
 
-def get_config_dir() -> "Path":
+def get_config_dir() -> Path:
     """
     Return the platform-appropriate configuration directory for Alpha-OSK.
 
@@ -146,7 +146,7 @@ def get_config_dir() -> "Path":
     return config_dir
 
 
-def get_model_dir() -> "Path":
+def get_model_dir() -> Path:
     """
     Return the platform-appropriate model storage directory.
 

@@ -15,9 +15,9 @@ The bridge is platform-agnostic — all OS-specific logic lives in
 from __future__ import annotations
 
 import logging
-from typing import Optional, List
+from typing import List, Optional
 
-from PySide6.QtCore import QObject, Slot, Signal, Property
+from PySide6.QtCore import Property, QObject, Signal, Slot
 
 from .platform import create_key_synthesizer
 from .platform.base import KeySynthesizerBase
@@ -48,7 +48,7 @@ class KeyboardBridge(QObject):
     altActiveChanged = Signal(bool)
     winActiveChanged = Signal(bool)
     currentLayerChanged = Signal(str)
-    
+
     # Prediction signals
     predictionsChanged = Signal(list)     # Instant predictions
     predictionsRefined = Signal(list)     # LLM-refined predictions
@@ -57,7 +57,7 @@ class KeyboardBridge(QObject):
     llmAvailableChanged = Signal(bool)    # LLM available state
     predictionCountChanged = Signal(int)  # Prediction count changed
     predictionStatsChanged = Signal()     # Stats updated
-    
+
     # Debug signals
     debugModeChanged = Signal(bool)
     debugLogChanged = Signal(list)
@@ -81,7 +81,7 @@ class KeyboardBridge(QObject):
                 "Keystrokes will not be sent to other applications.",
                 self._synth.backend_name(),
             )
-        
+
         # Initialize prediction engine (LLM disabled by default - overkill for keyboard)
         self._predictor = HybridPredictor(enable_llm=False, parent=self)
         self._predictor.predictionsReady.connect(self._on_predictions_ready)
@@ -89,15 +89,16 @@ class KeyboardBridge(QObject):
         self._predictor.modelLoading.connect(self.predictionLoading.emit)
         self._predictor.llmAvailableChanged.connect(self.llmAvailableChanged.emit)
         _logger.info("Prediction engine initialized")
-        
+
         # Prediction settings
         self._prediction_count = 5
         self._debug_mode = False
         self._debug_log: List[str] = []
-        
+
         # Context tracking for predictions
         self._context_buffer = ""
         self._current_word = ""
+        self._sentence_buffer = ""  # Accumulates words for sentence-level learning
         self._predictions: List[str] = []
 
     # --- Key synthesis (delegated to platform layer) ---
@@ -128,7 +129,7 @@ class KeyboardBridge(QObject):
 
     # Punctuation that should not have a space before them
     _NO_SPACE_BEFORE = {"?", "!", ".", ",", ";", ":", "'", '"', ")", "]", "}"}
-    
+
     @Slot(str)
     def pressKey(self, key: str) -> None:
         """Called from QML when a character key is pressed."""
@@ -149,9 +150,21 @@ class KeyboardBridge(QObject):
             self._send_key(char)
         else:
             self._send_text(char)
-        
+
         # Update context and get predictions
         self._current_word += char
+
+        # Sentence-ending punctuation triggers sentence learning
+        if char in (".", "!", "?"):
+            sentence = self._sentence_buffer + self._current_word
+            if sentence.strip():
+                self._predictor.learn(sentence.strip())
+            self._sentence_buffer = ""
+            self._current_word = ""
+            self._context_buffer += char + " "
+            if len(self._context_buffer) > 200:
+                self._context_buffer = self._context_buffer[-200:]
+
         self._update_predictions()
 
         # Auto-release shift after one keypress (not caps lock)
@@ -199,16 +212,18 @@ class KeyboardBridge(QObject):
         }
         xdotool_key = key_map.get(key_name, key_name)
         self._send_key(xdotool_key)
-        
+
         # Handle context for predictions
         if key_name == "space":
-            # Word completed - learn it and reset
+            # Word completed - learn it and add to sentence
             if self._current_word:
-                self._predictor.learn_word(self._current_word)
+                self._sentence_buffer += self._current_word + " "
                 self._context_buffer += self._current_word + " "
-                # Keep last 50 chars of context
-                if len(self._context_buffer) > 50:
-                    self._context_buffer = self._context_buffer[-50:]
+                # Learn bigrams/trigrams from the running sentence
+                self._predictor.learn(self._sentence_buffer.strip())
+                # Keep context buffer bounded
+                if len(self._context_buffer) > 200:
+                    self._context_buffer = self._context_buffer[-200:]
             self._current_word = ""
             self._update_predictions()
         elif key_name == "backspace":
@@ -217,10 +232,17 @@ class KeyboardBridge(QObject):
                 self._current_word = self._current_word[:-1]
                 self._update_predictions()
         elif key_name == "return":
-            # Reset context on new line
+            # Sentence boundary - learn full sentence, then reset sentence buffer
             if self._current_word:
-                self._predictor.learn_word(self._current_word)
-            self._context_buffer = ""
+                self._sentence_buffer += self._current_word
+            if self._sentence_buffer.strip():
+                self._predictor.learn(self._sentence_buffer.strip())
+            self._sentence_buffer = ""
+            # Preserve context across lines (don't wipe)
+            if self._current_word:
+                self._context_buffer += self._current_word + " "
+            if len(self._context_buffer) > 200:
+                self._context_buffer = self._context_buffer[-200:]
             self._current_word = ""
             self._update_predictions()
 
@@ -279,38 +301,41 @@ class KeyboardBridge(QObject):
     def pressPrediction(self, word: str) -> None:
         """Called when user taps a prediction suggestion."""
         _logger.info("Prediction selected: %s", word)
-        
+
         # Complete the word: type remaining characters + space
         if self._current_word:
             # Type only the remaining part of the word
-            remaining = word[len(self._current_word):] if word.startswith(self._current_word.lower()) else word
+            if word.startswith(self._current_word.lower()):
+                remaining = word[len(self._current_word):]
+            else:
+                remaining = word
             self._send_text(remaining + " ")
         else:
             self._send_text(word + " ")
-        
+
         # Learn from selection
         context = self._context_buffer + self._current_word
         self._predictor.learn_from_selection(context, word)
-        
+
         # Update context - add the completed word
         self._context_buffer += word + " "
         if len(self._context_buffer) > 100:
             self._context_buffer = self._context_buffer[-100:]
         self._current_word = ""
-        
+
         # IMPORTANT: Clear predictions first, then get next-word predictions
         self._predictions = []
         self.predictionsChanged.emit([])
-        
+
         # Get next-word predictions immediately
         # Context should end with space to signal "predict next word, not complete current"
         context_for_prediction = self._context_buffer
-        _logger.info("Context for next-word prediction: '%s' (ends_with_space=%s)", 
+        _logger.info("Context for next-word prediction: '%s' (ends_with_space=%s)",
                      context_for_prediction, context_for_prediction.endswith(" "))
-        
+
         next_preds = self._predictor.predict(context_for_prediction, n=5)
         _logger.info("Next-word predictions: %s", next_preds)
-        
+
         # Update with next-word predictions
         self._predictions = next_preds
         self.predictionsChanged.emit(next_preds)
@@ -357,57 +382,57 @@ class KeyboardBridge(QObject):
         if new_layer != self._current_layer:
             self._current_layer = new_layer
             self.currentLayerChanged.emit(self._current_layer)
-    
+
     def _update_predictions(self) -> None:
         """Request updated predictions from the engine."""
         context = self._context_buffer + self._current_word
         self._predictor.predict_with_refinement(context, n=5)
-    
+
     def _on_predictions_ready(self, predictions: List[str]) -> None:
         """Handle instant n-gram predictions."""
         self._predictions = predictions
         self.predictionsChanged.emit(predictions)
-    
+
     def _on_predictions_refined(self, predictions: List[str]) -> None:
         """Handle LLM-refined predictions."""
         self._predictions = predictions
         self.predictionsRefined.emit(predictions)
-    
+
     @Slot()
     def savePredictionModel(self) -> None:
         """Save the prediction model to disk."""
         self._predictor.save()
-    
+
     @Slot()
     def clearUserData(self) -> None:
         """Clear user-learned vocabulary."""
         self._predictor.clear_user_data()
         _logger.info("User data cleared")
-    
+
     @Slot()
     def reloadDictionary(self) -> None:
         """Reload the base dictionary."""
         self._predictor.reload_dictionary()
         _logger.info("Dictionary reloaded")
-    
+
     @Slot(bool)
     def setLlmEnabled(self, enabled: bool) -> None:
         """Enable/disable LLM predictions."""
         self._predictor.enable_llm = enabled
         self.llmEnabledChanged.emit(enabled)
         _logger.info("LLM enabled: %s", enabled)
-    
+
     @Slot(int)
     def setPredictionCount(self, count: int) -> None:
         """Set number of predictions to show."""
         self._prediction_count = max(1, min(10, count))
         self.predictionCountChanged.emit(self._prediction_count)
-    
+
     @Slot(result=dict)
     def getPredictionStats(self) -> dict:
         """Get prediction engine statistics."""
         return self._predictor.get_stats()
-    
+
     @Slot(str, result=bool)
     def importTextFile(self, file_path: str) -> bool:
         """Import a text file to train the prediction model."""
@@ -427,7 +452,7 @@ class KeyboardBridge(QObject):
             self._add_debug_log(f"Import failed: {e}")
             _logger.error("Failed to import file %s: %s", file_path, e)
             return False
-    
+
     @Slot(str, result=int)
     def importFolder(self, folder_path: str) -> int:
         """Import all text files from a folder."""
@@ -436,35 +461,35 @@ class KeyboardBridge(QObject):
         if not path.is_dir():
             self._add_debug_log(f"Folder not found: {folder_path}")
             return 0
-        
+
         count = 0
         extensions = [".txt", ".md", ".py", ".js", ".html", ".css", ".json"]
         for ext in extensions:
             for file in path.glob(f"**/*{ext}"):
                 if self.importTextFile(str(file)):
                     count += 1
-        
+
         self._add_debug_log(f"Imported {count} files from {path.name}")
         return count
-    
+
     @Slot(bool)
     def setDebugMode(self, enabled: bool) -> None:
         """Enable/disable debug mode."""
         self._debug_mode = enabled
         self.debugModeChanged.emit(enabled)
         self._add_debug_log(f"Debug mode: {'ON' if enabled else 'OFF'}")
-    
+
     @Slot(result=list)
     def getDebugLog(self) -> List[str]:
         """Get recent debug log entries."""
         return self._debug_log[-50:]  # Last 50 entries
-    
+
     @Slot()
     def clearDebugLog(self) -> None:
         """Clear the debug log."""
         self._debug_log.clear()
         self.debugLogChanged.emit([])
-    
+
     def _add_debug_log(self, message: str) -> None:
         """Add a message to the debug log."""
         from datetime import datetime
@@ -474,37 +499,37 @@ class KeyboardBridge(QObject):
         if len(self._debug_log) > 100:
             self._debug_log = self._debug_log[-100:]
         self.debugLogChanged.emit(self._debug_log)
-    
+
     # --- Accessibility Profile Management ---
-    
+
     @Slot(result=list)
     def getAccessibilityProfiles(self) -> List[str]:
         """Get list of available accessibility profile names."""
         return self._predictor.get_accessibility_profiles()
-    
+
     @Slot(result=str)
     def getCurrentProfile(self) -> str:
         """Get current accessibility profile name."""
         return self._predictor.get_current_profile()
-    
+
     @Slot(str, result=bool)
     def setAccessibilityProfile(self, profile_name: str) -> bool:
         """
         Set accessibility profile for fuzzy recognition.
-        
-        Profiles: precise, normal, mild_tremor, moderate_tremor, 
+
+        Profiles: precise, normal, mild_tremor, moderate_tremor,
                   severe_tremor, limited_mobility
         """
         result = self._predictor.set_accessibility_profile(profile_name)
         if result:
             self._add_debug_log(f"Accessibility profile: {profile_name}")
         return result
-    
+
     @Slot(str, result=str)
     def checkAutocorrect(self, typed_word: str) -> str:
         """
         Check if a word should be autocorrected.
-        
+
         Returns corrected word or empty string if no correction.
         """
         correction = self._predictor.check_autocorrect(typed_word, self._context_buffer)
@@ -512,34 +537,62 @@ class KeyboardBridge(QObject):
             self._add_debug_log(f"Autocorrect: {typed_word} -> {correction}")
             return correction
         return ""
-    
+
     @Slot(str, result=list)
     def getKeyAlternatives(self, key: str) -> list:
         """
         Get probability distribution over intended keys.
-        
+
         Returns list of [key, probability] pairs.
         """
         probs = self._predictor.get_key_alternatives(key)
         return [[k, v] for k, v in sorted(probs.items(), key=lambda x: -x[1])[:5]]
-    
+
+    # --- Vocabulary Packs ---
+
+    @Slot(result=list)
+    def getAvailablePacks(self) -> list:
+        """Get metadata for all available vocabulary packs."""
+        return self._predictor.get_available_packs()
+
+    @Slot(result=list)
+    def getEnabledPacks(self) -> list:
+        """Get list of enabled pack IDs."""
+        return self._predictor.get_enabled_packs()
+
+    @Slot(str, result=bool)
+    def enableVocabularyPack(self, pack_id: str) -> bool:
+        """Enable a vocabulary pack by ID (e.g., 'medical', 'programming')."""
+        result = self._predictor.enable_vocabulary_pack(pack_id)
+        if result:
+            self._add_debug_log(f"Vocabulary pack enabled: {pack_id}")
+        return result
+
+    @Slot(str, result=bool)
+    def disableVocabularyPack(self, pack_id: str) -> bool:
+        """Disable a vocabulary pack by ID."""
+        result = self._predictor.disable_vocabulary_pack(pack_id)
+        if result:
+            self._add_debug_log(f"Vocabulary pack disabled: {pack_id}")
+        return result
+
     # --- Prediction Properties ---
-    
+
     def _get_predictions(self) -> List[str]:
         return self._predictions
-    
+
     def _get_llm_enabled(self) -> bool:
         return self._predictor.enable_llm
-    
+
     def _get_llm_available(self) -> bool:
         return self._predictor.llm_available
-    
+
     def _get_prediction_count(self) -> int:
         return getattr(self, '_prediction_count', 5)
-    
+
     def _get_current_profile(self) -> str:
         return self._predictor.get_current_profile()
-    
+
     predictions = Property(list, _get_predictions, notify=predictionsChanged)
     llmEnabled = Property(bool, _get_llm_enabled, notify=llmEnabledChanged)
     llmAvailable = Property(bool, _get_llm_available, notify=llmAvailableChanged)

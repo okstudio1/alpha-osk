@@ -27,15 +27,14 @@ See Also
 
 from __future__ import annotations
 
-import sys
-import os
 import logging
+import os
+import sys
 from pathlib import Path
 
-from PySide6.QtCore import QUrl, Qt
+from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
-from PySide6.QtQuick import QQuickWindow
 
 from .keyboard_bridge import KeyboardBridge
 from .platform import CURRENT_PLATFORM, get_platform_info
@@ -114,7 +113,6 @@ def _apply_windows_extended_styles(root) -> None:
     """
     try:
         import ctypes
-        from ctypes import wintypes
 
         GWL_EXSTYLE = -20
         WS_EX_NOACTIVATE = 0x08000000
