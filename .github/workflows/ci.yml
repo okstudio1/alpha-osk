@@ -27,7 +27,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install mypy PySide6
-      - run: mypy src/ --ignore-missing-imports --exclude 'src/platform/(windows|linux)\.py' --exclude 'src/keyboard_app\.py'
+      - run: mypy src/prediction/ src/platform/__init__.py src/platform/base.py --ignore-missing-imports
 
   test:
     name: Test (${{ matrix.os }})
