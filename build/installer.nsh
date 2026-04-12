@@ -81,21 +81,11 @@
     skipPrevHKLM:
   ${EndIf}
 
-  ; --- Create shortcuts (force-create to ensure they exist) ---
-  CreateDirectory "$SMPROGRAMS\Alpha-OSK"
-  CreateShortCut "$SMPROGRAMS\Alpha-OSK\Alpha-OSK.lnk" "$INSTDIR\alpha-osk.exe" "" "$INSTDIR\alpha-osk.exe" 0
-  CreateShortCut "$DESKTOP\Alpha-OSK.lnk" "$INSTDIR\alpha-osk.exe" "" "$INSTDIR\alpha-osk.exe" 0
-
-  ; --- Optional: Add to Startup folder ---
-  ; Uncomment the next line to auto-start Alpha-OSK on login:
-  ; CreateShortCut "$SMSTARTUP\Alpha-OSK.lnk" "$INSTDIR\alpha-osk.exe" "" "$INSTDIR\alpha-osk.exe" 0
+  ; Shortcuts are created in the main install section (user-selectable)
 !macroend
 
 !macro customUnInstall
-  ; Clean up shortcuts on uninstall
-  Delete "$DESKTOP\Alpha-OSK.lnk"
-  Delete "$SMPROGRAMS\Alpha-OSK\Alpha-OSK.lnk"
-  RMDir "$SMPROGRAMS\Alpha-OSK"
+  ; Clean up startup shortcut if it exists
   Delete "$SMSTARTUP\Alpha-OSK.lnk"
 
   ; Clean up AppData (user config / learned models)

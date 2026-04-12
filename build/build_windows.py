@@ -400,6 +400,7 @@ def _generate_nsi_script(version: str, installer_name: str) -> str:
 
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
+!include "LogicLib.nsh"
 
 ; --- App metadata ---
 !define APP_NAME "Alpha-OSK"
@@ -418,12 +419,19 @@ InstallDirRegKey HKCU "Software\\${{APP_NAME}}" "InstallLocation"
 RequestExecutionLevel admin
 {icon_line}
 
+; --- Variables for shortcut options ---
+Var CreateDesktopShortcut
+Var CreateStartMenuShortcut
+
 ; --- MUI Settings ---
 !define MUI_ABORTWARNING
+!define MUI_FINISHPAGE_RUN "$INSTDIR\\${{APP_EXE}}"
+!define MUI_FINISHPAGE_RUN_TEXT "Launch ${{APP_NAME}}"
 
 ; --- Pages ---
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
+Page custom ShortcutOptionsPage ShortcutOptionsLeave
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
 
@@ -435,8 +443,46 @@ RequestExecutionLevel admin
 !insertmacro MUI_LANGUAGE "English"
 
 ; --- Include custom macros ---
-; (customInit, customInstall, customUnInstall from installer.nsh)
 !include "{installer_nsh}"
+
+; ============================================================
+;  Shortcut Options Page
+; ============================================================
+Function ShortcutOptionsPage
+  nsDialogs::Create 1018
+  Pop $0
+  ${{If}} $0 == error
+    Abort
+  ${{EndIf}}
+
+  ${{NSD_CreateLabel}} 0 0 100% 20u "Choose which shortcuts to create:"
+
+  ${{NSD_CreateCheckbox}} 20u 30u 100% 15u "Create Desktop shortcut"
+  Pop $1
+  ${{NSD_SetState}} $1 ${{BST_CHECKED}}
+
+  ${{NSD_CreateCheckbox}} 20u 50u 100% 15u "Create Start Menu shortcut"
+  Pop $2
+  ${{NSD_SetState}} $2 ${{BST_CHECKED}}
+
+  nsDialogs::Show
+FunctionEnd
+
+Function ShortcutOptionsLeave
+  ${{NSD_GetState}} $1 $CreateDesktopShortcut
+  ${{NSD_GetState}} $2 $CreateStartMenuShortcut
+FunctionEnd
+
+; ============================================================
+;  .onInit — runs on installer start
+; ============================================================
+Function .onInit
+  !insertmacro customInit
+
+  ; Default shortcut options to checked
+  StrCpy $CreateDesktopShortcut ${{BST_CHECKED}}
+  StrCpy $CreateStartMenuShortcut ${{BST_CHECKED}}
+FunctionEnd
 
 ; ============================================================
 ;  Install Section
@@ -457,14 +503,31 @@ Section "Install"
   WriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${{APP_GUID}}" "URLInfoAbout" "${{APP_URL}}"
   WriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${{APP_GUID}}" "UninstallString" "$INSTDIR\\uninstall.exe"
   WriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${{APP_GUID}}" "InstallLocation" "$INSTDIR"
+  WriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${{APP_GUID}}" "DisplayIcon" "$INSTDIR\\${{APP_EXE}}"
 
   ; Calculate installed size
   ${{GetSize}} "$INSTDIR" "/S=0K" $0 $1 $2
   IntFmt $0 "0x%08X" $0
   WriteRegDWORD HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${{APP_GUID}}" "EstimatedSize" "$0"
 
-  ; Run custom install macros (shortcuts, old version cleanup)
+  ; Run custom install macros (old version cleanup)
   !insertmacro customInstall
+
+  ; Create shortcuts based on user selection
+  ; Use SetShellVarContext to target the CURRENT user, not admin
+  SetShellVarContext current
+
+  ${{If}} $CreateStartMenuShortcut == ${{BST_CHECKED}}
+    CreateDirectory "$SMPROGRAMS\\Alpha-OSK"
+    CreateShortCut "$SMPROGRAMS\\Alpha-OSK\\Alpha-OSK.lnk" "$INSTDIR\\${{APP_EXE}}" "" "$INSTDIR\\${{APP_EXE}}" 0
+    CreateShortCut "$SMPROGRAMS\\Alpha-OSK\\Uninstall Alpha-OSK.lnk" "$INSTDIR\\uninstall.exe"
+  ${{EndIf}}
+
+  ${{If}} $CreateDesktopShortcut == ${{BST_CHECKED}}
+    CreateShortCut "$DESKTOP\\Alpha-OSK.lnk" "$INSTDIR\\${{APP_EXE}}" "" "$INSTDIR\\${{APP_EXE}}" 0
+  ${{EndIf}}
+
+  SetShellVarContext all
 SectionEnd
 
 ; ============================================================
@@ -474,11 +537,19 @@ Section "Uninstall"
   ; Run custom uninstall macros
   !insertmacro customUnInstall
 
+  ; Clean up shortcuts (both user contexts)
+  SetShellVarContext current
+  Delete "$DESKTOP\\Alpha-OSK.lnk"
+  Delete "$SMPROGRAMS\\Alpha-OSK\\Alpha-OSK.lnk"
+  Delete "$SMPROGRAMS\\Alpha-OSK\\Uninstall Alpha-OSK.lnk"
+  RMDir "$SMPROGRAMS\\Alpha-OSK"
+  SetShellVarContext all
+
   ; Remove files
 {uninstall_files}
   Delete "$INSTDIR\\uninstall.exe"
 
-  ; Remove install directory (if empty)
+  ; Remove install directory
   RMDir /r "$INSTDIR"
 
   ; Remove registry keys
