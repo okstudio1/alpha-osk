@@ -88,24 +88,32 @@ def header(msg: str) -> None:
     print(f"{Colors.HEADER}{Colors.BOLD}{'=' * 60}{Colors.END}\n")
 
 
+def _safe_print(msg: str) -> None:
+    """Print with fallback for terminals that can't render Unicode."""
+    try:
+        print(msg)
+    except UnicodeEncodeError:
+        print(msg.encode("ascii", errors="replace").decode("ascii"))
+
+
 def step(msg: str) -> None:
-    print(f"{Colors.CYAN}▶ {msg}{Colors.END}")
+    _safe_print(f"{Colors.CYAN}> {msg}{Colors.END}")
 
 
 def success(msg: str) -> None:
-    print(f"{Colors.GREEN}✓ {msg}{Colors.END}")
+    _safe_print(f"{Colors.GREEN}[OK] {msg}{Colors.END}")
 
 
 def error(msg: str) -> None:
-    print(f"{Colors.RED}✗ {msg}{Colors.END}")
+    _safe_print(f"{Colors.RED}[FAIL] {msg}{Colors.END}")
 
 
 def warning(msg: str) -> None:
-    print(f"{Colors.YELLOW}⚠ {msg}{Colors.END}")
+    _safe_print(f"{Colors.YELLOW}[WARN] {msg}{Colors.END}")
 
 
 def info(msg: str) -> None:
-    print(f"{Colors.BLUE}ℹ {msg}{Colors.END}")
+    _safe_print(f"{Colors.BLUE}[INFO] {msg}{Colors.END}")
 
 
 # ---------------------------------------------------------------------------
