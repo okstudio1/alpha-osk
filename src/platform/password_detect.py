@@ -27,15 +27,20 @@ from __future__ import annotations
 import ctypes
 import logging
 import sys
+from typing import Any, Optional, Protocol
 
 _logger = logging.getLogger("PasswordDetect")
+
+
+class _Detector(Protocol):
+    def check(self) -> bool: ...
 
 
 # ====================================================================== #
 #  Public API
 # ====================================================================== #
 
-_detector: object = None  # lazy-initialised
+_detector: Optional[_Detector] = None  # lazy-initialised
 
 
 def is_password_field() -> bool:
@@ -44,12 +49,12 @@ def is_password_field() -> bool:
     if _detector is None:
         _detector = _create_detector()
     try:
-        return _detector.check()  # type: ignore[union-attr]
+        return _detector.check()
     except Exception:
         return False
 
 
-def _create_detector() -> object:
+def _create_detector() -> _Detector:
     if sys.platform == "win32":
         det = _WindowsUIADetector()
         if det.available:
@@ -111,7 +116,7 @@ if sys.platform == "win32":
         ]
 
     def _vtable_func(obj: ctypes.c_void_p, index: int, restype: type,
-                     *argtypes: type) -> ctypes.CFUNCTYPE:  # type: ignore[type-arg]
+                     *argtypes: type) -> Any:
         """Get a function pointer from a COM object's vtable."""
         vtable = ctypes.cast(obj, ctypes.POINTER(ctypes.c_void_p))[0]
         fptr = ctypes.cast(vtable, ctypes.POINTER(ctypes.c_void_p))[index]
@@ -176,7 +181,7 @@ if sys.platform == "win32":
                 if hr != 0:
                     return False
 
-                return variant.vt == _VT_BOOL and variant.val != 0
+                return bool(variant.vt == _VT_BOOL and variant.val != 0)
 
             except Exception:
                 return False
@@ -228,9 +233,10 @@ if sys.platform == "win32":
                     return False
 
                 # EM_GETPASSWORDCHAR returns the mask char (e.g. '*') or 0
-                return self._user32.SendMessageW(
+                result: int = self._user32.SendMessageW(
                     focused, _EM_GETPASSWORDCHAR, 0, 0
-                ) != 0
+                )
+                return result != 0
 
             except Exception:
                 return False

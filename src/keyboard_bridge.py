@@ -941,9 +941,10 @@ class KeyboardBridge(QObject):
     # --- Analytics ---
 
     @Slot(result="QVariant")
-    def getAnalytics(self) -> dict:
+    def getAnalytics(self) -> Dict[str, Any]:
         """Return session + all-time analytics for the QML dashboard."""
-        return self._analytics.get_session_stats()
+        stats: Dict[str, Any] = self._analytics.get_session_stats()
+        return stats
 
     @Slot()
     def saveAnalytics(self) -> None:
@@ -951,7 +952,7 @@ class KeyboardBridge(QObject):
         self._analytics.save()
 
     @Slot(result="QVariant")
-    def getVisualizationData(self) -> dict:
+    def getVisualizationData(self) -> Dict[str, Any]:
         """Return language-model data for the visualisation panel."""
         ngram = self._predictor._ngram
 

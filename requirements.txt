@@ -7,8 +7,8 @@ PySide6>=6.6.0
 # Prediction engine (optional - n-gram works without these)
 # Install for LLM-enhanced predictions:
 #   pip install transformers torch
-transformers>=4.36.0
-torch>=2.1.0
+# transformers>=4.36.0
+# torch>=2.1.0
 
 # Windows build (optional - only needed to create .exe):
 #   pip install pyinstaller
