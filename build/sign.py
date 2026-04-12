@@ -225,13 +225,16 @@ def verify_file(file_path: str, signtool: str | None = None) -> bool:
 #  Sign all executables in a directory
 # ---------------------------------------------------------------------------
 
-def sign_directory(dir_path: str, signtool: str | None = None) -> int:
+def sign_directory(dir_path: str, signtool: str | None = None,
+                   exe_only: bool = True) -> int:
     """
-    Sign all ``.exe`` and ``.dll`` files in a directory tree.
+    Sign executables in a directory tree.
 
     Args:
         dir_path: Root directory to scan.
         signtool: Path to ``signtool.exe``. Auto-detected if ``None``.
+        exe_only: If True, only sign ``.exe`` files (default). If False,
+                  also sign ``.dll`` files.
 
     Returns:
         Number of files signed.
@@ -242,7 +245,8 @@ def sign_directory(dir_path: str, signtool: str | None = None) -> int:
     signed = 0
     root = Path(dir_path)
 
-    for ext in ("*.exe", "*.dll"):
+    exts = ["*.exe"] if exe_only else ["*.exe", "*.dll"]
+    for ext in exts:
         for file in root.rglob(ext):
             sign_file(str(file), signtool)
             signed += 1
