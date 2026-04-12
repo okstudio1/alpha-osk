@@ -143,6 +143,9 @@ def get_config_dir() -> Path:
         config_dir = Path.home() / ".config" / "alpha-osk"
 
     config_dir.mkdir(parents=True, exist_ok=True)
+    # Restrict permissions on Linux (model files contain typed word history)
+    if CURRENT_PLATFORM != "windows":
+        config_dir.chmod(0o700)
     return config_dir
 
 
@@ -158,6 +161,8 @@ def get_model_dir() -> Path:
     """
     model_dir = get_config_dir() / "models"
     model_dir.mkdir(parents=True, exist_ok=True)
+    if CURRENT_PLATFORM != "windows":
+        model_dir.chmod(0o700)
     return model_dir
 
 

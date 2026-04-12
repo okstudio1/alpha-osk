@@ -234,16 +234,24 @@ class TestDebugLog:
         assert bridge._debug_mode
 
     def test_debug_log_entries(self, bridge: KeyboardBridge):
+        bridge._debug_mode = True
         bridge._add_debug_log("test message")
         log = bridge.getDebugLog()
         assert any("test message" in entry for entry in log)
 
+    def test_debug_log_skipped_when_disabled(self, bridge: KeyboardBridge):
+        bridge._debug_mode = False
+        bridge._add_debug_log("secret")
+        assert len(bridge._debug_log) == 0
+
     def test_debug_log_capped(self, bridge: KeyboardBridge):
+        bridge._debug_mode = True
         for i in range(200):
             bridge._add_debug_log(f"entry {i}")
         assert len(bridge._debug_log) <= 100
 
     def test_clear_debug_log(self, bridge: KeyboardBridge):
+        bridge._debug_mode = True
         bridge._add_debug_log("something")
         bridge.clearDebugLog()
         assert len(bridge._debug_log) == 0

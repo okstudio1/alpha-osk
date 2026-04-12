@@ -631,9 +631,9 @@ def create_shortcut(
 
     # Try PowerShell (always available, no extra deps)
     try:
-        # Escape double quotes for PowerShell double-quoted strings ("" = literal ")
+        # Escape for PowerShell double-quoted strings
         def _ps_escape(s: str) -> str:
-            return s.replace('"', '""')
+            return s.replace('`', '``').replace('"', '""').replace('$', '`$')
 
         ps_script = (
             f'$ws = New-Object -ComObject WScript.Shell; '

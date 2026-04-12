@@ -153,9 +153,9 @@ class KeyboardBridge(QObject):
         self._privacy_mode_manual = False   # User toggled manually
         self._password_detect_enabled = True
 
-        # Poll for password fields every 500ms
+        # Poll for password fields every 200ms (fast detection reduces keystroke leakage)
         self._password_timer = QTimer(self)
-        self._password_timer.setInterval(500)
+        self._password_timer.setInterval(200)
         self._password_timer.timeout.connect(self._check_password_field)
         self._password_timer.start()
 
@@ -194,7 +194,8 @@ class KeyboardBridge(QObject):
     def pressKey(self, key: str) -> None:
         """Called from QML when a character key is pressed."""
         self._play_click()
-        self._analytics.record_keystroke(key)
+        if not self._privacy_mode:
+            self._analytics.record_keystroke(key)
         if self._shift_active or self._caps_lock_active:
             char = key.upper()
         else:
@@ -614,13 +615,18 @@ class KeyboardBridge(QObject):
             self._privacy_mode = detected
             self.privacyModeChanged.emit(detected)
             if detected:
-                # Entering password field — clear any visible predictions
-                self._predictions = []
-                self.predictionsChanged.emit([])
-                self._current_word = ""
+                self._enter_privacy_mode()
                 _logger.info("Password field detected — privacy mode ON")
             else:
                 _logger.info("Password field cleared — privacy mode OFF")
+
+    def _enter_privacy_mode(self) -> None:
+        """Scrub all buffers to prevent sensitive data from leaking to the model."""
+        self._predictions = []
+        self.predictionsChanged.emit([])
+        self._current_word = ""
+        self._context_buffer = ""
+        self._sentence_buffer = ""
 
     @Slot(bool)
     def setPrivacyMode(self, enabled: bool) -> None:
@@ -629,9 +635,7 @@ class KeyboardBridge(QObject):
         self._privacy_mode = enabled
         self.privacyModeChanged.emit(enabled)
         if enabled:
-            self._predictions = []
-            self.predictionsChanged.emit([])
-            self._current_word = ""
+            self._enter_privacy_mode()
         _logger.info("Privacy mode manually set: %s", enabled)
 
     @Slot(bool)
@@ -708,7 +712,9 @@ class KeyboardBridge(QObject):
         self.debugLogChanged.emit([])
 
     def _add_debug_log(self, message: str) -> None:
-        """Add a message to the debug log."""
+        """Add a message to the debug log (only when debug mode is active)."""
+        if not self._debug_mode:
+            return
         from datetime import datetime
         timestamp = datetime.now().strftime("%H:%M:%S")
         entry = f"[{timestamp}] {message}"
