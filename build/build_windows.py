@@ -217,7 +217,7 @@ def check_certificate() -> bool:
     try:
         result = subprocess.run(
             ["certutil", "-store", "-user", "My"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, timeout=30,
         )
         if CERTIFICATE_SHA1.lower() in result.stdout.lower():
             success("EV certificate found (OK Studio Inc.)")
