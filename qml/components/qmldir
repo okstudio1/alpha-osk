@@ -8,3 +8,4 @@ SettingsToggle 1.0 SettingsToggle.qml
 PredictionSettingsPanel 1.0 PredictionSettingsPanel.qml
 DebugPanel 1.0 DebugPanel.qml
 AnalyticsDashboard 1.0 AnalyticsDashboard.qml
+ModelVisualization 1.0 ModelVisualization.qml

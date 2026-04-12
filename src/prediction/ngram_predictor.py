@@ -49,6 +49,14 @@ class NgramPredictor:
         self.blacklist: set[str] = set()
         self.dispreference: Dict[str, int] = defaultdict(int)
 
+        # Auto-rehabilitation: track how many times a blacklisted word is typed
+        self._blacklist_type_count: Dict[str, int] = defaultdict(int)
+        self._rehabilitate_threshold = 3
+
+        # Capitalization: lowercase → preferred form (e.g. "owen" → "Owen")
+        self.capitalization: Dict[str, str] = {}
+        self._load_proper_nouns()
+
         # Recency decay: every N learn() calls, scale user frequencies down
         # so recent words gradually outweigh older ones
         self._learn_count = 0
@@ -108,6 +116,68 @@ class NgramPredictor:
             _logger.info("Google 10K wordlist loaded: %d words", len(words))
         except Exception as e:
             _logger.warning("Failed to load Google 10K wordlist: %s", e)
+
+        # Load supplementary 20K wordlist (lower frequency tier)
+        supplement_path = (
+            Path(__file__).parent.parent.parent / "data" / "google-20000-supplement.txt"
+        )
+        if supplement_path.exists():
+            try:
+                with open(supplement_path, "r") as f:
+                    supplement = [line.strip().lower() for line in f if line.strip()]
+                for rank, word in enumerate(supplement):
+                    if word not in self.unigrams:
+                        # Lower frequency tier: these words rank below the 10K list
+                        frequency = max(1, 500 - rank // 20)
+                        self.unigrams[word] = frequency
+                        self.total_words += frequency
+                _logger.info("Supplement wordlist loaded: %d words", len(supplement))
+            except Exception as e:
+                _logger.warning("Failed to load supplement wordlist: %s", e)
+
+    def _load_proper_nouns(self) -> None:
+        """Load built-in proper nouns for auto-capitalization."""
+        path = Path(__file__).parent.parent.parent / "data" / "proper_nouns.txt"
+        if not path.exists():
+            return
+        try:
+            with open(path, "r") as f:
+                for line in f:
+                    word = line.strip()
+                    if word and not word.startswith("#"):
+                        self.capitalization[word.lower()] = word
+            _logger.info("Proper nouns loaded: %d entries", len(self.capitalization))
+        except Exception as e:
+            _logger.warning("Failed to load proper nouns: %s", e)
+
+    def learn_capitalization(self, word: str) -> bool:
+        """Learn preferred capitalization from user typing.
+
+        Only stores non-trivial capitalization (not all-lower or first-letter-upper
+        for words that aren't already known proper nouns).
+
+        Returns True if a new or updated capitalization was saved.
+        """
+        if not word or len(word) < 2:
+            return False
+        lower = word.lower()
+        existing = self.capitalization.get(lower)
+        # Always learn if user typed something with mixed case like "iPhone"
+        # or capitalized a word that isn't in our proper nouns list
+        if word != lower and word != lower.capitalize():
+            # Unusual casing like "iPhone", "McDonald" — always learn
+            self.capitalization[lower] = word
+        elif word[0].isupper() and word[1:].islower():
+            # Standard proper noun casing: "Owen", "Paris"
+            # Learn it (may override existing entry with user preference)
+            self.capitalization[lower] = word
+        else:
+            return False
+        return self.capitalization.get(lower) != existing
+
+    def get_capitalized(self, word: str) -> str:
+        """Return the preferred capitalization for a word, or the word as-is."""
+        return self.capitalization.get(word.lower(), word)
 
     def predict(self, context: str, n: int = 5) -> List[str]:
         """
@@ -191,22 +261,30 @@ class NgramPredictor:
         words = re.findall(r"[a-zA-Z']+", text.lower())
         return words
 
-    def learn(self, text: str) -> None:
+    def learn(self, text: str) -> List[str]:
         """
         Learn from new text, updating n-gram frequencies.
 
         Args:
             text: Text to learn from
+
+        Returns:
+            List of words that were new to user_vocab (first time learned).
         """
         words = self._tokenize(text)
         if not words:
-            return
+            return []
+
+        new_words: List[str] = []
 
         # Update unigrams
         for word in words:
+            was_new = word not in self.user_vocab
             self.unigrams[word] += 1
             self.user_vocab[word] += 1
             self.total_words += 1
+            if was_new:
+                new_words.append(word)
 
         # Update bigrams
         for i in range(1, len(words)):
@@ -225,6 +303,8 @@ class NgramPredictor:
         if self._learn_count >= self._decay_interval:
             self._apply_decay()
             self._learn_count = 0
+
+        return new_words
 
     def _apply_decay(self) -> None:
         """Scale down user-learned frequencies so recent words outweigh old ones."""
@@ -252,17 +332,26 @@ class NgramPredictor:
     def blacklist_word(self, word: str) -> None:
         """Permanently suppress a word from predictions."""
         self.blacklist.add(word.lower())
+        self._blacklist_type_count.pop(word.lower(), None)
         _logger.info("Blacklisted word: %s", word)
 
     def unblacklist_word(self, word: str) -> None:
         """Re-enable a previously blacklisted word."""
         self.blacklist.discard(word.lower())
+        self._blacklist_type_count.pop(word.lower(), None)
         _logger.info("Unblacklisted word: %s", word)
 
     def mark_bad(self, word: str) -> None:
         """Downweight a word in future predictions."""
         self.dispreference[word.lower()] += 1
         _logger.info("Marked bad: %s (weight now %d)", word, self.dispreference[word.lower()])
+
+    def remove_dispreference(self, word: str) -> None:
+        """Remove dispreference penalty from a word."""
+        word_lower = word.lower()
+        if word_lower in self.dispreference:
+            del self.dispreference[word_lower]
+            _logger.info("Removed dispreference: %s", word)
 
     def is_suppressed(self, word: str) -> bool:
         """Check if a word is blacklisted."""
@@ -271,6 +360,24 @@ class NgramPredictor:
     def get_dispreference(self, word: str) -> int:
         """Get the dispreference weight for a word."""
         return self.dispreference.get(word.lower(), 0)
+
+    def record_typed_word(self, word: str) -> Optional[str]:
+        """Track typed words for auto-rehabilitation of blacklisted words.
+
+        If a blacklisted word is manually typed enough times, it is
+        automatically restored to predictions.
+
+        Returns the word if rehabilitated, None otherwise.
+        """
+        word_lower = word.lower()
+        if word_lower in self.blacklist:
+            self._blacklist_type_count[word_lower] += 1
+            if self._blacklist_type_count[word_lower] >= self._rehabilitate_threshold:
+                self.unblacklist_word(word_lower)
+                _logger.info("Auto-rehabilitated word: %s (typed %d times)",
+                             word_lower, self._rehabilitate_threshold)
+                return word_lower
+        return None
 
     def learn_word(self, word: str) -> None:
         """Learn a single word (boost its frequency)."""
@@ -290,6 +397,8 @@ class NgramPredictor:
             "total_words": self.total_words,
             "blacklist": sorted(self.blacklist),
             "dispreference": dict(self.dispreference),
+            "blacklist_type_count": dict(self._blacklist_type_count),
+            "capitalization": dict(self.capitalization),
         }
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:
@@ -315,7 +424,12 @@ class NgramPredictor:
             self.total_words = data.get("total_words", 0)
             self.blacklist = set(data.get("blacklist", []))
             self.dispreference = defaultdict(int, data.get("dispreference", {}))
-            _logger.info("Model loaded from %s (%d blacklisted)", path, len(self.blacklist))
+            self._blacklist_type_count = defaultdict(int, data.get("blacklist_type_count", {}))
+            # Merge saved capitalization with built-in proper nouns (user overrides win)
+            saved_caps = data.get("capitalization", {})
+            self.capitalization.update(saved_caps)
+            _logger.info("Model loaded from %s (%d blacklisted, %d capitalizations)",
+                         path, len(self.blacklist), len(self.capitalization))
         except Exception as e:
             _logger.warning("Failed to load model from %s: %s", path, e)
 

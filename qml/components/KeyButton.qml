@@ -13,6 +13,8 @@ Item {
     property color keyColor: "#3a3a3a"
     property color keyPressedColor: "#5a5a5a"
     property color keyTextColor: "#e0e0e0"
+    property color accentColor: "#4a9eff"
+    property color borderColor: "#505050"
     property real fontSize: 16
     property real radius: 8
     property bool isSpecial: false
@@ -54,13 +56,13 @@ Item {
         radius: keyRoot.radius
         clip: true
         color: mouseArea.pressed ? keyPressedColor
-             : isActive ? "#4a9eff"
+             : isActive ? accentColor
              : mouseArea.containsMouse ? Qt.lighter(keyColor, 1.25)
              : keyColor
 
-        border.color: isActive ? "#6ab4ff"
-                    : mouseArea.containsMouse ? Qt.lighter("#505050", 1.4)
-                    : "#505050"
+        border.color: isActive ? Qt.lighter(accentColor, 1.3)
+                    : mouseArea.containsMouse ? Qt.lighter(borderColor, 1.4)
+                    : borderColor
         border.width: 1
 
         // Subtle gradient overlay — enhanced depth on press
@@ -106,7 +108,16 @@ Item {
         Text {
             anchors.centerIn: parent
             text: keyRoot.displayText
-            color: mouseArea.pressed ? "#ffffff" : keyTextColor
+            // Ensure readable contrast: use dark text on bright backgrounds, white on dark
+            color: {
+                var bg = mouseArea.pressed ? keyPressedColor : isActive ? accentColor : keyColor
+                // Luminance approximation: bright backgrounds need dark text
+                var lum = bg.r * 0.299 + bg.g * 0.587 + bg.b * 0.114
+                if (mouseArea.pressed || isActive) {
+                    return lum > 0.5 ? "#111111" : "#ffffff"
+                }
+                return keyTextColor
+            }
             font.pixelSize: keyRoot.fontSize
             font.family: "Segoe UI, Inter, Ubuntu, Noto Sans, sans-serif"
             font.weight: isSpecial ? Font.DemiBold : Font.DemiBold

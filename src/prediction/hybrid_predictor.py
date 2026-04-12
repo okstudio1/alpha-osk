@@ -260,15 +260,17 @@ class HybridPredictor(QObject):
         # Sort by combined score
         sorted_words = sorted(scores.items(), key=lambda x: -x[1])
 
-        # Return top n valid words
+        # Return top n valid words, applying capitalization
         results = []
         for word, score in sorted_words:
             if is_next_word and len(word) <= 2:
                 continue
-            results.append(word)
+            # Apply proper noun / learned capitalization
+            capped = self._ngram.get_capitalized(word)
+            results.append(capped)
             # Log source for debugging
             src = "+".join(sources.get(word, ["?"]))
-            _logger.debug("  %s (%.2f) [%s]", word, score, src)
+            _logger.debug("  %s (%.2f) [%s]", capped, score, src)
             if len(results) >= n:
                 break
 
@@ -318,19 +320,24 @@ class HybridPredictor(QObject):
         assert self._transformer is not None  # Guarded by caller
         self._transformer.rerank_async(context, extended_candidates, on_refined, n)
 
-    def learn(self, text: str) -> None:
+    def learn(self, text: str) -> List[str]:
         """
         Learn from user's text to improve predictions.
 
         Args:
             text: Text to learn from
+
+        Returns:
+            List of words that were new to user vocabulary.
         """
-        self._ngram.learn(text)
+        new_words = self._ngram.learn(text)
 
         # Also train PPM model
         if self._enable_ppm:
             self._ppm.learn_text(text)
             self._ppm_word.learn(text)
+
+        return new_words
 
     def learn_word(self, word: str) -> None:
         """Learn a single word (e.g., when user types it)."""
@@ -600,6 +607,26 @@ class HybridPredictor(QObject):
         """Remove a word from all future predictions."""
         self._ngram.blacklist_word(word)
 
+    def unblacklist_word(self, word: str) -> None:
+        """Restore a previously blacklisted word."""
+        self._ngram.unblacklist_word(word)
+
     def mark_bad_suggestion(self, word: str) -> None:
         """Downweight a word in future predictions."""
         self._ngram.mark_bad(word)
+
+    def remove_dispreference(self, word: str) -> None:
+        """Remove dispreference penalty from a word."""
+        self._ngram.remove_dispreference(word)
+
+    def record_typed_word(self, word: str) -> Optional[str]:
+        """Track typed word for auto-rehabilitation of blacklisted words."""
+        return self._ngram.record_typed_word(word)
+
+    def learn_capitalization(self, word: str) -> bool:
+        """Learn preferred capitalization from user typing."""
+        return self._ngram.learn_capitalization(word)
+
+    def set_capitalization(self, word: str, preferred: str) -> None:
+        """Explicitly set preferred capitalization (from user edit)."""
+        self._ngram.capitalization[preferred.lower()] = preferred

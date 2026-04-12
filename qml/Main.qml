@@ -10,7 +10,7 @@ Window {
     visible: true
     // Default size gives keyW ≈ 56px; user can freely resize and keys scale
     width: 880
-    height: mainLayout.implicitHeight + 60  // Extra height for title bar + bottom padding
+    height: outerLayout.implicitHeight + 60  // Extra height for title bar + bottom padding
     minimumWidth: Math.round(30 * totalKeyUnits + layoutFixedPixels)  // keyW ≈ 30px — smallest usable touch target
     minimumHeight: 200
     color: "transparent"
@@ -128,6 +128,12 @@ Window {
     property bool showHelp: false
     property bool suggestionsEnabled: true
 
+    // Privacy
+    property bool privacyMode: keyboard ? keyboard.privacyMode : false
+
+    // Visualization
+    property bool showVisualization: false
+
     // Debug
     property bool showDebugPanel: false
 
@@ -138,7 +144,7 @@ Window {
 
     // Sizing — keys scale dynamically with window width using closed-form calculation.
     // All visible panels share the window width proportionally, avoiding static estimates.
-    property real keySpacing: Math.max(1, Math.round(root.width * 0.0035))
+    property real keySpacing: Math.max(1, Math.floor(root.width * 0.0025))
 
     // Total key-width units across all visible sections:
     // Widest row is the number row: Esc(1) + `(1) + 10 nums + -(1) + Backspace(1.5) = 14.5 units
@@ -176,11 +182,15 @@ Window {
 
     // Theme definitions — add new themes here, everything else updates automatically
     property var themeData: ({
-        "dark":   { background: "#1a1a1a", keyColor: "#3a3a3a", keyPressed: "#5a5a5a", textColor: "#e0e0e0", accent: "#4a9eff", border: "#505050" },
-        "light":  { background: "#e8e8e8", keyColor: "#ffffff", keyPressed: "#d0d0d0", textColor: "#1a1a1a", accent: "#0078d4", border: "#c0c0c0" },
-        "blue":   { background: "#1a2a3a", keyColor: "#2a4a6a", keyPressed: "#3a6a9a", textColor: "#e0e0e0", accent: "#4a9eff", border: "#505050" },
-        "green":  { background: "#1a2a1a", keyColor: "#2a4a2a", keyPressed: "#3a6a3a", textColor: "#e0e0e0", accent: "#4aff4a", border: "#505050" },
-        "purple": { background: "#2a1a3a", keyColor: "#4a2a5a", keyPressed: "#6a3a7a", textColor: "#e0e0e0", accent: "#bb66ff", border: "#505050" }
+        "dark":       { name: "Dark",       background: "#1a1a1a", keyColor: "#3a3a3a", keyPressed: "#5a5a5a", textColor: "#e0e0e0", accent: "#4a9eff", border: "#505050", animation: "" },
+        "light":      { name: "Light",      background: "#e8e8e8", keyColor: "#ffffff", keyPressed: "#d0d0d0", textColor: "#1a1a1a", accent: "#0078d4", border: "#c0c0c0", animation: "" },
+        "blue":       { name: "Ocean",      background: "#1a2a3a", keyColor: "#2a4a6a", keyPressed: "#3a6a9a", textColor: "#e0e0e0", accent: "#4a9eff", border: "#505050", animation: "" },
+        "green":      { name: "Forest",     background: "#1a2a1a", keyColor: "#2a4a2a", keyPressed: "#3a6a3a", textColor: "#e0e0e0", accent: "#4aff4a", border: "#505050", animation: "" },
+        "purple":     { name: "Amethyst",   background: "#2a1a3a", keyColor: "#4a2a5a", keyPressed: "#6a3a7a", textColor: "#e0e0e0", accent: "#bb66ff", border: "#505050", animation: "" },
+        "vaporwave":  { name: "Vaporwave",  background: "#1a0a2e", keyColor: "#2d1b4e", keyPressed: "#4a2d7a", textColor: "#ff71ce", accent: "#01cdfe", border: "#b967ff", animation: "gradient" },
+        "blackboard": { name: "Blackboard", background: "#2c3e2c", keyColor: "#3d5a3d", keyPressed: "#4e6e4e", textColor: "#e8e8d0", accent: "#ffffaa", border: "#4a6a4a", animation: "" },
+        "typewriter": { name: "Typewriter", background: "#f5f0e8", keyColor: "#d4c9b0", keyPressed: "#c0b090", textColor: "#2c2416", accent: "#8b4513", border: "#a08060", animation: "" },
+        "spaceship":  { name: "Spaceship",  background: "#040d04", keyColor: "#0a1f0a", keyPressed: "#153015", textColor: "#00e676", accent: "#00ff9f", border: "#0d3b0d", animation: "stars" }
     })
 
     property var activeTheme: themeData[currentTheme] || themeData["dark"]
@@ -224,6 +234,83 @@ Window {
         color: Qt.rgba(root.themeBackground.r, root.themeBackground.g, root.themeBackground.b, root.windowOpacity)
         border.color: Qt.rgba(root.themeBorder.r, root.themeBorder.g, root.themeBorder.b, root.windowOpacity)
         border.width: 1
+
+        // ===== Theme Animation Overlay =====
+        Canvas {
+            id: themeAnimCanvas
+            anchors.fill: parent
+            visible: root.activeTheme.animation !== ""
+            opacity: 0.15
+            z: 0
+
+            property real tick: 0
+            property var starField: []
+
+            NumberAnimation on tick {
+                from: 0; to: 10000
+                duration: 1000000
+                loops: Animation.Infinite
+                running: themeAnimCanvas.visible
+            }
+
+            onTickChanged: if (visible) requestPaint()
+
+            Component.onCompleted: {
+                // Generate star field for spaceship theme
+                var stars = []
+                for (var i = 0; i < 40; i++) {
+                    stars.push({
+                        x: Math.random(),
+                        y: Math.random(),
+                        r: Math.random() * 1.5 + 0.5,
+                        speed: Math.random() * 0.3 + 0.1,
+                        phase: Math.random() * Math.PI * 2
+                    })
+                }
+                starField = stars
+            }
+
+            onPaint: {
+                var ctx = getContext("2d")
+                ctx.clearRect(0, 0, width, height)
+                var anim = root.activeTheme.animation
+
+                if (anim === "gradient") {
+                    // Vaporwave: slow horizontal gradient shift
+                    var shift = (tick * 0.5) % 360
+                    var grad = ctx.createLinearGradient(0, 0, width, height)
+                    var hue1 = (shift) % 360
+                    var hue2 = (shift + 60) % 360
+                    grad.addColorStop(0, Qt.hsla(hue1 / 360, 0.6, 0.3, 1))
+                    grad.addColorStop(1, Qt.hsla(hue2 / 360, 0.6, 0.3, 1))
+                    ctx.fillStyle = grad
+                    // Clip to rounded rect
+                    ctx.beginPath()
+                    ctx.roundedRect(0, 0, width, height, 10, 10)
+                    ctx.fill()
+
+                } else if (anim === "pulse") {
+                    // Neon: border glow pulse
+                    var pulse = Math.sin(tick * 0.15) * 0.5 + 0.5
+                    ctx.strokeStyle = Qt.rgba(0.22, 1.0, 0.08, pulse)
+                    ctx.lineWidth = 2 + pulse * 2
+                    ctx.beginPath()
+                    ctx.roundedRect(1, 1, width - 2, height - 2, 10, 10)
+                    ctx.stroke()
+
+                } else if (anim === "stars") {
+                    // Spaceship: twinkling star field
+                    for (var i = 0; i < starField.length; i++) {
+                        var s = starField[i]
+                        var twinkle = Math.sin(tick * s.speed + s.phase) * 0.5 + 0.5
+                        ctx.beginPath()
+                        ctx.arc(s.x * width, s.y * height, s.r * twinkle + 0.3, 0, Math.PI * 2)
+                        ctx.fillStyle = Qt.rgba(0, 0.9, 0.47, twinkle * 0.8)
+                        ctx.fill()
+                    }
+                }
+            }
+        }
 
         Behavior on color { ColorAnimation { duration: 200 } }
 
@@ -306,27 +393,50 @@ Window {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 6
                 
-                // Help button
+                // Privacy mode toggle (play/pause learning)
                 Rectangle {
                     width: 28
                     height: 24
                     radius: 4
-                    color: helpBtn.containsMouse ? "#444" : "transparent"
+                    color: root.privacyMode ? "#4a2a2a" : privacyBtn.containsMouse ? "#444" : "transparent"
+                    border.color: root.privacyMode ? "#ff6b6b" : "transparent"
+                    border.width: root.privacyMode ? 1 : 0
 
-                    Text {
+                    Canvas {
                         anchors.centerIn: parent
-                        text: "?"
-                        font.pixelSize: 14
-                        font.weight: Font.Bold
-                        color: root.showHelp ? "#4a9eff" : "#999"
+                        width: 14; height: 14
+                        onPaint: {
+                            var ctx = getContext("2d")
+                            ctx.clearRect(0, 0, width, height)
+                            ctx.fillStyle = root.privacyMode ? "#ff6b6b" : "#999"
+                            if (root.privacyMode) {
+                                // Pause icon: two vertical bars
+                                ctx.fillRect(2, 1, 3.5, 12)
+                                ctx.fillRect(8.5, 1, 3.5, 12)
+                            } else {
+                                // Play icon: right-pointing triangle
+                                ctx.beginPath()
+                                ctx.moveTo(2, 1)
+                                ctx.lineTo(13, 7)
+                                ctx.lineTo(2, 13)
+                                ctx.closePath()
+                                ctx.fill()
+                            }
+                        }
+                        Connections {
+                            target: root
+                            function onPrivacyModeChanged() { parent.children[0].requestPaint() }
+                        }
                     }
 
                     MouseArea {
-                        id: helpBtn
+                        id: privacyBtn
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.showHelp = !root.showHelp
+                        onClicked: {
+                            if (keyboard) keyboard.setPrivacyMode(!root.privacyMode)
+                        }
                     }
                 }
 
@@ -341,7 +451,7 @@ Window {
                         anchors.centerIn: parent
                         text: "⚙"
                         font.pixelSize: 16
-                        color: root.showSettings ? "#4a9eff" : "#999"
+                        color: root.showSettings ? root.themeAccent : "#999"
                     }
                     
                     MouseArea {
@@ -402,131 +512,144 @@ Window {
             }
         }
 
-        RowLayout {
-            id: mainLayout
+        ColumnLayout {
+            id: outerLayout
             anchors.fill: parent
             anchors.margins: 8
             anchors.topMargin: 32  // Account for title bar
-            spacing: 6
+            spacing: 0
 
-            // ===== Main Keyboard Section =====
-            ColumnLayout {
-                id: mainKeyboard
+            // ===== Prediction Bar (spans full width including nav/numpad) =====
+            Item {
                 Layout.fillWidth: true
-                spacing: 2
+                Layout.preferredHeight: root.suggestionsEnabled ? 40 : 0
+                Layout.bottomMargin: root.suggestionsEnabled ? 4 : 0
+                clip: true
 
-                // ===== Function Row (F1-F12) =====
-                Comp.FunctionRow {
-                    visible: root.showFunctionRow
-                    Layout.alignment: Qt.AlignHCenter
-                    keyW: root.keyW * 0.85
-                    keyH: root.keyH * 0.7
-                    keySpacing: root.keySpacing
+                Behavior on Layout.preferredHeight { NumberAnimation { duration: 150 } }
+
+                // Privacy mode indicator (replaces predictions)
+                Row {
+                    anchors.centerIn: parent
+                    spacing: 6
+                    visible: root.suggestionsEnabled && root.privacyMode
+
+                    Canvas {
+                        width: 12; height: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        onPaint: {
+                            var ctx = getContext("2d")
+                            ctx.fillStyle = "#ff6b6b"
+                            ctx.fillRect(1, 0, 3.5, 12)
+                            ctx.fillRect(7.5, 0, 3.5, 12)
+                        }
+                    }
+                    Text {
+                        text: "Learning paused"
+                        color: "#ff8888"
+                        font.pixelSize: 13
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                 }
 
-                // ===== Prediction Bar (fixed height to prevent window resizing) =====
-                Item {
+                Row {
+                    id: predRow
+                    anchors.centerIn: parent
+                    spacing: 8
+                    visible: root.suggestionsEnabled && !root.privacyMode
+
+                    Repeater {
+                        model: root.suggestionsEnabled && !root.privacyMode && root.predictions.length > 0 ? root.predictions : []
+                        delegate: Rectangle {
+                            property real naturalWidth: Math.max(60, predText.implicitWidth + 28)
+                            property real maxPillWidth: {
+                                var count = root.predictions.length
+                                if (count <= 0) return naturalWidth
+                                var avail = root.width - 32 - (count - 1) * predRow.spacing
+                                return Math.max(50, avail / count)
+                            }
+                            width: Math.min(naturalWidth, maxPillWidth)
+                            height: 36
+                            radius: 8
+                            color: predMouse.containsMouse ? Qt.lighter(root.themeKeyColor, 1.3) : root.themeKeyColor
+                            border.color: predMouse.containsMouse ? Qt.lighter(root.themeAccent, 1.2) : root.themeAccent
+                            border.width: predMouse.containsMouse ? 2 : 1
+
+                            // Subtle gradient for depth
+                            Rectangle {
+                                anchors.fill: parent
+                                anchors.margins: 1
+                                radius: parent.radius - 1
+                                gradient: Gradient {
+                                    GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.08) }
+                                    GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.05) }
+                                }
+                            }
+
+                            Text {
+                                id: predText
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                horizontalAlignment: Text.AlignHCenter
+                                text: modelData
+                                color: predMouse.containsMouse ? Qt.lighter(root.themeTextColor, 1.3) : root.themeTextColor
+                                font.pixelSize: 15
+                                font.weight: Font.Medium
+                                font.family: "Ubuntu, Noto Sans, sans-serif"
+                                elide: Text.ElideRight
+                            }
+
+                            MouseArea {
+                                id: predMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: function(mouse) {
+                                    if (mouse.button === Qt.RightButton) {
+                                        var pos = mapToItem(root.contentItem, mouse.x, mouse.y)
+                                        predContextMenu.showAt(modelData, pos.x, pos.y)
+                                    } else {
+                                        keyboard.pressPrediction(modelData)
+                                    }
+                                }
+                            }
+
+                            // Smooth hover animation
+                            Behavior on color { ColorAnimation { duration: 100 } }
+                            Behavior on border.color { ColorAnimation { duration: 100 } }
+                        }
+                    }
+
+                }
+
+            }
+
+            RowLayout {
+                id: mainLayout
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: 6
+
+                // ===== Main Keyboard Section =====
+                ColumnLayout {
+                    id: mainKeyboard
                     Layout.fillWidth: true
-                    Layout.preferredHeight: root.suggestionsEnabled ? 40 : 0
-                    Layout.bottomMargin: root.suggestionsEnabled ? 4 : 0
-                    clip: true
+                    spacing: 2
 
-                    Behavior on Layout.preferredHeight { NumberAnimation { duration: 150 } }
-
-                    Row {
-                        id: predRow
-                        anchors.centerIn: parent
-                        spacing: 8
-                        visible: root.suggestionsEnabled
-
-                        Repeater {
-                            model: root.suggestionsEnabled && root.predictions.length > 0 ? root.predictions : []
-                            delegate: Rectangle {
-                                property real naturalWidth: Math.max(60, predText.implicitWidth + 28)
-                                property real maxPillWidth: {
-                                    var count = root.predictions.length
-                                    if (count <= 0) return naturalWidth
-                                    var avail = root.width - 32 - (count - 1) * predRow.spacing
-                                    return Math.max(50, avail / count)
-                                }
-                                width: Math.min(naturalWidth, maxPillWidth)
-                                height: 36
-                                radius: 8
-                                color: predMouse.containsMouse ? "#3d4d5d" : "#2a3a4a"
-                                border.color: predMouse.containsMouse ? "#6ab4ff" : "#4a9eff"
-                                border.width: predMouse.containsMouse ? 2 : 1
-
-                                // Subtle gradient for depth
-                                Rectangle {
-                                    anchors.fill: parent
-                                    anchors.margins: 1
-                                    radius: parent.radius - 1
-                                    gradient: Gradient {
-                                        GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.08) }
-                                        GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.05) }
-                                    }
-                                }
-
-                                Text {
-                                    id: predText
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    anchors.leftMargin: 8
-                                    anchors.rightMargin: 8
-                                    horizontalAlignment: Text.AlignHCenter
-                                    text: modelData
-                                    color: predMouse.containsMouse ? "#ffffff" : "#f0f0f0"
-                                    font.pixelSize: 15
-                                    font.weight: Font.Medium
-                                    font.family: "Ubuntu, Noto Sans, sans-serif"
-                                    elide: Text.ElideRight
-                                }
-
-                                MouseArea {
-                                    id: predMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: function(mouse) {
-                                        if (mouse.button === Qt.RightButton) {
-                                            predContextMenu.targetWord = modelData
-                                            predContextMenu.popup()
-                                        } else {
-                                            keyboard.pressPrediction(modelData)
-                                        }
-                                    }
-                                }
-
-                                // Smooth hover animation
-                                Behavior on color { ColorAnimation { duration: 100 } }
-                                Behavior on border.color { ColorAnimation { duration: 100 } }
-                            }
-                        }
+                    // ===== Function Row (F1-F12) =====
+                    Comp.FunctionRow {
+                        visible: root.showFunctionRow
+                        Layout.alignment: Qt.AlignHCenter
+                        keyW: root.keyW * 0.85
+                        keyH: root.keyH * 0.7
+                        keySpacing: root.keySpacing
                     }
 
-                    // Right-click context menu for prediction pills
-                    Menu {
-                        id: predContextMenu
-                        property string targetWord: ""
-
-                        MenuItem {
-                            text: "Remove \"%1\" from vocabulary".arg(predContextMenu.targetWord)
-                            onTriggered: {
-                                if (keyboard) keyboard.blacklistWord(predContextMenu.targetWord)
-                            }
-                        }
-                        MenuItem {
-                            text: "Bad suggestion (show less)"
-                            onTriggered: {
-                                if (keyboard) keyboard.markBadSuggestion(predContextMenu.targetWord)
-                            }
-                        }
-                    }
-                }
-
-                // ===== Data-Driven Keyboard Rows =====
+                    // ===== Data-Driven Keyboard Rows =====
                 Repeater {
                     model: root.layoutRows
 
@@ -576,6 +699,8 @@ Window {
                                 }
                                 keyPressedColor: root.themeKeyPressed
                                 keyTextColor: root.themeTextColor
+                                accentColor: root.themeAccent
+                                borderColor: root.themeBorder
 
                                 onKeyPressed: {
                                     if (kd.type === "char") {
@@ -612,6 +737,11 @@ Window {
                 keyW: root.keyW * 0.9
                 keyH: root.keyH * 0.9
                 keySpacing: root.keySpacing
+                keyColor: Qt.darker(root.themeKeyColor, 1.15)
+                keyPressedColor: root.themeKeyPressed
+                keyTextColor: root.themeTextColor
+                accentColor: root.themeAccent
+                borderColor: root.themeBorder
             }
 
             // ===== Numpad (toggleable) =====
@@ -627,8 +757,250 @@ Window {
                 keyW: root.keyW * 0.9
                 keyH: root.keyH * 0.9
                 keySpacing: root.keySpacing
+                keyColor: root.themeKeyColor
+                specialKeyColor: Qt.darker(root.themeKeyColor, 1.15)
+                keyPressedColor: root.themeKeyPressed
+                keyTextColor: root.themeTextColor
+                enterKeyColor: "#2a5a2a"
+                accentColor: root.themeAccent
+                borderColor: root.themeBorder
+            }
             }
         }
+
+        // Custom styled context menu for prediction pills
+        Popup {
+            id: predContextMenu
+            property string targetWord: ""
+            property real popupX: 0
+            property real popupY: 0
+
+            parent: Overlay.overlay
+            x: popupX
+            y: popupY
+            width: 200
+            height: menuCol.implicitHeight + 16
+            modal: true
+            dim: false
+            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+            function showAt(word, globalX, globalY) {
+                targetWord = word
+                // Position below the click point, clamped to window
+                popupX = Math.max(4, Math.min(globalX, root.width - width - 4))
+                popupY = Math.max(4, Math.min(globalY + 4, root.height - height - 4))
+                open()
+            }
+
+            background: Rectangle {
+                color: "#252535"
+                border.color: "#555"
+                border.width: 1
+                radius: 10
+            }
+
+            contentItem: Column {
+                id: menuCol
+                width: parent ? parent.width : 200
+                padding: 4
+                spacing: 2
+
+                // Word label
+                Text {
+                    width: parent.width - 8
+                    leftPadding: 12
+                    topPadding: 6
+                    bottomPadding: 4
+                    text: predContextMenu.targetWord
+                    color: "#888"
+                    font.pixelSize: 11
+                    elide: Text.ElideRight
+                }
+
+                // Edit
+                Rectangle {
+                    width: parent.width - 8
+                    height: 34
+                    x: 4
+                    radius: 6
+                    color: editMa.containsMouse ? "#3a3a5a" : "transparent"
+
+                    Row {
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+                        anchors.leftMargin: 12
+                        spacing: 10
+                        Text { text: "\u270E"; font.pixelSize: 14; color: "#8cf"; anchors.verticalCenter: parent.verticalCenter }
+                        Text { text: "Edit"; font.pixelSize: 13; color: "#ddd"; anchors.verticalCenter: parent.verticalCenter }
+                    }
+
+                    MouseArea {
+                        id: editMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            predContextMenu.close()
+                            predEditField.originalWord = predContextMenu.targetWord
+                            predEditField.text = predContextMenu.targetWord
+                            predEditPopup.open()
+                            predEditField.selectAll()
+                            predEditField.forceActiveFocus()
+                        }
+                    }
+                }
+
+                // Divider
+                Rectangle { width: parent.width - 24; height: 1; color: "#3a3a4a"; anchors.horizontalCenter: parent.horizontalCenter }
+
+                // Downweight
+                Rectangle {
+                    width: parent.width - 8
+                    height: 34
+                    x: 4
+                    radius: 6
+                    color: badMa.containsMouse ? "#3a3a5a" : "transparent"
+
+                    Row {
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+                        anchors.leftMargin: 12
+                        spacing: 10
+                        Text { text: "\u25BC"; font.pixelSize: 11; color: "#fb4"; anchors.verticalCenter: parent.verticalCenter }
+                        Text { text: "Show less"; font.pixelSize: 13; color: "#ddd"; anchors.verticalCenter: parent.verticalCenter }
+                    }
+
+                    MouseArea {
+                        id: badMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (keyboard) keyboard.markBadSuggestion(predContextMenu.targetWord)
+                            predContextMenu.close()
+                        }
+                    }
+                }
+
+                // Remove
+                Rectangle {
+                    width: parent.width - 8
+                    height: 34
+                    x: 4
+                    radius: 6
+                    color: removeMa.containsMouse ? "#4a2a2a" : "transparent"
+
+                    Row {
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+                        anchors.leftMargin: 12
+                        spacing: 10
+                        Text { text: "\u2715"; font.pixelSize: 12; color: "#f66"; anchors.verticalCenter: parent.verticalCenter }
+                        Text { text: "Remove"; font.pixelSize: 13; color: "#f88"; anchors.verticalCenter: parent.verticalCenter }
+                    }
+
+                    MouseArea {
+                        id: removeMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (keyboard) keyboard.blacklistWord(predContextMenu.targetWord)
+                            predContextMenu.close()
+                        }
+                    }
+                }
+
+                Item { height: 2; width: 1 }
+            }
+        }
+
+        // Edit prediction popup
+        Popup {
+            id: predEditPopup
+            parent: Overlay.overlay
+            x: (root.width - width) / 2
+            y: 36
+            width: 260
+            height: 46
+            modal: true
+            dim: false
+            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+            background: Rectangle {
+                color: "#252535"
+                border.color: "#4a9eff"
+                border.width: 1.5
+                radius: 10
+            }
+
+            contentItem: RowLayout {
+                spacing: 6
+
+                TextField {
+                    id: predEditField
+                    property string originalWord: ""
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 32
+                    color: "#f0f0f0"
+                    font.pixelSize: 15
+                    font.weight: Font.Medium
+                    selectionColor: "#4a9eff"
+                    selectedTextColor: "#fff"
+                    leftPadding: 10
+                    rightPadding: 10
+                    verticalAlignment: Text.AlignVCenter
+
+                    background: Rectangle {
+                        color: "#1a1a2a"
+                        radius: 6
+                        border.color: predEditField.activeFocus ? "#4a9eff" : "#444"
+                        border.width: 1
+                    }
+
+                    onAccepted: {
+                        if (text.trim() && keyboard) {
+                            keyboard.editPrediction(originalWord, text.trim())
+                        }
+                        predEditPopup.close()
+                    }
+
+                    Keys.onEscapePressed: predEditPopup.close()
+                }
+
+                // Confirm button
+                Rectangle {
+                    width: 32
+                    height: 32
+                    radius: 6
+                    color: confirmMa.containsMouse ? "#2a6a2a" : "#1e3e1e"
+                    border.color: "#4a4"
+                    border.width: 1
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "\u2713"
+                        font.pixelSize: 16
+                        font.weight: Font.Bold
+                        color: "#6f6"
+                    }
+
+                    MouseArea {
+                        id: confirmMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (predEditField.text.trim() && keyboard) {
+                                keyboard.editPrediction(predEditField.originalWord, predEditField.text.trim())
+                            }
+                            predEditPopup.close()
+                        }
+                    }
+                }
+            }
+        }
+
 
         // Debug Panel
         Comp.DebugPanel {
@@ -846,6 +1218,8 @@ Window {
             }
 
             onCloseRequested: root.showSettings = false
+            onShowHelpRequested: root.showHelp = true
+            onShowVisualizationRequested: root.showVisualization = true
         }
     }
 
@@ -874,6 +1248,36 @@ Window {
         Comp.HelpPanel {
             anchors.fill: parent
             onCloseRequested: root.showHelp = false
+        }
+    }
+
+    // ===== Model Visualization Window =====
+    Window {
+        id: vizWindow
+        title: "Language Model"
+        visible: root.showVisualization
+        width: 720
+        minimumWidth: 520
+        height: 600
+        minimumHeight: 400
+        flags: Qt.Window | Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.Tool
+
+        onVisibleChanged: {
+            if (visible) {
+                vizWindow.x = Screen.width / 2 - vizWindow.width / 2
+                vizWindow.y = Screen.height / 2 - vizWindow.height / 2
+                vizContent.refresh()
+            }
+        }
+
+        onClosing: root.showVisualization = false
+
+        color: "transparent"
+
+        Comp.ModelVisualization {
+            id: vizContent
+            anchors.fill: parent
+            onCloseRequested: root.showVisualization = false
         }
     }
 }

@@ -31,6 +31,8 @@ Item {
 
     signal settingChanged(string setting, var value)
     signal closeRequested()
+    signal showHelpRequested()
+    signal showVisualizationRequested()
 
     Rectangle {
         anchors.fill: parent
@@ -416,7 +418,8 @@ Item {
                                     { id: "programming",  label: "Programming" },
                                     { id: "academic",     label: "Academic" },
                                     { id: "gaming",       label: "Gaming" },
-                                    { id: "business",     label: "Business" }
+                                    { id: "business",     label: "Business" },
+                                    { id: "nsfw",         label: "NSFW / Adult Language" }
                                 ]
 
                                 SettingsToggle {
@@ -501,34 +504,56 @@ Item {
                         title: "Theme"
                         Layout.fillWidth: true
 
-                        Row {
-                            spacing: 8
+                        Flow {
+                            Layout.fillWidth: true
+                            spacing: 6
 
                             Repeater {
                                 model: Object.keys(unifiedSettings.themeData)
 
-                                Rectangle {
+                                Column {
+                                    spacing: 3
                                     property var t: unifiedSettings.themeData[modelData]
-                                    width: 34
-                                    height: 34
-                                    radius: 7
-                                    color: t.background
-                                    border.color: unifiedSettings.currentTheme === modelData
-                                                  ? t.accent : "#555"
-                                    border.width: unifiedSettings.currentTheme === modelData ? 2 : 1
+                                    property bool isCurrent: unifiedSettings.currentTheme === modelData
 
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: unifiedSettings.currentTheme === modelData ? "\u2713" : ""
-                                        color: modelData === "light" ? "#333" : "#fff"
-                                        font.pixelSize: 14
-                                        font.bold: true
+                                    Rectangle {
+                                        width: 34
+                                        height: 34
+                                        radius: 7
+                                        color: t.background
+                                        border.color: isCurrent ? t.accent : themeMa.containsMouse ? "#888" : "#555"
+                                        border.width: isCurrent ? 2 : 1
+                                        anchors.horizontalCenter: parent.horizontalCenter
+
+                                        // Show key color + text color as inner swatch
+                                        Rectangle {
+                                            anchors.centerIn: parent
+                                            width: 16; height: 12; radius: 3
+                                            color: t.keyColor
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: isCurrent ? "\u2713" : "A"
+                                                color: t.textColor
+                                                font.pixelSize: 9
+                                                font.bold: true
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            id: themeMa
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: unifiedSettings.settingChanged("theme", modelData)
+                                        }
                                     }
 
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: unifiedSettings.settingChanged("theme", modelData)
+                                    Text {
+                                        text: t.name || modelData
+                                        color: isCurrent ? "#ddd" : "#888"
+                                        font.pixelSize: 9
+                                        font.weight: isCurrent ? Font.DemiBold : Font.Normal
+                                        anchors.horizontalCenter: parent.horizontalCenter
                                     }
                                 }
                             }
@@ -732,6 +757,65 @@ Item {
                             Layout.fillWidth: true
                             implicitHeight: 460
                             visible: true
+                        }
+                    }
+
+                    // -- TOOLS --
+                    SettingsSection {
+                        title: "Tools"
+                        Layout.fillWidth: true
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                implicitHeight: 32
+                                radius: 5
+                                color: helpBtnArea.containsMouse ? "#3a3a5a" : "#2a2a3a"
+                                border.color: "#4a4a6a"
+                                border.width: 1
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "Help & Shortcuts"
+                                    color: helpBtnArea.containsMouse ? "#cce" : "#aab"
+                                    font.pixelSize: 12
+                                }
+
+                                MouseArea {
+                                    id: helpBtnArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: unifiedSettings.showHelpRequested()
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                implicitHeight: 32
+                                radius: 5
+                                color: vizBtnArea.containsMouse ? "#3a3a5a" : "#2a2a3a"
+                                border.color: "#4a4a6a"
+                                border.width: 1
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "Language Model Visualization"
+                                    color: vizBtnArea.containsMouse ? "#cce" : "#aab"
+                                    font.pixelSize: 12
+                                }
+
+                                MouseArea {
+                                    id: vizBtnArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: unifiedSettings.showVisualizationRequested()
+                                }
+                            }
                         }
                     }
 

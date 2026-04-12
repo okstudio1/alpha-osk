@@ -1,0 +1,7 @@
+{
+  "id": "nsfw",
+  "name": "NSFW / Adult Language",
+  "description": "Adult and explicit vocabulary. Disabled by default.",
+  "version": "1.0",
+  "word_count": 82
+}

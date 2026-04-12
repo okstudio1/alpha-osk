@@ -33,7 +33,7 @@ User clicks key (QML)
 |------|------|
 | `src/keyboard_bridge.py` | Central bridge: key handling, modifiers, context tracking, predictions |
 | `src/keyboard_app.py` | App launcher: QML engine, window flags, auto-save on exit |
-| `src/platform/` | OS abstraction — `linux.py` (xdotool/ydotool), `windows.py` (SendInput) |
+| `src/platform/` | OS abstraction — `linux.py` (xdotool/ydotool), `windows.py` (SendInput), `password_detect.py` |
 | `src/platform/__init__.py` | Platform detection, `get_config_dir()`, `get_model_dir()` |
 | `src/prediction/` | Prediction engines (see below) |
 | `qml/Main.qml` | Root UI — title bar, keyboard rows, prediction bar, resize handles |
@@ -54,6 +54,16 @@ All in `src/prediction/`. Orchestrated by `hybrid_predictor.py`:
 | `hybrid_predictor.py` | Merges all predictors. Manages model save/load. Emits Qt signals. |
 | `vocabulary_pack.py` | Domain vocab packs (medical, programming, etc.) + custom pack import |
 | `transformer_predictor.py` | Optional LLM re-ranking (disabled by default) |
+
+## Auto-Capitalization & Proper Nouns
+
+Predictions automatically capitalize known proper nouns (names, places, brands, days/months).
+
+- **Built-in**: `data/proper_nouns.txt` (~8,000 entries from US Census + community datasets) loaded into `ngram_predictor.capitalization` on startup.
+- **Learned**: When a user types a word with non-trivial capitalization (e.g., "iPhone", "Owen") and completes it with space, the preferred form is saved via `learn_capitalization()`.
+- **User edits**: Right-click a prediction → Edit to correct capitalization. This calls `editPrediction()` which inserts the corrected word and saves the capitalization permanently.
+- **Applied at output**: `hybrid_predictor._merge_predictions()` calls `ngram.get_capitalized()` on each result before returning to QML.
+- **Persisted**: The `capitalization` dict is saved in `ngram_model.json`. User overrides merge with built-in proper nouns on load (user wins).
 
 ## Where User Data Lives
 
@@ -120,6 +130,57 @@ Users can right-click prediction pills to:
 
 Both are persisted in `ngram_model.json` and applied in `hybrid_predictor._merge_predictions()`.
 
+### Restoring Suppressed Words
+In the Model Visualization dashboard (Settings → Tools → Language Model Visualization → Dashboard tab → Suppressed Words), blacklisted and dispreferred words display as clickable tags. Click a tag to restore it.
+
+Bridge slots: `keyboard.unblacklistWord(word)`, `keyboard.undisprefer(word)`.
+
+### Auto-Rehabilitation
+If a user manually types a blacklisted word 3 times (completing it with space), the word is automatically restored to predictions. Tracked via `ngram_predictor._blacklist_type_count`, persisted in `ngram_model.json`.
+
+## Model Visualization
+
+Accessed via Settings → Tools → Language Model Visualization. Three tabs:
+- **Word Cloud** — circle-packed bubble chart of top words, sized by frequency
+- **Word Flow** — network graph of bigram word→word connections
+- **Dashboard** — stats cards, top words bar chart, interactive suppressed words, top word pairs
+
+Data provided by `keyboard_bridge.getVisualizationData()` → `ModelVisualization.qml`.
+
+## Privacy Mode & Password Detection
+
+Protects sensitive input (passwords, PINs) from leaking into the prediction model.
+
+### How it works
+- **Auto-detection** (Windows): A `QTimer` polls every 500ms, calling `is_password_field()` from `src/platform/password_detect.py`. Uses Windows UI Automation COM (`IUIAutomation::GetFocusedElement` → `UIA_IsPasswordPropertyId`) to detect password fields in native apps and browsers. Falls back to Win32 `EM_GETPASSWORDCHAR` if UIA fails.
+- **Manual toggle**: Play/pause icon in the title bar (Canvas-drawn). Overrides auto-detection.
+- **When active**: Keystrokes still reach the OS, but `_current_word`, predictions, and learning are all suppressed. The prediction bar shows "Learning paused".
+
+### Key files
+- `src/platform/password_detect.py` — platform-specific detection (UIA COM via ctypes)
+- `src/keyboard_bridge.py` — `_privacy_mode` flag, `_check_password_field()` timer, `setPrivacyMode()` slot
+
+### Linux
+Auto-detection not yet implemented. Users should use the manual toggle.
+
+## Themes
+
+Defined in `themeData` in `Main.qml`. Each theme has: `name`, `background`, `keyColor`, `keyPressed`, `textColor`, `accent`, `border`, `animation`.
+
+**9 themes**: Dark, Light, Ocean, Forest, Amethyst, Vaporwave, Blackboard, Typewriter, Spaceship.
+
+Theme colors flow to all components: main keyboard keys, prediction pills, nav panel, numpad, title bar icons, and active key states (NumLock, Shift, etc.). `KeyButton.qml` auto-computes text contrast on active/pressed states using luminance.
+
+**Animations** (optional per theme): Canvas overlay at 15% opacity. Vaporwave has gradient shift, Spaceship has twinkling stars.
+
+Theme picker in settings shows labeled color swatches with mini key previews.
+
+## Vocabulary
+
+- **Base**: Google 10K wordlist (`data/google-10000-english-usa-no-swears.txt`) + 10K supplement (`data/google-20000-supplement.txt`, filtered for explicit content). ~20K total regular words.
+- **Packs**: Medical, Programming, Academic, Gaming, Business, NSFW. Toggled in Settings → Vocabulary Packs. NSFW is off by default.
+- **Numpad**: Toggles between numbers and navigation keys (Home/End/PgUp/PgDn/arrows/Ins/Del) via NumLock. Key 5 is blank in nav mode.
+
 ## Analytics & Quality Scoring
 
 `src/analytics.py` tracks session and all-time stats. All-time stats persist to `<config_dir>/analytics.json`.
@@ -140,9 +201,10 @@ Conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`
 
 ## Things to Watch Out For
 
-- `Main.qml` is large (~900 lines). The keyboard rows are data-driven from `keyboard.getLayoutRows()`.
-- `keyboard_bridge.py` is the biggest Python file (~800 lines). It handles everything: keys, modifiers, context, predictions, settings.
+- `Main.qml` is large (~1300 lines). The keyboard rows are data-driven from `keyboard.getLayoutRows()`.
+- `keyboard_bridge.py` is the biggest Python file (~1000 lines). It handles everything: keys, modifiers, context, predictions, settings, privacy mode.
 - Window flags are critical — the keyboard must never steal focus from the user's app. See `_apply_window_flags()` in `keyboard_app.py`.
 - On Windows, `WS_EX_NOACTIVATE` is set via Win32 API (not just Qt flags).
 - Key spacing and sizing are calculated dynamically from window width — see `keyW`, `keyH`, `keySpacing`, `layoutFixedPixels` properties in Main.qml.
+- The title bar has play/pause (privacy), ⚙ (settings), minimize, and close. Help and visualization are in Settings → Tools.
 - Predictions clear automatically when the window loses focus (`onActiveChanged` in Main.qml) so context doesn't go stale.

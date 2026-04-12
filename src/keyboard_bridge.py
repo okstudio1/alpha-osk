@@ -19,7 +19,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
+from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
 
 # Audio feedback — optional, gracefully degrades if QtMultimedia unavailable
 try:
@@ -31,6 +31,7 @@ except ImportError:
 from .analytics import TypingAnalytics
 from .platform import create_key_synthesizer
 from .platform.base import KeySynthesizerBase
+from .platform.password_detect import is_password_field
 from .prediction import HybridPredictor
 
 _logger = logging.getLogger("KeyboardBridge")
@@ -78,6 +79,9 @@ class KeyboardBridge(QObject):
     # Debug signals
     debugModeChanged = Signal(bool)
     debugLogChanged = Signal(list)
+
+    # Privacy signals
+    privacyModeChanged = Signal(bool)
 
     def __init__(self, parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
@@ -144,6 +148,17 @@ class KeyboardBridge(QObject):
         self._auto_capitalize_after_punctuation = False
         self._auto_save_on_exit = True
 
+        # Privacy mode — suppresses prediction and learning
+        self._privacy_mode = False
+        self._privacy_mode_manual = False   # User toggled manually
+        self._password_detect_enabled = True
+
+        # Poll for password fields every 500ms
+        self._password_timer = QTimer(self)
+        self._password_timer.setInterval(500)
+        self._password_timer.timeout.connect(self._check_password_field)
+        self._password_timer.start()
+
     # --- Key synthesis (delegated to platform layer) ---
 
     def _send_key(self, key_name: str) -> None:
@@ -196,35 +211,62 @@ class KeyboardBridge(QObject):
         # Send the lowercase key — Shift is included as a modifier by _send_key
         if self._ctrl_active or self._alt_active or self._win_active:
             self._send_key(key.lower())
+            # Don't update _current_word or predictions — this was a shortcut,
+            # not text input. Skip the rest of character handling.
+            # Auto-release shift after one keypress (not caps lock)
+            if self._shift_active and not self._caps_lock_active:
+                self._shift_active = False
+                self._update_layer()
+                self.shiftActiveChanged.emit(self._shift_active)
+            # Auto-release ctrl/alt/win after one keypress
+            if self._ctrl_active:
+                self._ctrl_active = False
+                self.ctrlActiveChanged.emit(self._ctrl_active)
+            if self._alt_active:
+                self._alt_active = False
+                self.altActiveChanged.emit(self._alt_active)
+            if self._win_active:
+                self._win_active = False
+                self.winActiveChanged.emit(self._win_active)
+            return
         else:
             self._send_text(char)
 
-        # Update context and get predictions
-        self._current_word += char
-
-        # Sentence-ending punctuation triggers sentence learning
-        if char in (".", "!", "?"):
-            sentence = self._sentence_buffer + self._current_word
-            if sentence.strip():
-                self._predictor.learn(sentence.strip())
-            self._sentence_buffer = ""
-            self._current_word = ""
-            if self._auto_space_after_punctuation:
-                self._send_text(" ")
-            self._context_buffer += char + " "
-            # Auto-capitalize next letter
-            if self._auto_capitalize_after_punctuation:
-                self._shift_active = True
-                self.shiftActiveChanged.emit(True)
-            if len(self._context_buffer) > 200:
-                self._context_buffer = self._context_buffer[-200:]
-
-        # Only show predictions for alphabetic input
-        if char.isalpha():
-            self._update_predictions()
+        # Privacy mode — send keystrokes but don't learn or predict
+        if self._privacy_mode:
+            # Still handle auto-release of modifiers below, but skip learning
+            pass
         else:
-            self._predictions = []
-            self.predictionsChanged.emit([])
+            # Update context and get predictions
+            self._current_word += char
+
+            # Sentence-ending punctuation triggers sentence learning
+            if char in (".", "!", "?"):
+                sentence = self._sentence_buffer + self._current_word
+                if sentence.strip():
+                    new_words = self._predictor.learn(sentence.strip())
+                    if new_words:
+                        for nw in new_words:
+                            self._add_debug_log(f"NEW WORD learned: \"{nw}\"")
+                            _logger.info("New word learned: %s", nw)
+                self._sentence_buffer = ""
+                self._current_word = ""
+                if self._auto_space_after_punctuation:
+                    self._send_text(" ")
+                self._context_buffer += char + " "
+                # Auto-capitalize next letter
+                if self._auto_capitalize_after_punctuation:
+                    self._shift_active = True
+                    self.shiftActiveChanged.emit(True)
+                if len(self._context_buffer) > 200:
+                    self._context_buffer = self._context_buffer[-200:]
+
+            # Only show predictions for alphabetic input
+            if char.isalpha():
+                self._update_predictions()
+            else:
+                self._predictions = []
+                self.predictionsChanged.emit([])
 
         # Auto-release shift after one keypress (not caps lock)
         if self._shift_active and not self._caps_lock_active:
@@ -276,15 +318,30 @@ class KeyboardBridge(QObject):
         xdotool_key = key_map.get(key_name, key_name)
         self._send_key(xdotool_key)
 
-        # Handle context for predictions
-        if key_name == "space":
+        # Privacy mode — send the key but don't track context or learn
+        if self._privacy_mode:
+            pass
+        elif key_name == "space":
             # Word completed - learn it and add to sentence
             if self._current_word:
+                self._add_debug_log(f"Word completed: \"{self._current_word}\"")
+                # Auto-rehabilitate blacklisted words typed repeatedly
+                rehabilitated = self._predictor.record_typed_word(self._current_word)
+                if rehabilitated:
+                    self._add_debug_log(f"Auto-rehabilitated: {rehabilitated}")
                 self._analytics.record_word_completed(self._current_word)
+                # Learn capitalization from user typing
+                if self._predictor.learn_capitalization(self._current_word):
+                    self._add_debug_log(f"Learned capitalization: \"{self._current_word}\"")
+                    _logger.info("Learned capitalization: %s", self._current_word)
                 self._sentence_buffer += self._current_word + " "
                 self._context_buffer += self._current_word + " "
                 # Learn bigrams/trigrams from the running sentence
-                self._predictor.learn(self._sentence_buffer.strip())
+                new_words = self._predictor.learn(self._sentence_buffer.strip())
+                if new_words:
+                    for nw in new_words:
+                        self._add_debug_log(f"NEW WORD learned: \"{nw}\"")
+                        _logger.info("New word learned: %s", nw)
                 # Keep context buffer bounded
                 if len(self._context_buffer) > 200:
                     self._context_buffer = self._context_buffer[-200:]
@@ -299,10 +356,15 @@ class KeyboardBridge(QObject):
         elif key_name == "return":
             # Sentence boundary - learn full sentence, then reset sentence buffer
             if self._current_word:
+                self._add_debug_log(f"Word completed: \"{self._current_word}\"")
                 self._analytics.record_word_completed(self._current_word)
                 self._sentence_buffer += self._current_word
             if self._sentence_buffer.strip():
-                self._predictor.learn(self._sentence_buffer.strip())
+                new_words = self._predictor.learn(self._sentence_buffer.strip())
+                if new_words:
+                    for nw in new_words:
+                        self._add_debug_log(f"NEW WORD learned: \"{nw}\"")
+                        _logger.info("New word learned: %s", nw)
             self._sentence_buffer = ""
             # Preserve context across lines (don't wipe)
             if self._current_word:
@@ -376,16 +438,14 @@ class KeyboardBridge(QObject):
         saved = len(word) - len(self._current_word) + 1  # +1 for auto-space
         self._analytics.record_prediction_selected(word, rank, keystrokes_saved=max(0, saved))
 
-        # Complete the word: type remaining characters + space
+        # Complete the word: erase typed prefix, then type full word + space.
+        # Using backspace-then-retype is more robust than sending only the
+        # remaining suffix, because _current_word can drift out of sync with
+        # what's actually on screen (e.g. after modifier keys or focus changes).
         if self._current_word:
-            # Type only the remaining part of the word
-            if word.startswith(self._current_word.lower()):
-                remaining = word[len(self._current_word):]
-            else:
-                remaining = word
-            self._send_text(remaining + " ")
-        else:
-            self._send_text(word + " ")
+            for _ in range(len(self._current_word)):
+                self._synth.send_key("BackSpace")
+        self._send_text(word + " ")
 
         # Learn from selection
         context = self._context_buffer + self._current_word
@@ -541,6 +601,49 @@ class KeyboardBridge(QObject):
     def autoSaveOnExit(self) -> bool:
         """Whether to auto-save prediction model on exit."""
         return self._auto_save_on_exit
+
+    # --- Privacy Mode ---
+
+    def _check_password_field(self) -> None:
+        """Periodic check for password field focus (called by QTimer)."""
+        if not self._password_detect_enabled or self._privacy_mode_manual:
+            return
+
+        detected = is_password_field()
+        if detected != self._privacy_mode:
+            self._privacy_mode = detected
+            self.privacyModeChanged.emit(detected)
+            if detected:
+                # Entering password field — clear any visible predictions
+                self._predictions = []
+                self.predictionsChanged.emit([])
+                self._current_word = ""
+                _logger.info("Password field detected — privacy mode ON")
+            else:
+                _logger.info("Password field cleared — privacy mode OFF")
+
+    @Slot(bool)
+    def setPrivacyMode(self, enabled: bool) -> None:
+        """Manually toggle privacy mode (overrides auto-detection)."""
+        self._privacy_mode_manual = enabled
+        self._privacy_mode = enabled
+        self.privacyModeChanged.emit(enabled)
+        if enabled:
+            self._predictions = []
+            self.predictionsChanged.emit([])
+            self._current_word = ""
+        _logger.info("Privacy mode manually set: %s", enabled)
+
+    @Slot(bool)
+    def setPasswordDetectionEnabled(self, enabled: bool) -> None:
+        """Enable/disable automatic password field detection."""
+        self._password_detect_enabled = enabled
+        _logger.info("Password field detection: %s", enabled)
+
+    def _get_privacy_mode(self) -> bool:
+        return self._privacy_mode
+
+    privacyMode = Property(bool, _get_privacy_mode, notify=privacyModeChanged)
 
     @Slot(result=dict)
     def getPredictionStats(self) -> dict:
@@ -722,6 +825,50 @@ class KeyboardBridge(QObject):
         self._predictor.mark_bad_suggestion(word)
         self._add_debug_log(f"Marked bad: {word}")
 
+    @Slot(str)
+    def unblacklistWord(self, word: str) -> None:
+        """Restore a previously blacklisted word to predictions."""
+        self._predictor.unblacklist_word(word)
+        self._add_debug_log(f"Unblacklisted: {word}")
+
+    @Slot(str)
+    def undisprefer(self, word: str) -> None:
+        """Remove dispreference penalty from a word."""
+        self._predictor.remove_dispreference(word)
+        self._add_debug_log(f"Removed dispreference: {word}")
+
+    @Slot(str, str)
+    def editPrediction(self, original: str, edited: str) -> None:
+        """User edited a prediction (e.g. to fix capitalization). Insert it and learn."""
+        edited = edited.strip()
+        if not edited:
+            return
+
+        # Learn the preferred capitalization
+        self._predictor.set_capitalization(edited, edited)
+
+        # Insert the edited word (same as pressPrediction but with edited text)
+        if self._current_word:
+            for _ in range(len(self._current_word)):
+                self._synth.send_key("BackSpace")
+        self._send_text(edited + " ")
+
+        # Update context
+        self._context_buffer += edited + " "
+        if len(self._context_buffer) > 100:
+            self._context_buffer = self._context_buffer[-100:]
+        self._current_word = ""
+
+        # Refresh predictions
+        self._predictions = []
+        self.predictionsChanged.emit([])
+        next_preds = self._predictor.predict(self._context_buffer, n=self._prediction_count)
+        self._predictions = next_preds
+        self.predictionsChanged.emit(next_preds)
+
+        self._add_debug_log(f"Edited prediction: {original} → {edited}")
+        _logger.info("Prediction edited: %s → %s", original, edited)
+
     # --- Audio Feedback ---
 
     def _play_click(self) -> None:
@@ -802,6 +949,53 @@ class KeyboardBridge(QObject):
     def saveAnalytics(self) -> None:
         """Save analytics to disk."""
         self._analytics.save()
+
+    @Slot(result="QVariant")
+    def getVisualizationData(self) -> dict:
+        """Return language-model data for the visualisation panel."""
+        ngram = self._predictor._ngram
+
+        # Top words by frequency (unigrams + user_vocab merged)
+        merged: dict[str, int] = {}
+        for w, c in ngram.unigrams.items():
+            if w not in ngram.blacklist:
+                merged[w] = merged.get(w, 0) + c
+        for w, c in ngram.user_vocab.items():
+            if w not in ngram.blacklist:
+                merged[w] = merged.get(w, 0) + c
+        sorted_words = sorted(merged.items(), key=lambda x: x[1], reverse=True)[:100]
+
+        # Bigram edges — top connections for the top words
+        top_word_set = {w for w, _ in sorted_words[:40]}
+        edges: list[dict] = []
+        for prev, nexts in ngram.bigrams.items():
+            if prev not in top_word_set:
+                continue
+            for nxt, cnt in nexts.items():
+                if nxt in top_word_set and cnt >= 2:
+                    edges.append({"from": prev, "to": nxt, "count": cnt})
+        edges.sort(key=lambda e: e["count"], reverse=True)
+        edges = edges[:150]
+
+        # Stats
+        stats = ngram.get_stats()
+        stats["blacklistCount"] = len(ngram.blacklist)
+        stats["dispreferenceCount"] = len(ngram.dispreference)
+        stats["blacklist"] = list(ngram.blacklist)[:30]
+        stats["dispreference"] = [
+            {"word": w, "count": c}
+            for w, c in sorted(ngram.dispreference.items(), key=lambda x: x[1], reverse=True)[:20]
+        ]
+
+        # Analytics
+        analytics = self._analytics.get_session_stats()
+
+        return {
+            "words": [{"word": w, "count": c} for w, c in sorted_words],
+            "edges": edges,
+            "stats": stats,
+            "analytics": analytics,
+        }
 
     # --- Prediction Properties ---
 
