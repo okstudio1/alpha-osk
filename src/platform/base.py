@@ -134,6 +134,34 @@ class KeySynthesizerBase(ABC):
         ...
 
     # ------------------------------------------------------------------ #
+    #  Modifier hold / release
+    # ------------------------------------------------------------------ #
+
+    def hold_modifier(self, key_name: str) -> None:
+        """
+        Send a modifier key-down event (Ctrl, Alt, Shift, Win/Super).
+
+        The modifier stays held at the OS level until :meth:`release_modifier`
+        is called.  This allows modifier+mouse-click combinations (e.g.
+        Ctrl+click to open a hyperlink).
+
+        The default implementation is a no-op — backends that support
+        independent key-down / key-up override this.
+
+        Args:
+            key_name: Modifier name (``"ctrl"``, ``"alt"``, ``"shift"``,
+                      ``"win"``).
+        """
+
+    def release_modifier(self, key_name: str) -> None:
+        """
+        Send a modifier key-up event, releasing a previously held modifier.
+
+        Args:
+            key_name: Modifier name (same as :meth:`hold_modifier`).
+        """
+
+    # ------------------------------------------------------------------ #
     #  Helpers available to all backends
     # ------------------------------------------------------------------ #
 

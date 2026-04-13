@@ -528,6 +528,20 @@ class WindowsKeySynthesizer(KeySynthesizerBase):
 
         return events
 
+    def hold_modifier(self, key_name: str) -> None:
+        """Send a modifier key-down so it stays held at the OS level."""
+        vk = _KEY_MAP.get(key_name)
+        if vk is not None:
+            self._inject([self._make_key_event(vk, key_down=True)])
+            self._log_send(f"hold modifier {key_name} (vk=0x{vk:02X})")
+
+    def release_modifier(self, key_name: str) -> None:
+        """Send a modifier key-up to release a held modifier."""
+        vk = _KEY_MAP.get(key_name)
+        if vk is not None:
+            self._inject([self._make_key_event(vk, key_down=False)])
+            self._log_send(f"release modifier {key_name} (vk=0x{vk:02X})")
+
     def _inject(self, events: List[INPUT]) -> None:
         """
         Call ``SendInput`` to inject an array of INPUT events atomically.

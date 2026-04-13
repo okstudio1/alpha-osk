@@ -86,6 +86,20 @@ QML calls Python via `@Slot` methods on `KeyboardBridge`. Python emits `Signal`s
 3. Python: `self.predictionsChanged.emit(predictions)` → Signal
 4. QML: binds to `keyboard.predictions` property, updates UI
 
+## Sticky Modifiers (Ctrl, Alt, Win)
+
+Modifier keys are **sticky** — tap once to activate, tap again to deactivate. While active, the modifier is held at the OS level via `hold_modifier()` / `release_modifier()` on the platform synthesizer. This means:
+
+- **Modifier+click works**: e.g., Ctrl+click to open hyperlinks in terminals/browsers.
+- **Modifier+key combos work**: e.g., tap Ctrl, then tap C → sends Ctrl+C.
+- **Auto-release**: After any key press (character or special), active modifiers are released at the OS level and deactivated.
+
+### Implementation
+- `keyboard_bridge.py`: `toggleCtrl()` / `toggleAlt()` / `toggleWin()` call `_synth.hold_modifier()` on activate and `_synth.release_modifier()` on deactivate. All auto-release paths in `pressKey()` and `pressSpecialKey()` also call `release_modifier()`.
+- `platform/base.py`: `hold_modifier()` and `release_modifier()` — default no-op.
+- `platform/windows.py`: Sends `VK_CONTROL` / `VK_MENU` / `VK_LWIN` key-down or key-up via `SendInput`.
+- `platform/linux.py`: Uses `xdotool keydown/keyup` or `ydotool key --key-down/--key-up`.
+
 ## Adding a New Setting
 
 1. Add `property bool savedFoo: defaultValue` to `Settings {}` in `Main.qml`

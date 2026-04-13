@@ -191,6 +191,52 @@ class LinuxKeySynthesizer(KeySynthesizerBase):
         except Exception as e:
             _logger.error("Failed to type text: %s", e)
 
+    def hold_modifier(self, key_name: str) -> None:
+        """Send a modifier key-down so it stays held at the OS level."""
+        if not self._tool:
+            return
+        mapped = "super" if key_name == "win" else key_name
+        try:
+            if self._tool == "xdotool":
+                self._log_send(f"xdotool keydown {mapped}")
+                subprocess.Popen(
+                    ["xdotool", "keydown", mapped],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            elif self._tool == "ydotool":
+                self._log_send(f"ydotool key --key-down {mapped}")
+                subprocess.Popen(
+                    ["ydotool", "key", "--key-down", mapped],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+        except Exception as e:
+            _logger.error("Failed to hold modifier %s: %s", key_name, e)
+
+    def release_modifier(self, key_name: str) -> None:
+        """Send a modifier key-up to release a held modifier."""
+        if not self._tool:
+            return
+        mapped = "super" if key_name == "win" else key_name
+        try:
+            if self._tool == "xdotool":
+                self._log_send(f"xdotool keyup {mapped}")
+                subprocess.Popen(
+                    ["xdotool", "keyup", mapped],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            elif self._tool == "ydotool":
+                self._log_send(f"ydotool key --key-up {mapped}")
+                subprocess.Popen(
+                    ["ydotool", "key", "--key-up", mapped],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+        except Exception as e:
+            _logger.error("Failed to release modifier %s: %s", key_name, e)
+
     def send_combination(self, keys: List[str]) -> None:
         """
         Send a multi-key chord (e.g. Ctrl+Alt+Delete).

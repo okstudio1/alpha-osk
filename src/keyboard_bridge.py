@@ -221,12 +221,15 @@ class KeyboardBridge(QObject):
                 self.shiftActiveChanged.emit(self._shift_active)
             # Auto-release ctrl/alt/win after one keypress
             if self._ctrl_active:
+                self._synth.release_modifier("ctrl")
                 self._ctrl_active = False
                 self.ctrlActiveChanged.emit(self._ctrl_active)
             if self._alt_active:
+                self._synth.release_modifier("alt")
                 self._alt_active = False
                 self.altActiveChanged.emit(self._alt_active)
             if self._win_active:
+                self._synth.release_modifier("win")
                 self._win_active = False
                 self.winActiveChanged.emit(self._win_active)
             return
@@ -277,12 +280,15 @@ class KeyboardBridge(QObject):
 
         # Auto-release ctrl/alt/win after one keypress
         if self._ctrl_active:
+            self._synth.release_modifier("ctrl")
             self._ctrl_active = False
             self.ctrlActiveChanged.emit(self._ctrl_active)
         if self._alt_active:
+            self._synth.release_modifier("alt")
             self._alt_active = False
             self.altActiveChanged.emit(self._alt_active)
         if self._win_active:
+            self._synth.release_modifier("win")
             self._win_active = False
             self.winActiveChanged.emit(self._win_active)
 
@@ -377,12 +383,15 @@ class KeyboardBridge(QObject):
 
         # Auto-release ctrl/alt/win after special key too
         if self._ctrl_active:
+            self._synth.release_modifier("ctrl")
             self._ctrl_active = False
             self.ctrlActiveChanged.emit(self._ctrl_active)
         if self._alt_active:
+            self._synth.release_modifier("alt")
             self._alt_active = False
             self.altActiveChanged.emit(self._alt_active)
         if self._win_active:
+            self._synth.release_modifier("win")
             self._win_active = False
             self.winActiveChanged.emit(self._win_active)
 
@@ -407,20 +416,32 @@ class KeyboardBridge(QObject):
 
     @Slot()
     def toggleCtrl(self) -> None:
-        """Toggle ctrl modifier (sticky)."""
+        """Toggle ctrl modifier (sticky). Holds/releases at the OS level."""
         self._ctrl_active = not self._ctrl_active
+        if self._ctrl_active:
+            self._synth.hold_modifier("ctrl")
+        else:
+            self._synth.release_modifier("ctrl")
         self.ctrlActiveChanged.emit(self._ctrl_active)
 
     @Slot()
     def toggleAlt(self) -> None:
-        """Toggle alt modifier (sticky)."""
+        """Toggle alt modifier (sticky). Holds/releases at the OS level."""
         self._alt_active = not self._alt_active
+        if self._alt_active:
+            self._synth.hold_modifier("alt")
+        else:
+            self._synth.release_modifier("alt")
         self.altActiveChanged.emit(self._alt_active)
 
     @Slot()
     def toggleWin(self) -> None:
-        """Toggle Windows/Super modifier (sticky)."""
+        """Toggle Windows/Super modifier (sticky). Holds/releases at the OS level."""
         self._win_active = not self._win_active
+        if self._win_active:
+            self._synth.hold_modifier("win")
+        else:
+            self._synth.release_modifier("win")
         self.winActiveChanged.emit(self._win_active)
 
     @Slot(str)
