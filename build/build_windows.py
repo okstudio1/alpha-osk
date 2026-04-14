@@ -507,6 +507,18 @@ FunctionEnd
 Section "Install"
   SetOutPath "$INSTDIR"
 
+  ; --- Clean up previous same-directory install ---
+  ; If an old uninstaller exists at this path, run it silently first.
+  ; This removes orphaned files from prior versions before we extract.
+  ; (Different-directory cleanup is handled in customInstall.)
+  IfFileExists "$INSTDIR\\uninstall.exe" 0 skipSameDirCleanup
+    DetailPrint "Removing previous installation..."
+    ExecWait '"$INSTDIR\\uninstall.exe" /S _?=$INSTDIR'
+    Sleep 1500
+    ; Delete the old uninstaller itself (_? flag keeps it from self-deleting)
+    Delete "$INSTDIR\\uninstall.exe"
+  skipSameDirCleanup:
+
   ; Install all files from PyInstaller dist
 {files_block}
 

@@ -344,3 +344,29 @@ class TestPunctuationSpacing:
         # Context buffer now has "hi ", pressing "." should remove the space
         bridge.pressKey(".")
         bridge._synth.send_key.assert_any_call("BackSpace", modifiers=None)
+
+    def test_auto_space_after_comma(self, bridge: KeyboardBridge):
+        bridge._auto_space_after_punctuation = True
+        bridge.pressKey("h")
+        bridge.pressKey("i")
+        bridge.pressKey(",")
+        # Comma should be followed by an auto-space
+        calls = [c[0][0] for c in bridge._synth.send_text.call_args_list]
+        assert calls[-2:] == [",", " "]
+
+    def test_auto_space_after_semicolon(self, bridge: KeyboardBridge):
+        bridge._auto_space_after_punctuation = True
+        bridge.pressKey("h")
+        bridge.pressKey("i")
+        bridge.pressKey(";")
+        calls = [c[0][0] for c in bridge._synth.send_text.call_args_list]
+        assert calls[-2:] == [";", " "]
+
+    def test_comma_does_not_trigger_capitalize(self, bridge: KeyboardBridge):
+        bridge._auto_space_after_punctuation = True
+        bridge._auto_capitalize_after_punctuation = True
+        bridge.pressKey("h")
+        bridge.pressKey("i")
+        bridge.pressKey(",")
+        # Comma should NOT activate shift (only sentence-enders do)
+        assert not bridge._shift_active

@@ -43,8 +43,9 @@
 
 !macro customInstall
   ; --- Uninstall previous versions from DIFFERENT directories ---
-  ; Same-directory upgrades are handled automatically (files overwritten).
-  ; We only need to prompt if an old install exists at a different path.
+  ; Same-directory upgrades are handled in the Install section (silent
+  ; uninstall before file extraction). We only need to prompt if an old
+  ; install exists at a different path.
   ; This macro runs once, after UAC elevation, so no double-prompt.
 
   ; Check per-user install (HKCU) in a different directory
@@ -89,7 +90,9 @@
   Delete "$SMSTARTUP\Alpha-OSK.lnk"
 
   ; Clean up AppData (user config / learned models)
-  ; Note: We ask first — user may want to keep their learned vocabulary
+  ; In silent mode (/S — used during upgrades), skip the prompt and keep AppData.
+  ; Only ask during interactive uninstall.
+  IfSilent keepAppData
   MessageBox MB_YESNO|MB_ICONQUESTION \
     "Would you like to remove Alpha-OSK's learned vocabulary and settings?$\r$\n$\r$\n(Stored in %APPDATA%\alpha-osk)" \
     IDYES removeAppData IDNO keepAppData

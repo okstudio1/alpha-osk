@@ -265,6 +265,15 @@ class KeyboardBridge(QObject):
                 if len(self._context_buffer) > 200:
                     self._context_buffer = self._context_buffer[-200:]
 
+            # Mid-sentence punctuation — auto-space but no learning/capitalize
+            elif char in (",", ";", ":"):
+                self._current_word = ""
+                if self._auto_space_after_punctuation:
+                    self._send_text(" ")
+                self._context_buffer += char + " "
+                if len(self._context_buffer) > 200:
+                    self._context_buffer = self._context_buffer[-200:]
+
             # Only show predictions for alphabetic input
             if char.isalpha():
                 self._update_predictions()
@@ -578,9 +587,11 @@ class KeyboardBridge(QObject):
 
     @Slot()
     def clearUserData(self) -> None:
-        """Clear user-learned vocabulary."""
+        """Clear user-learned vocabulary and overwrite saved models on disk."""
         self._predictor.clear_user_data()
-        _logger.info("User data cleared")
+        # Save immediately so stale model files don't restore old data on restart
+        self._predictor.save()
+        _logger.info("User data cleared and model files overwritten")
 
     @Slot()
     def reloadDictionary(self) -> None:

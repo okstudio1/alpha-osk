@@ -569,6 +569,8 @@ class NgramPredictor:
         self.dispreference.clear()
         self._blacklist_type_count.clear()
         self._learn_count = 0
+        # Clear learned capitalization so user-typed forms don't persist
+        self.capitalization.clear()
 
         # Rebuild base vocabulary from wordlists
         self._load_frequency_wordlist()
