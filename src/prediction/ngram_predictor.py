@@ -61,18 +61,31 @@ class NgramPredictor:
             "i've": "I've",
         }
         # Words that are common English AND names — only capitalize at
-        # sentence start, not mid-sentence (avoids "the Jack was loose")
+        # sentence start, not mid-sentence (avoids "the Jack was loose"
+        # or "there are Many reasons").  132 entries.
         self._ambiguous_names: set = {
-            "bell", "bud", "carol", "chase", "cliff", "dale", "dawn",
-            "dean", "don", "drew", "earl", "faith", "fern", "flora",
-            "frank", "gene", "glen", "grace", "grant", "guy", "heath",
-            "hope", "hunter", "iris", "ivy", "jack", "jade", "jean",
-            "jerry", "jimmy", "joe", "john", "joy", "june", "lance",
-            "lee", "lily", "mark", "matt", "max", "mercy", "mike",
-            "nick", "norm", "olive", "pat", "pearl", "penny", "peter",
-            "ray", "reed", "rob", "robin", "rocky", "rose", "ruby",
-            "sandy", "sue", "terry", "troy", "wade", "will", "violet",
-            "may", "bill", "bob", "art", "bar",
+            # Common words that are also first names
+            "art", "bar", "bell", "bill", "bird", "bob", "bud", "buddy",
+            "cam", "candy", "carol", "carry", "chase", "cliff", "con",
+            "dale", "dawn", "dean", "desire", "don", "dot", "drew",
+            "earl", "faith", "fan", "fern", "flora", "frank", "gay",
+            "gene", "glad", "glen", "grace", "grant", "guy", "happy",
+            "heath", "honor", "hope", "hunter", "iris", "ivy", "jack",
+            "jade", "jan", "jean", "jerry", "jimmy", "joe", "john",
+            "joy", "june", "junior", "kit", "lady", "lance", "lane",
+            "lee", "lib", "lily", "lucky", "man", "many", "mark",
+            "marine", "matt", "max", "may", "mercy", "mike", "min",
+            "miss", "nick", "norm", "olive", "pat", "pearl", "pen",
+            "penny", "pet", "peter", "princess", "queen", "ray", "reed",
+            "rob", "robin", "rocky", "rose", "row", "ruby", "sandy",
+            "see", "shell", "son", "song", "soon", "sue", "sun",
+            "terry", "thu", "tiny", "troy", "valentine", "van", "violet",
+            "wade", "ward", "will", "winter", "young",
+            # Common words that overlap with other proper nouns
+            "alpha", "angel", "angeles", "angle", "brain", "delta",
+            "echo", "edge", "else", "era", "forest", "glory", "golden",
+            "loan", "long", "love", "manual", "moon", "nova", "numbers",
+            "season",
         }
         self._load_proper_nouns()
 
