@@ -220,6 +220,28 @@ Theme picker in settings shows labeled color swatches with mini key previews.
 - Rank accuracy (20%) — how often users pick the #1 suggestion
 - Low correction rate (15%) — inverse of backspace rate
 
+## Prediction & Autocorrect — Architecture Notes
+
+Commercial keyboards (Gboard/LatinIME, Presage) treat prediction and spell-check as **one unified system**, not two. During a single dictionary trie traversal, they generate both completions and corrections scored together. The literal typed word competes against alternatives — autocorrect only fires if a correction scores 1.5–2x higher.
+
+### What Alpha-OSK does now
+- **Hybrid prediction**: n-gram + PPM + fuzzy (same layered approach as Presage)
+- **Spatial error correction**: `fuzzy_recognizer.py` considers nearby keys (same concept as LatinIME's key-distance weighting)
+- **Three-tier capitalization**: always-capitalize ("I"), sentence-start-only (ambiguous names), always (proper nouns)
+
+### Known gaps (future work, priority order)
+1. **SymSpell for fuzzy matching** — Replace Levenshtein edit-distance in `fuzzy_recognizer.py` with SymSpell's precomputed-deletion approach. ~1000x faster, O(1) lookup, ~30MB RAM. (Garbe, 2012)
+2. **Autocorrect confidence threshold** — Only auto-replace if the correction scores 1.5–2x higher than the literal typed word. Prevents over-correction. (LatinIME uses ~1.8x)
+3. **Unified scoring** — Make the literal typed word compete against corrections in the same ranked list with an explicit score, so the system knows when NOT to correct.
+4. **Spatial edit costs in ranking** — Key-distance weights from fuzzy_recognizer should feed into final prediction ranking, not just candidate generation.
+
+### Reference implementations
+- **LatinIME (AOSP)**: trie-based dictionary with weighted edit distance, n-gram LM scoring. Open source.
+- **Presage**: pluggable predictors (smoothed n-gram + Katz backoff, recency, trie completion). Linear interpolation merge. Similar to our hybrid approach.
+- **Dasher**: PPM-C character-level prediction. Our PPM predictor is based on this.
+- **SymSpell**: precompute all deletion variants within edit distance N at index time. Query = generate deletions of input + hash lookup. (github.com/wolfgarbe/SymSpell)
+- **Hunspell**: affix-based dictionary + phonetic matching. Slower but handles morphology.
+
 ## Federated Learning
 
 Design doc at `docs/FEDERATED_LEARNING.md`. Not yet implemented — Phase 1 (local delta computation) is the next step.
