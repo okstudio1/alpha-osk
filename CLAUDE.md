@@ -242,6 +242,10 @@ Commercial keyboards (Gboard/LatinIME, Presage) treat prediction and spell-check
 - **SymSpell**: precompute all deletion variants within edit distance N at index time. Query = generate deletions of input + hash lookup. (github.com/wolfgarbe/SymSpell)
 - **Hunspell**: affix-based dictionary + phonetic matching. Slower but handles morphology.
 
+## Auto-Update
+
+Design doc at `docs/AUTO_UPDATE.md`. Not yet implemented. Recommended approach: check GitHub Releases API on startup, notify via tray icon, download and run installer silently (`/S`). The NSIS silent upgrade path already works. ~50 lines of Python. WinGet manifest as a bonus.
+
 ## MacroVox Integration
 
 Design doc at `docs/MACROVOX_INTEGRATION.md`. MacroVox (`C:\Users\Owen\dev\MacroVox`) is a managed voice dictation app (Tauri 2 / Rust + React, Deepgram STT, Claude AI cleanup). Together with Alpha-OSK it forms a complete accessibility input suite: type when you can, dictate when you can't.
