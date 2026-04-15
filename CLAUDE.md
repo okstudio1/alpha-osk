@@ -252,13 +252,20 @@ Action types: `char`, `special`, `hotkey`, `text`, `macro`, `launch`, `layout`, 
 
 Design doc at `docs/AUTO_UPDATE.md`. Not yet implemented. Recommended approach: check GitHub Releases API on startup, notify via tray icon, download and run installer silently (`/S`). The NSIS silent upgrade path already works. ~50 lines of Python. WinGet manifest as a bonus.
 
-## MacroVox Integration
+## Accessibility Ecosystem
 
-Design doc at `docs/MACROVOX_INTEGRATION.md`. MacroVox (`C:\Users\Owen\dev\MacroVox`) is a managed voice dictation app (Tauri 2 / Rust + React, Deepgram STT, Claude AI cleanup). Together with Alpha-OSK it forms a complete accessibility input suite: type when you can, dictate when you can't.
+Design doc at `docs/ECOSYSTEM.md`. Alpha-OSK is part of a four-tool adaptive input platform:
 
-**Phases**: (1) Launch & trigger via mic button + Ctrl+Space hotkey. (2) Clipboard bridge — dictated text feeds prediction context. (3) Named pipe IPC — real-time transcript streaming + keyword boosting. (4) Unified installer and shared auth.
+| Tool | Repo | Output |
+|------|------|--------|
+| **Alpha-OSK** | `C:\Users\Owen\dev\alpha-osk` | Keystrokes (SendInput) |
+| **MacroVox** | `C:\Users\Owen\dev\MacroVox` | Text (Deepgram STT → clipboard) |
+| **Octavium** | `C:\Users\Owen\dev\Octavium` | MIDI (virtual piano/pads) |
+| **Nimbus** | `C:\Users\Owen\dev\Nimbus-Adaptive-Controller` | Joystick (vJoy/ViGEm) |
 
-Phase 1 requires no MacroVox changes — just a mic icon in Alpha-OSK's title bar.
+All four: same developer, same EV cert, PySide6/Qt (except MacroVox: Tauri), mouse-driven, accessibility-first. Integration phases: coexistence → launch/trigger → profile auto-switch → shared input layer → unified UI.
+
+See also: `docs/MACROVOX_INTEGRATION.md` (voice dictation), `docs/MODULAR_LAYOUTS.md` (custom layouts inspired by Octavium/Nimbus).
 
 ## Federated Learning
 
