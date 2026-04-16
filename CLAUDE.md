@@ -285,7 +285,49 @@ Action types: `char`, `special`, `hotkey`, `text`, `macro`, `launch`, `layout`, 
 
 ## Auto-Update
 
-Design doc at `docs/AUTO_UPDATE.md`. Not yet implemented. Recommended approach: check GitHub Releases API on startup, notify via tray icon, download and run installer silently (`/S`). The NSIS silent upgrade path already works. ~50 lines of Python. WinGet manifest as a bonus.
+Implemented in `src/updater.py`. Design doc + threat model at `docs/AUTO_UPDATE.md`.
+
+### Flow
+
+1. App startup — `qml/Main.qml` Component.onCompleted reads `appSettings.savedAutoCheckUpdates` (default on) and starts `updateCheckTimer` (3 s delay so the network call doesn't fight QML init).
+2. `keyboard.checkForUpdate()` slot launches a `threading.Thread` that calls `updater.check_for_update()` against `https://api.github.com/repos/okstudio1/alpha-osk/releases/latest`.
+3. If the response advertises a strictly higher MAJOR.MINOR.PATCH tag whose installer asset URL is on the host whitelist, bridge emits `updateAvailable(version, asset_name, notes)` and stores the `UpdateInfo` in `self._update_info`.
+4. QML shows the update banner at the top of the keyboard. User clicks "Install" → `keyboard.installUpdate()` → background thread downloads the installer (with byte-cap), **verifies its Authenticode signature against the EV cert thumbprint `fc22b522…`**, then `Popen([dest, "/S"])`. The NSIS installer kills the running app, runs the previous uninstaller, installs the new build.
+
+### Threat model & defences
+
+The updater is the highest-value MITM target — a successful attacker ships arbitrary signed code on the user's machine. Defences are layered so no single layer compromise unlocks code execution:
+
+| Threat                                                  | Defence                                                      |
+|---------------------------------------------------------|--------------------------------------------------------------|
+| TLS strip / MITM                                        | `urllib` cert validation + scheme whitelist (https only)     |
+| DNS hijack to attacker host                             | Authenticode pin — attacker can't sign with our key          |
+| Compromised GitHub asset                                | Authenticode pin (thumbprint + Status==Valid + signer CN)    |
+| Asset URL points off-host                               | Host whitelist: `github.com`, `objects.githubusercontent.com` |
+| Post-redirect host swap                                 | Re-validate `resp.geturl()` after `urlopen` follows redirects |
+| Disk-fill                                               | `_MAX_DOWNLOAD_BYTES = 500 MB` aborts runaway downloads       |
+| Downgrade attack                                        | Strict semver compare (`is_newer`); refuse equal/older       |
+| Pre-release/garbage tag confusion ("v1.0.3-evil")       | Regex `^\d+\.\d+\.\d+$` only — pre-release/+build refused     |
+| Misnamed asset                                          | Filename pattern locked to `Alpha-OSK-Setup-{version}.exe`    |
+| Tag confusion across repos                              | Endpoint hard-pinned to `releases/latest` of our repo only    |
+| QML-side URL injection                                  | QML never sees the URL — it only triggers `installUpdate()`, the bridge consults `self._update_info` for the URL |
+| Release-notes injection (control chars / oversized)     | `_sanitize_notes` strips C0 controls, caps length to 4 KB     |
+
+What's **not** covered: compromise of the EV signing key itself. That requires a build-pipeline / cert-rotation response, not a client-side fix.
+
+### Bumping the version
+
+Single source of truth: `src/__version__.py`. `build/build_windows.py` reads from it; the updater compares against it. To ship a new release:
+
+1. Edit `src/__version__.py` → bump `__version__`.
+2. Update `CHANGELOG.md`.
+3. Commit, run `python build/build_windows.py`, tag, `gh release create`.
+
+The release-asset filename **must** match `Alpha-OSK-Setup-{version}.exe` exactly — the updater rejects anything else.
+
+### Disabling
+
+User-facing toggle: *Settings → Updates → "Check for updates on startup"*. Manual "Check Now" button next to it. Persisted as `appSettings.savedAutoCheckUpdates`.
 
 ## Accessibility Ecosystem
 

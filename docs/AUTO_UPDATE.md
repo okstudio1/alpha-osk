@@ -2,9 +2,34 @@
 
 ## Current State
 
-Alpha-OSK ships as a signed NSIS installer via GitHub Releases. The installer already handles same-directory upgrades (silently runs the old uninstaller before extracting new files). There is no auto-update mechanism — users must manually download new releases.
+**Implemented in v1.0.3.** Alpha-OSK checks GitHub Releases on startup (3 s after launch) and shows an in-app banner when a newer signed installer is available. Click *Install* and the app downloads the installer, verifies its Authenticode signature against our pinned EV-cert thumbprint, and runs it silently — the NSIS installer kills the running app, runs the previous uninstaller, and installs the new build.
 
-## Recommended: Option A — GitHub Releases + Silent Installer
+Code lives in `src/updater.py` (network + signature verification), `src/keyboard_bridge.py` (`checkForUpdate` / `installUpdate` / `dismissUpdate` slots, `updateAvailable` / `updateUnavailable` / `updateInstallStarted` / `updateInstallFailed` signals), `qml/Main.qml` (banner + Connections), `qml/components/UnifiedSettingsPanel.qml` (Updates section). Tests in `tests/test_updater.py`.
+
+## Threat model
+
+The updater is the highest-value MITM target in the app — a successful attacker gets to ship arbitrary signed code on every user's machine. Defences are layered so no single layer compromise unlocks code execution:
+
+| Threat                                                  | Defence                                                                                                |
+|---------------------------------------------------------|--------------------------------------------------------------------------------------------------------|
+| TLS strip / MITM                                        | `urllib` cert validation + scheme whitelist (https only)                                              |
+| DNS hijack to attacker host                             | Authenticode pin — attacker can't sign with our key                                                   |
+| Compromised GitHub asset                                | Authenticode pin: `Status == Valid` AND thumbprint matches `fc22b522…` AND signer CN matches `OK Studio Inc.` |
+| Asset URL points off-host                               | Host whitelist: `github.com`, `objects.githubusercontent.com` only                                    |
+| Post-redirect host swap                                 | Re-validate `resp.geturl()` after `urlopen` follows redirects                                          |
+| Disk-fill                                               | `_MAX_DOWNLOAD_BYTES = 500 MB` aborts runaway downloads                                                |
+| Downgrade attack                                        | Strict semver compare (`is_newer`); equal/older silently refused                                       |
+| Pre-release/garbage tag confusion (`v1.0.3-evil`)       | Regex `^\d+\.\d+\.\d+$` only — pre-release/+build refused                                              |
+| Misnamed asset                                          | Filename pattern locked to `Alpha-OSK-Setup-{version}.exe`                                             |
+| Tag confusion across repos                              | Endpoint hard-pinned to `https://api.github.com/repos/okstudio1/alpha-osk/releases/latest`            |
+| QML-side URL injection                                  | QML never sees the URL — it only triggers `installUpdate()`; the bridge holds `self._update_info`     |
+| Release-notes injection                                 | `_sanitize_notes` strips C0 controls and caps length to 4 KB                                          |
+
+What's **not** covered: compromise of the EV signing key. That's a build-pipeline / cert-rotation response, not a client-side fix.
+
+## Original design
+
+## Implemented: Option A — GitHub Releases + Silent Installer (with hardening)
 
 The simplest path that leverages existing infrastructure.
 

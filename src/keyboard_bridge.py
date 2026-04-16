@@ -33,6 +33,7 @@ from .platform import create_key_synthesizer
 from .platform.base import KeySynthesizerBase
 from .platform.password_detect import is_password_field
 from .prediction import HybridPredictor, SwipeRecognizer
+from .updater import UpdateInfo, check_for_update, download_and_install
 
 _logger = logging.getLogger("KeyboardBridge")
 
@@ -82,6 +83,15 @@ class KeyboardBridge(QObject):
 
     # Privacy signals
     privacyModeChanged = Signal(bool)
+
+    # Auto-update signals — version, asset_name, notes (release-notes
+    # markdown, already sanitised by the updater).  ``updateUnavailable``
+    # fires after a manual "Check now" that found nothing — it lets the
+    # UI distinguish "no newer version" from "still checking".
+    updateAvailable = Signal(str, str, str)
+    updateUnavailable = Signal()
+    updateInstallStarted = Signal()
+    updateInstallFailed = Signal(str)
 
     def __init__(self, parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
@@ -177,6 +187,12 @@ class KeyboardBridge(QObject):
         self._foreground_timer.setInterval(250)
         self._foreground_timer.timeout.connect(self._check_foreground_window)
         self._foreground_timer.start()
+
+        # Auto-update — last fetched UpdateInfo, used by installUpdate()
+        # so the QML side doesn't have to round-trip the URL/asset name
+        # back through Python (and so we never trust QML-supplied URLs).
+        self._update_info: Optional[UpdateInfo] = None
+        self._update_check_in_flight = False
 
     # --- Key synthesis (delegated to platform layer) ---
 
@@ -640,6 +656,95 @@ class KeyboardBridge(QObject):
     def savePredictionModel(self) -> None:
         """Save the prediction model to disk."""
         self._predictor.save()
+
+    # ------------------------------------------------------------------
+    #  Auto-update (see src/updater.py for the security model)
+    # ------------------------------------------------------------------
+
+    @Slot()
+    def checkForUpdate(self) -> None:
+        """Run the GitHub Releases check on a background thread.
+
+        Emits ``updateAvailable(version, asset_name, notes)`` if a newer
+        signed installer exists, ``updateUnavailable()`` otherwise.  Both
+        signals always fire — the UI uses them to clear a "checking…"
+        indicator without polling.
+
+        We deliberately never expose the download URL to QML — QML only
+        sees the version + notes, and ``installUpdate`` consults the
+        Python-side ``self._update_info`` so a compromised QML can't
+        substitute an attacker URL into the install path.
+        """
+        if self._update_check_in_flight:
+            _logger.debug("Update check already running; ignoring duplicate")
+            return
+        self._update_check_in_flight = True
+
+        import threading
+
+        def _worker() -> None:
+            try:
+                info = check_for_update()
+            except Exception as e:                       # noqa: BLE001
+                _logger.warning("Update check raised: %s", e)
+                info = None
+            finally:
+                self._update_check_in_flight = False
+
+            # Qt signals are thread-safe; auto-connection delivers them
+            # to the receiver's thread via a queued connection.
+            if info is None:
+                self._update_info = None
+                self.updateUnavailable.emit()
+                return
+            self._update_info = info
+            self.updateAvailable.emit(info.version, info.asset_name, info.notes)
+
+        threading.Thread(target=_worker, name="alpha-osk-update-check",
+                         daemon=True).start()
+
+    @Slot()
+    def installUpdate(self) -> None:
+        """Download + verify + launch the most recently announced update.
+
+        Idempotent — does nothing if no update has been announced yet
+        (the QML side should disable the button until ``updateAvailable``
+        fires, but we double-check here).
+        """
+        info = self._update_info
+        if info is None:
+            _logger.info("installUpdate called with no pending update; ignoring")
+            return
+
+        import threading
+
+        def _worker(info: UpdateInfo) -> None:
+            self.updateInstallStarted.emit()
+            try:
+                ok = download_and_install(info)
+            except Exception as e:                       # noqa: BLE001
+                _logger.error("Install raised: %s", e)
+                self.updateInstallFailed.emit(str(e))
+                return
+            if not ok:
+                self.updateInstallFailed.emit(
+                    "Update download or signature verification failed. "
+                    "See logs for details."
+                )
+
+        threading.Thread(target=_worker, args=(info,),
+                         name="alpha-osk-update-install", daemon=True).start()
+
+    @Slot()
+    def dismissUpdate(self) -> None:
+        """Forget the pending update without installing.
+
+        Clears the in-memory ``_update_info`` so the install button is
+        a no-op until the next ``checkForUpdate()`` finds the release
+        again.  Cheap state — we don't bother persisting "dismissed"
+        across restarts.
+        """
+        self._update_info = None
 
     def shutdown(self) -> None:
         """Stop background timers cleanly before the app tears down.

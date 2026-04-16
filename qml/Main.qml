@@ -32,6 +32,30 @@ Window {
         property bool savedAutoCapitalizeAfterPunctuation: false
         property bool savedAutoSaveOnExit: true
         property bool savedSwipeEnabled: false
+        property bool savedAutoCheckUpdates: true
+    }
+
+    // Auto-update — bridge fills these in when checkForUpdate() finds
+    // a signed newer release.  See src/updater.py for the security model.
+    property bool autoCheckUpdates: true
+    property bool updateAvailable: false
+    property string updateVersion: ""
+    property string updateNotes: ""
+    property bool updateInstalling: false
+    property string updateError: ""
+    // "" / "checking" / "uptodate" / "available" / "failed" — drives the
+    // settings-panel status text after a manual "Check now".  Auto-checks
+    // also update this so the panel reflects reality if the user opens
+    // it after a silent background check.
+    property string _lastCheckStatus: ""
+
+    // Single-shot timer that delays the startup update check so it
+    // doesn't compete with QML/QQmlApplicationEngine init for CPU.
+    Timer {
+        id: updateCheckTimer
+        interval: 3000
+        repeat: false
+        onTriggered: if (root.autoCheckUpdates && keyboard) keyboard.checkForUpdate()
     }
 
     // Position once at startup — do NOT bind x/y to width/height or resize
@@ -56,6 +80,12 @@ Window {
             keyboard.setAutoSaveOnExit(appSettings.savedAutoSaveOnExit)
             keyboard.setSwipeEnabled(appSettings.savedSwipeEnabled)
         }
+
+        // Auto-update setting — kicks off the background check after a
+        // 3-second delay (see updateCheckTimer) so startup isn't blocked
+        // on a network round-trip.
+        root.autoCheckUpdates = appSettings.savedAutoCheckUpdates
+        if (root.autoCheckUpdates) updateCheckTimer.start()
 
         // Load saved keyboard layout
         if (keyboard && appSettings.savedLayout !== "qwerty") {
@@ -291,6 +321,33 @@ Window {
 
         // Debug updates
         function onDebugLogChanged(log) { root.debugLog = log }
+
+        // Auto-update — see src/updater.py.  We never receive the
+        // download URL here (Python keeps it); we just toggle the
+        // banner and forward the user's Install/Later click back to
+        // the bridge.
+        function onUpdateAvailable(version, assetName, notes) {
+            root.updateVersion = version
+            root.updateNotes = notes
+            root.updateError = ""
+            root.updateAvailable = true
+            root._lastCheckStatus = "available"
+        }
+        function onUpdateUnavailable() {
+            // Quiet — no banner when there's nothing new.  The settings
+            // panel reads _lastCheckStatus to show "Up to date." after
+            // a manual "Check now".
+            root._lastCheckStatus = "uptodate"
+        }
+        function onUpdateInstallStarted() {
+            root.updateInstalling = true
+            root.updateError = ""
+        }
+        function onUpdateInstallFailed(msg) {
+            root.updateInstalling = false
+            root.updateError = msg
+            root._lastCheckStatus = "failed"
+        }
     }
 
     // Main background — uses Qt.rgba so only the background becomes transparent
@@ -586,6 +643,61 @@ Window {
             anchors.margins: 8
             anchors.topMargin: 32  // Account for title bar
             spacing: 0
+
+            // ===== Update Banner =====
+            // Visible iff the bridge announced a signed newer release.
+            // Action buttons round-trip through the bridge — the QML
+            // never sees the download URL, so a compromised QML can't
+            // substitute one (see src/updater.py threat model).
+            Rectangle {
+                id: updateBanner
+                Layout.fillWidth: true
+                Layout.preferredHeight: root.updateAvailable ? 36 : 0
+                Layout.bottomMargin: root.updateAvailable ? 4 : 0
+                clip: true
+                radius: 6
+                color: Qt.rgba(root.themeAccent.r, root.themeAccent.g,
+                               root.themeAccent.b, 0.18)
+                border.color: root.themeAccent
+                border.width: 1
+                visible: root.updateAvailable
+
+                Behavior on Layout.preferredHeight { NumberAnimation { duration: 150 } }
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 10
+                    anchors.rightMargin: 6
+                    spacing: 8
+
+                    Text {
+                        Layout.fillWidth: true
+                        elide: Text.ElideRight
+                        color: root.themeTextColor
+                        font.pixelSize: 13
+                        text: root.updateInstalling
+                              ? qsTr("Installing v%1…").arg(root.updateVersion)
+                              : (root.updateError !== ""
+                                 ? qsTr("Update failed: %1").arg(root.updateError)
+                                 : qsTr("Alpha-OSK v%1 available — install will close + relaunch the app.").arg(root.updateVersion))
+                    }
+
+                    Button {
+                        text: qsTr("Install")
+                        enabled: !root.updateInstalling && root.updateError === ""
+                        onClicked: keyboard.installUpdate()
+                    }
+                    Button {
+                        text: qsTr("Later")
+                        enabled: !root.updateInstalling
+                        onClicked: {
+                            keyboard.dismissUpdate()
+                            root.updateAvailable = false
+                            root.updateError = ""
+                        }
+                    }
+                }
+            }
 
             // ===== Prediction Bar (spans full width including nav/numpad) =====
             Item {
@@ -1267,6 +1379,10 @@ Window {
             autoSaveOnExit: root.autoSaveOnExit
             swipeEnabled: root.swipeEnabled
             debugMode: root.showDebugPanel
+            autoCheckUpdates: root.autoCheckUpdates
+            updateStatus: root.updateInstalling
+                          ? "checking"
+                          : (root.updateAvailable ? "available" : root._lastCheckStatus)
 
             onSettingChanged: function(setting, value) {
                 if (setting === "functionRow") {
@@ -1313,12 +1429,21 @@ Window {
                 } else if (setting === "debugMode") {
                     root.showDebugPanel = value
                     if (keyboard) keyboard.setDebugMode(value)
+                } else if (setting === "autoCheckUpdates") {
+                    root.autoCheckUpdates = value
+                    appSettings.savedAutoCheckUpdates = value
                 }
             }
 
             onCloseRequested: root.showSettings = false
             onShowHelpRequested: root.showHelp = true
             onShowVisualizationRequested: root.showVisualization = true
+            onCheckForUpdatesNowRequested: {
+                if (keyboard) {
+                    root._lastCheckStatus = "checking"
+                    keyboard.checkForUpdate()
+                }
+            }
         }
     }
 

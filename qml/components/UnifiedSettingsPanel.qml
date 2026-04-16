@@ -32,7 +32,13 @@ Item {
     // Debug
     property bool debugMode: false
 
+    // Auto-update — see src/updater.py
+    property bool autoCheckUpdates: true
+    // "Check now" feedback — set to "checking" / "uptodate" / "" by parent
+    property string updateStatus: ""
+
     signal settingChanged(string setting, var value)
+    signal checkForUpdatesNowRequested()
     signal closeRequested()
     signal showHelpRequested()
     signal showVisualizationRequested()
@@ -824,6 +830,54 @@ Item {
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: unifiedSettings.showVisualizationRequested()
+                                }
+                            }
+                        }
+                    }
+
+                    // -- UPDATES --
+                    SettingsSection {
+                        title: "Updates"
+                        Layout.fillWidth: true
+
+                        SettingsToggle {
+                            Layout.fillWidth: true
+                            text: "Check for updates on startup"
+                            checked: unifiedSettings.autoCheckUpdates
+                            onToggled: function(c) { unifiedSettings.settingChanged("autoCheckUpdates", c) }
+                        }
+
+                        // "Check now" row — kicks the bridge and shows
+                        // status text returned via the updateStatus
+                        // property (the parent wires this to update
+                        // signals from the bridge).
+                        Item {
+                            Layout.fillWidth: true
+                            implicitHeight: 32
+
+                            RowLayout {
+                                anchors.fill: parent
+                                spacing: 8
+
+                                Button {
+                                    text: "Check Now"
+                                    enabled: unifiedSettings.updateStatus !== "checking"
+                                    onClicked: unifiedSettings.checkForUpdatesNowRequested()
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    color: "#bbb"
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                    text: {
+                                        switch (unifiedSettings.updateStatus) {
+                                            case "checking": return "Checking…"
+                                            case "uptodate": return "Up to date."
+                                            case "available": return "Update available — see banner."
+                                            case "failed":   return "Check failed — try again later."
+                                            default: return ""
+                                        }
+                                    }
                                 }
                             }
                         }

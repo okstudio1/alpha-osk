@@ -2,6 +2,16 @@
 
 All notable changes to Alpha-OSK are documented in this file.
 
+## [1.0.3] — 2026-04-16
+
+### Added
+- **Auto-update with MITM hardening** — Alpha-OSK now checks GitHub Releases on startup (3 s after launch) and shows an in-app banner when a newer signed installer is available. Click *Install* and the app downloads, **verifies the installer's Authenticode signature against our pinned EV-cert thumbprint**, and runs it silently. The NSIS installer kills the running app, runs the previous uninstaller, and installs the new build.
+  - Layered defences against attacks on the update channel: HTTPS-only with cert validation, host whitelist (`github.com` / `objects.githubusercontent.com`), strict semver compare (refuses pre-release/garbage tags so `v1.0.3-evil` can't pass), filename pattern lock (`Alpha-OSK-Setup-{version}.exe`), byte-cap downloads (500 MB), post-redirect host re-validation, and the load-bearing **Authenticode pin** against thumbprint `fc22b522…` + `Status == Valid` + signer CN `OK Studio Inc.` before any exec. Release notes are sanitised before reaching QML.
+  - QML never sees the download URL — the bridge holds the `UpdateInfo` from the check, so a compromised QML can't substitute an attacker URL into the install path.
+  - Threat model + per-defence rationale in `docs/AUTO_UPDATE.md` and `CLAUDE.md`.
+  - User-facing toggle: *Settings → Updates → "Check for updates on startup"* (default on). Manual *Check Now* button next to it.
+- **Single source of truth for the version** — `src/__version__.py`. `build/build_windows.py` reads from it; the updater compares against it. Bumping the version is now a one-line change.
+
 ## [1.0.2] — 2026-04-16
 
 ### Security
