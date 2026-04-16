@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from src.prediction.swipe_recognizer import SwipeRecognizer
 
-
 # A stylised QWERTY-ish letter grid.  Units are arbitrary — the
 # recogniser normalises internally.
 _QWERTY = {

@@ -1047,7 +1047,8 @@ class KeyboardBridge(QObject):
         # Apply learned/built-in capitalisation to each candidate so that
         # picking the top word respects "iPhone" vs. "iphone".
         ngram = self._predictor._ngram
-        sentence_start = (not self._context_buffer) or self._context_buffer.rstrip().endswith((".", "!", "?"))
+        trimmed = self._context_buffer.rstrip()
+        sentence_start = not trimmed or trimmed.endswith((".", "!", "?"))
         capitalised = [ngram.get_capitalized(w, sentence_start) for w in results]
 
         top = capitalised[0]
