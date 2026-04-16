@@ -31,6 +31,7 @@ Window {
         property bool savedAutoSpaceAfterPunctuation: true
         property bool savedAutoCapitalizeAfterPunctuation: false
         property bool savedAutoSaveOnExit: true
+        property bool savedSwipeEnabled: false
     }
 
     // Position once at startup — do NOT bind x/y to width/height or resize
@@ -53,6 +54,7 @@ Window {
             keyboard.setAutoSpaceAfterPunctuation(appSettings.savedAutoSpaceAfterPunctuation)
             keyboard.setAutoCapitalizeAfterPunctuation(appSettings.savedAutoCapitalizeAfterPunctuation)
             keyboard.setAutoSaveOnExit(appSettings.savedAutoSaveOnExit)
+            keyboard.setSwipeEnabled(appSettings.savedSwipeEnabled)
         }
 
         // Load saved keyboard layout
@@ -89,6 +91,17 @@ Window {
         if (!active && keyboard) keyboard.clearPredictions()
     }
 
+    // Refresh the swipe-recognizer layout whenever the window is resized —
+    // key positions move with the layout.
+    onWidthChanged: swipeLayoutPushTimer.restart()
+    onHeightChanged: swipeLayoutPushTimer.restart()
+
+    onSwipeEnabledChanged: {
+        appSettings.savedSwipeEnabled = swipeEnabled
+        if (keyboard) keyboard.setSwipeEnabled(swipeEnabled)
+        if (swipeEnabled) pushSwipeLayout()
+    }
+
     // Window transparency (0.3 = very transparent, 1.0 = fully opaque)
     property real windowOpacity: appSettings.savedWindowOpacity
 
@@ -101,6 +114,58 @@ Window {
 
     // Auto-save prediction model on exit
     property bool autoSaveOnExit: appSettings.savedAutoSaveOnExit
+
+    // Swipe / glide typing — when on, dragging across keys decodes a word.
+    property bool swipeEnabled: appSettings.savedSwipeEnabled
+
+    // Char-key registry — populated by each KeyButton on creation; consumed
+    // by SwipeOverlay for hit testing and by buildSwipeLayout() for the
+    // recogniser's key-centre map.
+    property var charKeyRegistry: []
+
+    function registerCharKey(item, kd) {
+        if (!kd || kd.type !== "char" || !kd.key || kd.key.length !== 1) return
+        charKeyRegistry.push({ item: item, kd: kd })
+        swipeLayoutPushTimer.restart()
+    }
+
+    function unregisterCharKey(item) {
+        for (var i = 0; i < charKeyRegistry.length; i++) {
+            if (charKeyRegistry[i].item === item) {
+                charKeyRegistry.splice(i, 1)
+                break
+            }
+        }
+        swipeLayoutPushTimer.restart()
+    }
+
+    // Coalesce many register/unregister calls during a layout swap into one
+    // setSwipeLayout push to Python.
+    Timer {
+        id: swipeLayoutPushTimer
+        interval: 100
+        repeat: false
+        onTriggered: root.pushSwipeLayout()
+    }
+
+    function pushSwipeLayout() {
+        if (!keyboard) return
+        // Push key centres in the same coordinate frame the SwipeOverlay
+        // uses for its trace (overlay-local), so the recogniser sees both
+        // in matching units.
+        var overlay = (typeof swipeOverlay !== "undefined") ? swipeOverlay : null
+        if (!overlay) return
+        var centers = ({})
+        for (var i = 0; i < charKeyRegistry.length; i++) {
+            var entry = charKeyRegistry[i]
+            if (!entry.item || !entry.kd || !entry.kd.key) continue
+            var p = overlay.mapFromItem(entry.item,
+                                        entry.item.width / 2,
+                                        entry.item.height / 2)
+            centers[entry.kd.key.toLowerCase()] = [p.x, p.y]
+        }
+        keyboard.setSwipeLayout(centers)
+    }
 
     // Keyboard state from Python bridge
     property bool shiftOn: keyboard ? keyboard.shiftActive : false
@@ -640,6 +705,18 @@ Window {
                     Layout.fillWidth: true
                     spacing: 2
 
+                    // Swipe overlay — covers the keyboard rows when swipe
+                    // typing is on.  Hidden + non-interactive otherwise so
+                    // KeyButtons handle their own presses normally.
+                    Comp.SwipeOverlay {
+                        id: swipeOverlay
+                        enabled: root.swipeEnabled
+                        keyboardBridge: keyboard
+                        keyRegistry: root.charKeyRegistry
+                        anchors.fill: parent
+                        anchors.margins: 0
+                    }
+
                     // ===== Function Row (F1-F12) =====
                     Comp.FunctionRow {
                         visible: root.showFunctionRow
@@ -663,13 +740,18 @@ Window {
                             model: rowData.keys
 
                             Comp.KeyButton {
+                                id: keyBtn
                                 property var kd: modelData
+                                Component.onCompleted: root.registerCharKey(keyBtn, kd)
+                                Component.onDestruction: root.unregisterCharKey(keyBtn)
                                 keyText: kd.key || kd.action || ""
                                 displayText: {
                                     if (kd.type === "char") {
+                                        // Shift shows the shifted glyph (e.g. "!" on "1")
                                         if (kd.shifted && root.shiftOn) return kd.shifted
+                                        // Letters uppercase under shift OR caps lock
                                         if (kd.key && kd.key.length === 1 && /[a-z]/.test(kd.key))
-                                            return root.shiftOn ? kd.key.toUpperCase() : kd.key
+                                            return (root.shiftOn || root.capsOn) ? kd.key.toUpperCase() : kd.key
                                         return kd.display || kd.key
                                     }
                                     return kd.display || ""
@@ -1174,6 +1256,7 @@ Window {
             autoSpaceAfterPunctuation: root.autoSpaceAfterPunctuation
             autoCapitalizeAfterPunctuation: root.autoCapitalizeAfterPunctuation
             autoSaveOnExit: root.autoSaveOnExit
+            swipeEnabled: root.swipeEnabled
             debugMode: root.showDebugPanel
 
             onSettingChanged: function(setting, value) {
@@ -1216,6 +1299,8 @@ Window {
                     root.autoSaveOnExit = value
                     appSettings.savedAutoSaveOnExit = value
                     if (keyboard) keyboard.setAutoSaveOnExit(value)
+                } else if (setting === "swipeEnabled") {
+                    root.swipeEnabled = value
                 } else if (setting === "debugMode") {
                     root.showDebugPanel = value
                     if (keyboard) keyboard.setDebugMode(value)

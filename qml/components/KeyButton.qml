@@ -177,5 +177,16 @@ Item {
             repeatTimer.interval = keyRoot.repeatDelay
             repeatTimer.repeat = false
         }
+
+        // Stop key repeat the moment the cursor drags off the key — even
+        // if the user is still holding the mouse button.  Prevents a
+        // held key from continuing to fire while the pointer wanders.
+        onContainsMouseChanged: {
+            if (!containsMouse) {
+                repeatTimer.stop()
+                repeatTimer.interval = keyRoot.repeatDelay
+                repeatTimer.repeat = false
+            }
+        }
     }
 }

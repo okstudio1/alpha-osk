@@ -48,13 +48,22 @@ class TestModifierState:
     def test_toggle_caps_lock(self, bridge: KeyboardBridge):
         bridge.toggleCapsLock()
         assert bridge._caps_lock_active
-        assert bridge._shift_active  # Caps activates shift
-
-    def test_caps_lock_off_clears_shift(self, bridge: KeyboardBridge):
-        bridge.toggleCapsLock()  # On
-        bridge.toggleCapsLock()  # Off
-        assert not bridge._caps_lock_active
+        # Caps Lock and Shift are independent — toggling caps does NOT
+        # also flip shift's state (the visual highlight on the Shift key
+        # used to come on with caps; that was a bug).
         assert not bridge._shift_active
+
+    def test_caps_lock_off_does_not_touch_shift(self, bridge: KeyboardBridge):
+        bridge.toggleShift()                   # Shift on independently
+        bridge.toggleCapsLock()                # Caps on
+        bridge.toggleCapsLock()                # Caps off
+        assert not bridge._caps_lock_active
+        assert bridge._shift_active            # Shift state preserved
+
+    def test_caps_lock_uppercases_letters(self, bridge: KeyboardBridge):
+        bridge.toggleCapsLock()
+        # Layer reflects caps even though shift is off
+        assert bridge._current_layer == "upper"
 
     def test_toggle_ctrl(self, bridge: KeyboardBridge):
         bridge.toggleCtrl()

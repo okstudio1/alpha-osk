@@ -55,6 +55,8 @@ All in `src/prediction/`. Orchestrated by `hybrid_predictor.py`:
 | `vocabulary_pack.py` | Domain vocab packs (medical, programming, etc.) + custom pack import |
 | `transformer_predictor.py` | Optional LLM re-ranking (disabled by default) |
 
+Deep-dive design docs for each algorithm: `docs/FUZZY_RECOGNITION.md` (spatial model + accessibility profiles), `docs/PPM.md` (variable-order character model + PPMD escape), `docs/HYBRID_MERGING.md` (merge weights + validation + capitalization), `docs/SWIPE_TYPING.md` (shape-matching swipe decoder).
+
 ## Auto-Capitalization & Proper Nouns
 
 Capitalization uses a **three-tier context-aware system** (same model as Android/Gboard):
@@ -100,6 +102,30 @@ QML calls Python via `@Slot` methods on `KeyboardBridge`. Python emits `Signal`s
 2. Python: synthesizes keystroke, updates context, runs prediction
 3. Python: `self.predictionsChanged.emit(predictions)` → Signal
 4. QML: binds to `keyboard.predictions` property, updates UI
+
+## Caps Lock vs. Shift
+
+Caps Lock and Shift are **independent toggles**. Toggling caps no longer also flips shift. Both are surfaced separately to QML (`capsLockActive`, `shiftActive`).
+
+- **Uppercase output** in `pressKey`: `key.upper()` if `_shift_active OR _caps_lock_active`.
+- **Upper layer**: `_update_layer()` switches to `"upper"` if `_shift_active OR _caps_lock_active`. Same for the displayed glyph in `Main.qml`.
+- **Auto-release**: Shift auto-releases after a single keypress; caps stays on until explicitly toggled. Caps is unaffected by the auto-release path.
+- **Visual highlight**: only the toggled key is highlighted — toggling caps does NOT also highlight the Shift key (it used to, that was a bug).
+
+The shifted *glyph* on a key (e.g. `!` on the `1` key) follows shift only — caps lock uppercases letters but does not pick the shifted variant of symbol/number keys, matching standard keyboard behavior.
+
+## Swipe / Glide Typing
+
+Drag the mouse across letters to type a whole word in one gesture, like Gboard. Off by default; toggle in *Settings → Suggestions → Swipe Typing*. Design doc: `docs/SWIPE_TYPING.md`.
+
+| File | Role |
+|------|------|
+| `src/prediction/swipe_recognizer.py` | `SwipeRecognizer` — simplified SHARK² shape matching + frequency prior |
+| `src/keyboard_bridge.py` | `setSwipeEnabled`, `setSwipeLayout`, `processSwipe` slots |
+| `qml/components/SwipeOverlay.qml` | Mouse interceptor + path canvas, hidden when off |
+| `qml/Main.qml` | `charKeyRegistry`, `pushSwipeLayout()` (overlay-local key centres) |
+
+When the toggle is on, a transparent overlay covers the keyboard rows and intercepts all gestures. Press → drag past 60 px → swipe; press → release on a key → tap fall-through (the overlay hit-tests the registry and forwards to the underlying `KeyButton.keyPressed`). The recogniser pre-filters by start/end key, then scores remaining candidates with `log(freq+1) − 8 · mean_normalized_distance`. Top result is typed via `send_text` + space; alternates appear in the prediction bar so the user can repick.
 
 ## Sticky Modifiers (Ctrl, Alt, Win)
 

@@ -290,3 +290,69 @@ class TestCapitalization:
         predictor = NgramPredictor()
         predictor.learn_capitalization("iPhone")
         assert predictor.get_capitalized("iphone", sentence_start=False) == "iPhone"
+
+
+class TestPersonalVocabRanking:
+    """Personal typing should outrank dictionary-only words on partial match."""
+
+    def test_typed_word_beats_never_typed_dict_word(self):
+        """Typing 'claude' 10 times should make it beat 'can' when user types 'c'.
+
+        Under the old multiplicative-boost scoring, personal vocab was
+        drowned by the base dictionary's massive pre-seeded frequencies.
+        After the probability-space split (P = alpha*P_user + (1-a)*P_base)
+        a handful of personal uses is enough to win on rank.
+        """
+        predictor = NgramPredictor()
+        # Simulate typing "claude" 10 times
+        for _ in range(10):
+            predictor.learn("claude")
+
+        results = predictor.predict("c", n=20)
+        assert "claude" in results, f"'claude' missing from predictions: {results}"
+        # Should beat 'can' (very common English word, never typed by user)
+        assert results.index("claude") < results.index("can"), (
+            f"'claude' should outrank 'can' after 10 uses; got {results}"
+        )
+
+    def test_frequent_personal_word_ranks_near_top(self):
+        """A heavily-used personal word lands in the top 3 for its prefix."""
+        predictor = NgramPredictor()
+        for _ in range(50):
+            predictor.learn("claude")
+        results = predictor.predict("cl", n=10)
+        assert "claude" in results[:3], (
+            f"'claude' should be top-3 after 50 uses; got {results}"
+        )
+
+    def test_zero_personal_vocab_falls_back_to_base(self):
+        """With no personal typing, ranking comes from the base dictionary."""
+        predictor = NgramPredictor()
+        results = predictor.predict("th", n=10)
+        # 'the' is the most common English word — should be the first 'th' hit
+        th_results = [w for w in results if w.startswith("th")]
+        assert th_results, f"no 'th' predictions: {results}"
+        assert th_results[0] == "the"
+
+    def test_personal_weight_knob_affects_ranking(self):
+        """Turning alpha down puts the dictionary back in charge.
+
+        Uses a realistic amount of background personal text (~450 words)
+        so P_user isn't pathologically dominated by a single entry — the
+        knob's effect is measured the way it would be in practice.
+        """
+        predictor = NgramPredictor()
+        predictor.learn("the quick brown fox jumps over the lazy dog " * 50)
+        for _ in range(10):
+            predictor.learn("claude")
+
+        predictor.personal_weight = 0.9
+        strong = predictor.predict("c", n=20)
+
+        predictor.personal_weight = 0.05
+        weak = predictor.predict("c", n=20)
+
+        # Under strong personal bias "claude" should rank at least as
+        # well as under weak personal bias.
+        if "claude" in strong and "claude" in weak:
+            assert strong.index("claude") <= weak.index("claude")

@@ -32,7 +32,7 @@ from .analytics import TypingAnalytics
 from .platform import create_key_synthesizer
 from .platform.base import KeySynthesizerBase
 from .platform.password_detect import is_password_field
-from .prediction import HybridPredictor
+from .prediction import HybridPredictor, SwipeRecognizer
 
 _logger = logging.getLogger("KeyboardBridge")
 
@@ -147,6 +147,12 @@ class KeyboardBridge(QObject):
         self._auto_space_after_punctuation = True
         self._auto_capitalize_after_punctuation = False
         self._auto_save_on_exit = True
+
+        # Swipe / glide typing — off by default, toggled in settings.
+        # The recognizer needs the keyboard layout (key centres) before it
+        # can decode anything; QML pushes that via setSwipeLayout().
+        self._swipe_enabled = False
+        self._swipe = SwipeRecognizer()
 
         # Privacy mode — suppresses prediction and learning
         self._privacy_mode = False
@@ -432,15 +438,15 @@ class KeyboardBridge(QObject):
 
     @Slot()
     def toggleCapsLock(self) -> None:
-        """Toggle caps lock state."""
+        """Toggle caps lock state.
+
+        Caps Lock and Shift are independent — flipping caps no longer also
+        toggles shift's visual/active state.  Uppercase output and the
+        upper layer are driven by ``_shift_active OR _caps_lock_active``.
+        """
         self._caps_lock_active = not self._caps_lock_active
-        if self._caps_lock_active:
-            self._shift_active = True
-        else:
-            self._shift_active = False
         self._update_layer()
         self.capsLockActiveChanged.emit(self._caps_lock_active)
-        self.shiftActiveChanged.emit(self._shift_active)
 
     @Slot()
     def toggleCtrl(self) -> None:
@@ -496,18 +502,20 @@ class KeyboardBridge(QObject):
         # Shift+Left selection, which both break in certain apps:
         # - Backspace empties the field in Slack/Teams/Discord → compose closes
         # - Shift+Left doesn't select text in terminals → leaves duplicates
-        # Suffix-only typing works everywhere.
-        lower_word = word.lower()
-        lower_prefix = self._current_word.lower()
-        if lower_word.startswith(lower_prefix) and self._current_word:
-            # Prediction extends what was typed — just type the remaining chars
+        # Suffix-only typing works everywhere — but only when the prediction's
+        # prefix matches what was typed CASE-SENSITIVELY.  Otherwise the typed
+        # lowercase letters survive (e.g. "iph"+"iPhone" → "iphone"), so we
+        # fall back to select-and-replace to honour the prediction's casing.
+        if word.startswith(self._current_word) and self._current_word:
+            # Prediction extends what was typed (same case) — type the rest
             suffix = word[len(self._current_word):] + " "
             self._send_text(suffix)
         elif not self._current_word:
             # Next-word prediction (nothing typed) — type the full word
             self._send_text(word + " ")
         else:
-            # Prediction doesn't match typed prefix (rare) — select and replace
+            # Casing differs (e.g. "iph"→"iPhone") or prefix mismatch —
+            # select the typed letters and overwrite with the correct word.
             self._synth.replace_text(len(self._current_word), word + " ")
 
         # Learn from selection — use context_buffer only, not the typed
@@ -597,7 +605,7 @@ class KeyboardBridge(QObject):
         """Update the current layer based on shift/caps state."""
         if self._current_layer in ("numbers", "symbols"):
             return  # Don't change layer if user is on numbers/symbols
-        new_layer = "upper" if self._shift_active else "lower"
+        new_layer = "upper" if (self._shift_active or self._caps_lock_active) else "lower"
         if new_layer != self._current_layer:
             self._current_layer = new_layer
             self.currentLayerChanged.emit(self._current_layer)
@@ -964,6 +972,98 @@ class KeyboardBridge(QObject):
 
         self._add_debug_log(f"Edited prediction: {original} → {edited}")
         _logger.info("Prediction edited: %s → %s", original, edited)
+
+    # --- Swipe / Glide Typing ---
+
+    swipeEnabledChanged = Signal(bool)
+
+    @Slot(bool)
+    def setSwipeEnabled(self, enabled: bool) -> None:
+        """Toggle swipe / glide typing globally."""
+        self._swipe_enabled = enabled
+        self.swipeEnabledChanged.emit(enabled)
+        _logger.info("Swipe typing: %s", enabled)
+
+    def _get_swipe_enabled(self) -> bool:
+        return self._swipe_enabled
+
+    swipeEnabled = Property(bool, _get_swipe_enabled, notify=swipeEnabledChanged)
+
+    @Slot("QVariant")
+    def setSwipeLayout(self, key_centers: Any) -> None:
+        """Push the current keyboard layout to the swipe recognizer.
+
+        QML supplies a ``{letter: [x, y]}`` map of key-centre coordinates
+        in any consistent unit (window-local pixels work fine — the
+        recognizer normalises internally).
+        """
+        try:
+            mapping: Dict[str, tuple] = {}
+            # QML JS objects come through as dicts; tolerate both.
+            items = key_centers.items() if hasattr(key_centers, "items") else key_centers
+            for key, value in items:
+                if value is None:
+                    continue
+                # QML arrays come through as lists of floats
+                if isinstance(value, dict):
+                    x, y = value.get("x", 0.0), value.get("y", 0.0)
+                else:
+                    x, y = value[0], value[1]
+                mapping[str(key)] = (float(x), float(y))
+            self._swipe.set_layout(mapping)
+        except Exception as e:
+            _logger.warning("setSwipeLayout failed: %s", e)
+
+    @Slot("QVariant")
+    def processSwipe(self, points: Any) -> None:
+        """Decode a swipe trace and insert the top candidate.
+
+        Args:
+            points: List of ``[x, y]`` pairs from QML, in the same
+                    coordinate space as the layout pushed via
+                    :meth:`setSwipeLayout`.
+        """
+        if not self._swipe_enabled or self._privacy_mode:
+            return
+        try:
+            trace = [(float(p[0]), float(p[1])) for p in points]
+        except (TypeError, ValueError, IndexError):
+            return
+        if len(trace) < 4:
+            return
+
+        candidates = self._predictor._ngram.unigrams.keys()
+        word_freq = self._predictor._ngram.unigrams
+        results = self._swipe.decode(
+            trace,
+            candidates,
+            word_freq=dict(word_freq),
+            top_k=self._prediction_count,
+        )
+        if not results:
+            self._add_debug_log("Swipe: no candidates matched")
+            return
+
+        # Apply learned/built-in capitalisation to each candidate so that
+        # picking the top word respects "iPhone" vs. "iphone".
+        ngram = self._predictor._ngram
+        sentence_start = (not self._context_buffer) or self._context_buffer.rstrip().endswith((".", "!", "?"))
+        capitalised = [ngram.get_capitalized(w, sentence_start) for w in results]
+
+        top = capitalised[0]
+        self._send_text(top + " ")
+        self._context_buffer += top + " "
+        self._sentence_buffer += top + " "
+        if len(self._context_buffer) > 200:
+            self._context_buffer = self._context_buffer[-200:]
+        self._current_word = ""
+
+        # Show the rest as alternative predictions in case the top guess is wrong.
+        self._predictions = capitalised
+        self.predictionsChanged.emit(capitalised)
+        self._analytics.record_word_completed(top)
+        self._add_debug_log(f"Swipe → {top} (alts: {capitalised[1:4]})")
+        _logger.info("Swipe decoded: %s (alts: %s)", top, capitalised[1:4])
 
     # --- Audio Feedback ---
 

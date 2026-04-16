@@ -26,6 +26,9 @@ Item {
     // Data
     property bool autoSaveOnExit: true
 
+    // Input methods
+    property bool swipeEnabled: false
+
     // Debug
     property bool debugMode: false
 
@@ -235,6 +238,13 @@ Item {
                                 text: "Auto-Capitalize After Punctuation"
                                 checked: unifiedSettings.autoCapitalizeAfterPunctuation
                                 onToggled: function(c) { unifiedSettings.settingChanged("autoCapitalizeAfterPunctuation", c) }
+                            }
+
+                            SettingsToggle {
+                                Layout.fillWidth: true
+                                text: "Swipe Typing (drag across keys)"
+                                checked: unifiedSettings.swipeEnabled
+                                onToggled: function(c) { unifiedSettings.settingChanged("swipeEnabled", c) }
                             }
 
                             // Prediction count

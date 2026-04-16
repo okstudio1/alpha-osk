@@ -32,7 +32,10 @@ class NgramPredictor:
         Args:
             model_path: Path to saved model file. If None, starts with empty model.
         """
-        # Unigram: word -> frequency
+        # Unigram: word -> frequency (MERGED VIEW — base + user).  Kept
+        # for backwards compatibility; predict() uses the split tables
+        # below.  External callers (hybrid_predictor._is_valid_word) rely
+        # on this as a simple "is this word in the vocabulary" set.
         self.unigrams: Dict[str, int] = defaultdict(int)
         # Bigram: (prev_word, word) -> frequency
         self.bigrams: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
@@ -42,7 +45,19 @@ class NgramPredictor:
         # Total word count for probability calculation
         self.total_words = 0
 
-        # User-specific vocabulary boost
+        # Split-table scoring: predictions blend base-dictionary statistics
+        # with the user's personal typing counts in probability space, so
+        # frequently-typed words (e.g. "Claude") surface above common
+        # English words even when the user's raw counts are small.
+        #   P(w) = alpha · P_user(w) + (1 - alpha) · P_base(w)
+        # alpha ("personal_weight") defaults to 0.7 — personal typing wins
+        # on rank but the base dictionary still shapes the long tail.
+        self._base_unigrams: Dict[str, int] = defaultdict(int)
+        self._base_total: int = 0
+        self.personal_weight: float = 0.7
+
+        # User-typed word counts.  Incremented by learn() / learn_word();
+        # feeds P_user in the split-table score.  Recency-decayed.
         self.user_vocab: Dict[str, int] = defaultdict(int)
 
         # Word suppression: blacklisted words never appear, dispreferred are downweighted
@@ -112,6 +127,8 @@ class NgramPredictor:
             ]
             for word in self._common_words:
                 self.unigrams[word] = 100
+                self._base_unigrams[word] = 100
+                self._base_total += 100
             self.total_words = len(self._common_words) * 100
 
         # Load saved model if provided
@@ -143,6 +160,8 @@ class NgramPredictor:
             for rank, word in enumerate(words):
                 frequency = max_freq - rank
                 self.unigrams[word] = frequency
+                self._base_unigrams[word] = frequency
+                self._base_total += frequency
                 self.total_words += frequency
 
             _logger.info("Google 10K wordlist loaded: %d words", len(words))
@@ -162,6 +181,8 @@ class NgramPredictor:
                         # Lower frequency tier: these words rank below the 10K list
                         frequency = max(1, 500 - rank // 20)
                         self.unigrams[word] = frequency
+                        self._base_unigrams[word] = frequency
+                        self._base_total += frequency
                         self.total_words += frequency
                 _logger.info("Supplement wordlist loaded: %d words", len(supplement))
             except Exception as e:
@@ -294,15 +315,42 @@ class NgramPredictor:
                     if self._matches_partial(word, partial_word):
                         candidates[word] = candidates.get(word, 0) + freq * 2  # Weight bigrams
 
-        # Unigram fallback + partial matching
-        for word, freq in self.unigrams.items():
-            if self._matches_partial(word, partial_word):
-                candidates[word] = candidates.get(word, 0) + freq * 0.5
+        # Unigram scoring — split-table linear interpolation.
+        #
+        #   score(w) = SCALE · [alpha · P_user(w) + (1 − alpha) · P_base(w)]
+        #
+        # Probability space is the right space to blend in: raw-count
+        # blending drowns personal typing under the dictionary's huge
+        # pre-seeded frequencies.  With alpha = 0.7 by default, a word the
+        # user has typed even a handful of times ranks ahead of common
+        # English words they've never used.  SCALE brings the unigram
+        # contribution into a similar magnitude as the bigram/trigram
+        # weights above (bigram += freq · 2 etc.), so those context
+        # bonuses still meaningfully boost candidates.
+        alpha = self.personal_weight
+        user_total = sum(self.user_vocab.values())
+        base_total = self._base_total
+        SCALE = 100_000
 
-        # Boost user vocabulary
-        for word, boost in self.user_vocab.items():
-            if word in candidates:
-                candidates[word] *= (1 + boost * 0.1)
+        # Walk the union of base and user vocabularies.  Using the merged
+        # view (``self.unigrams``) would also work, but this skips the
+        # many ambiguous-name / decayed entries that aren't real vocab.
+        seen_words: set[str] = set()
+        for word in self._base_unigrams.keys():
+            seen_words.add(word)
+        for word in self.user_vocab.keys():
+            seen_words.add(word)
+
+        for word in seen_words:
+            if not self._matches_partial(word, partial_word):
+                continue
+            base_freq = self._base_unigrams.get(word, 0)
+            user_freq = self.user_vocab.get(word, 0)
+            p_base = (base_freq / base_total) if base_total else 0.0
+            p_user = (user_freq / user_total) if user_total else 0.0
+            p_mixed = alpha * p_user + (1.0 - alpha) * p_base
+            if p_mixed > 0:
+                candidates[word] = candidates.get(word, 0) + p_mixed * SCALE
 
         # Sort by score and return top n
         sorted_candidates = sorted(candidates.items(), key=lambda x: -x[1])
@@ -369,6 +417,31 @@ class NgramPredictor:
             self._learn_count = 0
 
         return new_words
+
+    def _learn_base(self, text: str) -> None:
+        """Learn from a base corpus / built-in dictionary.
+
+        Unlike :meth:`learn`, counts go into ``_base_unigrams`` (not
+        ``user_vocab``), so loading the shipped dictionary does not mask
+        the user's genuine typing signal.  Bigrams and trigrams are still
+        populated — those tables are not split in the current design, and
+        the base sentences are useful context regardless.
+        """
+        words = self._tokenize(text)
+        if not words:
+            return
+
+        for word in words:
+            self._base_unigrams[word] += 1
+            self.unigrams[word] += 1
+            self._base_total += 1
+            self.total_words += 1
+
+        for i in range(1, len(words)):
+            self.bigrams[words[i - 1]][words[i]] += 1
+        for i in range(2, len(words)):
+            key = f"{words[i - 2]} {words[i - 1]}"
+            self.trigrams[key][words[i]] += 1
 
     def _apply_decay(self) -> None:
         """Scale down user-learned frequencies so recent words outweigh old ones."""
@@ -525,14 +598,15 @@ class NgramPredictor:
             with open(dict_path, "r") as f:
                 content = f.read()
 
-            # Process each line
+            # Process each line — route through _learn_base so counts go
+            # into _base_unigrams and do NOT inflate the user's personal
+            # vocab (which would mask actual personal typing signal).
             for line in content.split("\n"):
                 line = line.strip()
                 # Skip comments and empty lines
                 if not line or line.startswith("#"):
                     continue
-                # Learn the words/phrases on this line
-                self.learn(line)
+                self._learn_base(line)
 
             _logger.info("Base dictionary loaded: %d total words", self.total_words)
             return True
@@ -628,6 +702,8 @@ class NgramPredictor:
         self.unigrams.clear()
         self.bigrams.clear()
         self.trigrams.clear()
+        self._base_unigrams.clear()
+        self._base_total = 0
         self.total_words = 0
         self.blacklist.clear()
         self.dispreference.clear()
