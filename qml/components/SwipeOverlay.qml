@@ -21,7 +21,9 @@ import QtQuick 2.15
 
 Item {
     id: swipeRoot
-    anchors.fill: parent
+    // Geometry (x / y / width / height) is set by the parent — see
+    // Main.qml's swipeOverlay block, which positions us over mainKeyboard
+    // without going through anchors-on-a-layout-child.
     visible: enabled        // hides AND disables hit testing when off
     z: 50                   // above KeyButtons but below dialogs/popups
 

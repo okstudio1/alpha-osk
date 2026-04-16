@@ -847,14 +847,17 @@ Window {
         }
 
         // Swipe overlay — covers the main keyboard area when swipe typing
-        // is on, otherwise invisible and non-interactive.  Declared
-        // OUTSIDE the ColumnLayout (mainKeyboard) and re-parented to it so
-        // the layout doesn't try to slot it like a real layout child —
-        // anchors must not mix with QtQuick.Layouts.
+        // is on.  Sibling to mainLayout (NOT a child of mainKeyboard),
+        // because re-parenting into a QtQuick.Layouts ColumnLayout makes
+        // Qt warn about anchors-on-layout-managed-items even when we set
+        // the parent imperatively.  Geometry is bound to mainKeyboard's
+        // position/size through coordinate bindings instead.
         Comp.SwipeOverlay {
             id: swipeOverlay
-            parent: mainKeyboard
-            anchors.fill: parent
+            x: mainLayout.x + mainKeyboard.x
+            y: mainLayout.y + mainKeyboard.y
+            width: mainKeyboard.width
+            height: mainKeyboard.height
             z: 50
             enabled: root.swipeEnabled
             keyboardBridge: keyboard

@@ -229,6 +229,15 @@ def main() -> int:
     # Set up QML engine
     engine = QQmlApplicationEngine()
 
+    # Surface QML diagnostics through the Python logger.  Without this,
+    # QQmlApplicationEngine silently swallows parse / binding errors and
+    # rootObjects() just returns empty — past startup crashes were much
+    # harder to diagnose than they needed to be.
+    def _on_qml_warnings(warnings: list) -> None:
+        for w in warnings:
+            _logger.warning("QML: %s", w.toString())
+    engine.warnings.connect(_on_qml_warnings)
+
     # Expose bridge to QML
     engine.rootContext().setContextProperty("keyboard", bridge)
 
@@ -242,7 +251,7 @@ def main() -> int:
     engine.load(QUrl.fromLocalFile(str(main_qml)))
 
     if not engine.rootObjects():
-        _logger.error("Failed to load QML")
+        _logger.error("Failed to load QML — see preceding QML: warnings")
         return 1
 
     # Apply window flags for OSK behavior (cross-platform + Windows extras)
