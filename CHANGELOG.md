@@ -2,7 +2,7 @@
 
 All notable changes to Alpha-OSK are documented in this file.
 
-## [Unreleased]
+## [1.0.2] — 2026-04-16
 
 ### Security
 - **Path traversal in `PackManager.import_pack` (CRITICAL)** — a source folder whose pathlib `.name` resolves to `..` would have made `dest_dir` the parent of the user packs directory, and the existing `shutil.rmtree(dest_dir)` call would then have wiped the app config root (learned models, settings). Now the pack id is sanitised with a strict `[a-z0-9_-]{1,64}` pattern and the resolved destination is verified to sit under `user_packs_dir`; symlinks in the source tree are skipped rather than dereferenced.
@@ -11,19 +11,17 @@ All notable changes to Alpha-OSK are documented in this file.
 - **Password-field detection race closed (HIGH)** — `pressKey` / `pressSpecialKey` now call `is_password_field()` synchronously (rate-limited to ~50 ms) before touching prediction state, instead of relying on the 200 ms background timer.
 - **`editPrediction` input sanitised (MEDIUM)** — `_sanitize_edit` strips control characters, caps length to 64, and rejects empty-after-strip so malformed QML input can't persist junk into the capitalisation table.
 
-### Changed
-- **Encapsulation** — `keyboard_bridge.processSwipe` now calls `HybridPredictor.get_unigram_freqs()` / `get_capitalized()` instead of reaching through `_predictor._ngram`.
-- **`NgramPredictor._user_total` is tracked incrementally** — `learn` / `learn_word` / `_apply_decay` / `clear_user_data` / `load` all keep the running total in sync, removing an O(N) `sum()` from every keystroke's `predict()` call.
-
 ### Added
 - **Swipe / glide typing** — drag the mouse across letters to type a whole word in one gesture (Gboard-style). Uses simplified SHARK² shape matching against the dictionary, with a frequency prior. Off by default; toggle in *Settings → Suggestions → Swipe Typing*. Design doc: `docs/SWIPE_TYPING.md`.
 - **Deep-dive algorithm docs** — `docs/FUZZY_RECOGNITION.md` (spatial model + accessibility profiles), `docs/PPM.md` (variable-order character model + PPMD escape), `docs/HYBRID_MERGING.md` (merge weights + validation + capitalization).
 
 ### Changed
+- **Next-word scoring now uses linear interpolation** — `NgramPredictor.predict()` ranks candidates by `λ₃·P(w | w₋₂, w₋₁) + λ₂·P(w | w₋₁) + λ₁·P_uni(w)` with λ = 0.5 / 0.3 / 0.2, all in probability space. Previously, raw trigram/bigram frequencies (× 2–3) competed against a 100 000-scaled unigram probability, so the global unigram favourite drowned real context — "I want " predicted "the" instead of "to". When there is no preceding word, the formula collapses to `P_uni` at full weight so partial-prefix completion isn't flattened.
+- **Keyboard-slip fragments no longer enter the learned vocabulary** — `NgramPredictor.learn()` gates unknown words through a shape check (length ≤ 2 must match a small whitelist; length ≥ 3 needs both a vowel and a non-`aeiou` letter — `y` counts as both, so "eye" and "cry" pass but "aaaa" and "xqz" don't). Surviving unknown words go through a repetition gate: counted in a candidate pool until 3 sightings, then promoted. Known base-dict words and `learn_word()` bypass the gate. Candidate counts decay with the rest of user vocab and persist across save/load.
 - **Personal vocabulary now outranks dictionary words in predictions** — the n-gram unigram scoring now blends a separate base-dictionary table with the user's personal typing counts in probability space (`P = α·P_user + (1−α)·P_base`, α = 0.7 by default). Previously, a word typed 10 times scored ~10 while a common dictionary word scored ~5,000; now a few uses is enough for a personal word to rise to the top for its prefix. Tunable via `NgramPredictor.personal_weight`. See `docs/HYBRID_MERGING.md` → "Personal vs. Base Vocabulary".
-
-### Changed
 - **Tray icon double-click now minimizes** — single click still toggles show/hide, but a double-click on the system tray icon sends the keyboard to the minimized state (same as clicking the `−` button in the title bar). A short timer on the single-click action waits for the system's double-click interval so the two gestures don't fight.
+- **Encapsulation** — `keyboard_bridge.processSwipe` now calls `HybridPredictor.get_unigram_freqs()` / `get_capitalized()` instead of reaching through `_predictor._ngram`.
+- **`NgramPredictor._user_total` is tracked incrementally** — `learn` / `learn_word` / `_apply_decay` / `clear_user_data` / `load` all keep the running total in sync, removing an O(N) `sum()` from every keystroke's `predict()` call.
 
 ### Fixed
 - **Double-typed keystrokes eliminated** — two separate causes were firing a single click as two characters:
