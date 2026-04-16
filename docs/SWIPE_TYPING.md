@@ -28,11 +28,16 @@ mouse press / drag / release on keyboard area
        • swipe → keyboard.processSwipe(points)
        • tap   → keyRegistry hit-test → KeyButton.keyPressed()
   → keyboard_bridge.processSwipe(points)
+    → HybridPredictor.get_unigram_freqs() → dictionary + frequencies
     → SwipeRecognizer.decode(points, dictionary, freq) → top-N words
-    → applies built-in / learned capitalization
+    → HybridPredictor.get_capitalized() for each candidate
     → sends top word + space via send_text
     → emits remaining candidates as predictions for re-pick
 ```
+
+The bridge uses `HybridPredictor.get_unigram_freqs()` /
+`get_capitalized()` rather than reaching through to `_ngram` directly.
+See `docs/HYBRID_MERGING.md` → "Public API for External Callers".
 
 Tap fall-through is what lets a single key still work normally even when
 swipe mode is on — short gestures hit the key under the release point.

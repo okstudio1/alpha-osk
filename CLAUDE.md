@@ -89,10 +89,12 @@ Everything else in `data/proper_nouns.txt` (~8,000 entries) and user-taught capi
   - Windows: `%APPDATA%/alpha-osk/models/`
   - Linux: `~/.config/alpha-osk/models/`
   - Files: `ngram_model.json`, `ppm_model.json`
+  - **Load-time caps**: both loaders reject files over 50 MB. The n-gram loader also rejects files with more than 500 000 unigrams, 500 000 bigram prefixes, or 100 000 capitalisation entries — anything beyond these is assumed to be corrupt or hostile and is silently skipped (the in-memory base dictionary is kept).
 - **Custom vocabulary packs**: Imported by user, stored separately from built-in packs.
   - Built-in: `data/packs/` (in repo — medical, programming, academic, gaming, business)
   - User-imported: `%APPDATA%/alpha-osk/packs/` (Windows) or `~/.config/alpha-osk/packs/` (Linux)
   - Pack format: folder with `dictionary.txt` (required), optional `bigrams.txt`, `trigrams.txt`, `pack.json`
+  - **Import hardening**: the source folder's name is sanitised to `[a-z0-9_-]{1,64}`; anything else (including `..`) is rejected. The resolved destination is verified to sit strictly under `user_packs_dir` before any `rmtree`/`copytree` runs, and symlinks inside the source tree are skipped rather than dereferenced. Don't loosen this without re-reading `PackManager.import_pack` and the regression tests in `tests/test_vocabulary_pack.py::TestImportPackSecurity`.
 
 ## QML ↔ Python Bridge Pattern
 
@@ -207,13 +209,16 @@ Data provided by `keyboard_bridge.getVisualizationData()` → `ModelVisualizatio
 Protects sensitive input (passwords, PINs) from leaking into the prediction model.
 
 ### How it works
-- **Auto-detection** (Windows): A `QTimer` polls every 500ms, calling `is_password_field()` from `src/platform/password_detect.py`. Uses Windows UI Automation COM (`IUIAutomation::GetFocusedElement` → `UIA_IsPasswordPropertyId`) to detect password fields in native apps and browsers. Falls back to Win32 `EM_GETPASSWORDCHAR` if UIA fails.
+- **Auto-detection** (Windows): Two complementary paths call `is_password_field()` from `src/platform/password_detect.py`:
+  1. A background `QTimer` polls every 200ms (`_check_password_field`). Catches focus changes that happen between keystrokes.
+  2. **Every keystroke** (`pressKey`/`pressSpecialKey`) also calls `_check_password_field_sync()`, rate-limited to ~50ms via `_last_sync_password_check`. Closes the race window where the first characters after focus lands on a password field would otherwise reach the prediction cache before the timer fires.
+- Detection uses Windows UI Automation COM (`IUIAutomation::GetFocusedElement` → `UIA_IsPasswordPropertyId`) in native apps and browsers. Falls back to Win32 `EM_GETPASSWORDCHAR` if UIA fails.
 - **Manual toggle**: Play/pause icon in the title bar (Canvas-drawn). Overrides auto-detection.
 - **When active**: Keystrokes still reach the OS, but `_current_word`, predictions, and learning are all suppressed. The prediction bar shows "Learning paused".
 
 ### Key files
 - `src/platform/password_detect.py` — platform-specific detection (UIA COM via ctypes)
-- `src/keyboard_bridge.py` — `_privacy_mode` flag, `_check_password_field()` timer, `setPrivacyMode()` slot
+- `src/keyboard_bridge.py` — `_privacy_mode` flag, `_check_password_field()` timer, `_check_password_field_sync()` per-keystroke, `setPrivacyMode()` slot
 
 ### Linux
 Auto-detection not yet implemented. Users should use the manual toggle.
@@ -466,3 +471,6 @@ Conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`
 - The title bar has play/pause (privacy), ⚙ (settings), minimize, and close. Help and visualization are in Settings → Tools.
 - Predictions clear when the user switches apps — monitored via `GetForegroundWindow()` polling every 250ms in `keyboard_bridge.py`. The QML `onActiveChanged` doesn't fire reliably with `WS_EX_NOACTIVATE`, so Python handles it. Full context reset on app switch (`_current_word`, `_context_buffer`, `_sentence_buffer`).
 - Prediction selection uses **suffix-only typing** — if the user typed "hel" and picks "hello", only "lo " is sent. No Backspace (empties Slack compose), no Shift+Left (doesn't work in terminals). Falls back to `replace_text()` only when the prediction doesn't match the typed prefix.
+- **Shutdown ordering matters** — `keyboard_app.py` wires `aboutToQuit` to run `savePredictionModel`, `saveAnalytics`, then `bridge.shutdown()` in that order. `shutdown()` stops `_password_timer` and `_foreground_timer` so a final `timeout` can't run against a half-torn-down predictor. Any new long-lived QTimer in `KeyboardBridge` should also be stopped there.
+- **External callers reach `NgramPredictor` via `HybridPredictor` forwarders** — don't access `keyboard._predictor._ngram` from `keyboard_bridge.py` or new code. Use `get_unigram_freqs()` / `get_capitalized()` or add a new forwarder. The swipe path is the canonical example (see `processSwipe`).
+- **`NgramPredictor._user_total` is an invariant** — every mutation to `user_vocab` (in `learn`, `learn_word`, `_apply_decay`, `clear_user_data`, `load`) must keep it equal to `sum(user_vocab.values())`. `predict()` reads it every keystroke; the consistency tests in `tests/test_ngram_predictor.py::TestUserTotalIncremental` will catch a missed site.

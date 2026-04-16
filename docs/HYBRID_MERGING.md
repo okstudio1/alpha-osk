@@ -169,7 +169,7 @@ Scoring for a partial-prefix candidate:
 
 ```
 alpha   = personal_weight   (default 0.7)
-P_user  = user_vocab[w]    / sum(user_vocab.values())
+P_user  = user_vocab[w]    / _user_total
 P_base  = _base_unigrams[w] / _base_total
 score   = SCALE · [ alpha · P_user + (1 − alpha) · P_base ]
 ```
@@ -177,6 +177,12 @@ score   = SCALE · [ alpha · P_user + (1 − alpha) · P_base ]
 `SCALE = 100,000` brings the interpolated probability into the same
 magnitude as the bigram/trigram scores added earlier in `predict`, so
 context bonuses still move the needle.
+
+**`_user_total` is tracked incrementally** — `learn`, `learn_word`,
+`_apply_decay`, `clear_user_data`, and `load` all keep it equal to
+`sum(user_vocab.values())`.  Don't recompute the sum in `predict()`;
+the invariant is covered by
+`tests/test_ngram_predictor.py::TestUserTotalIncremental`.
 
 ### Why the split matters
 
@@ -248,6 +254,26 @@ dominating predictions months later.  PPM does **not** currently decay
 4. **LLM could suggest new candidates, not just reorder.**  Current
    implementation is defensive; a more integrated path would let the
    LLM propose words outside the candidate list (with sandboxing).
+
+## Public API for External Callers
+
+Code outside `src/prediction/` should go through `HybridPredictor`, not
+reach into `_ngram` / `_ppm` / `_fuzzy`.  The bridge and anything else
+that needs raw data should use these forwarders:
+
+| Method | Returns | Used by |
+|--------|---------|---------|
+| `get_unigram_freqs()` | merged `unigrams` dict (base + user) | `keyboard_bridge.processSwipe` (candidate set for the swipe decoder) |
+| `get_capitalized(word, sentence_start)` | `str` | same, to render "iPhone" / "Owen" correctly on decoded swipes |
+| `learn`, `learn_word`, `learn_from_selection`, `predict`, `predict_with_refinement` | — | all normal prediction paths |
+| `blacklist_word`, `unblacklist_word`, `mark_bad_suggestion`, `remove_dispreference` | — | right-click word suppression |
+| `set_accessibility_profile`, `get_accessibility_profiles`, `get_current_profile` | — | accessibility settings UI |
+| `enable_vocabulary_pack`, `disable_vocabulary_pack`, `import_vocabulary_pack` | — | vocabulary-pack UI |
+
+If you need data that isn't exposed, add a new forwarder here rather
+than reaching through private attributes.  Private access from the
+bridge or UI was removed during the security review; don't re-introduce
+it.  CLAUDE.md "Things to Watch Out For" calls this out.
 
 ## References
 
