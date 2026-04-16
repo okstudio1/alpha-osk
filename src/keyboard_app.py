@@ -32,7 +32,7 @@ import os
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QIcon
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
@@ -264,12 +264,36 @@ def main() -> int:
             root.show()
             root.raise_()
 
+    def _minimize_window() -> None:
+        """Send the window to the Windows taskbar minimized state.
+
+        Matches the in-window ``−`` button (``Window.Minimized`` in QML).
+        Triggered by a double-click on the tray icon — the single-click
+        path still toggles show/hide.
+        """
+        root.showMinimized()
+
+    # Tray single-click vs. double-click: we want a single click to
+    # toggle show/hide (current behaviour) and a double click to
+    # minimize.  On Windows, Qt delivers Trigger first, then DoubleClick,
+    # for a double click — so we start a timer on Trigger and only
+    # fire the single-click action if no DoubleClick arrives within the
+    # system's double-click interval.  If DoubleClick arrives first,
+    # the pending Trigger is cancelled.
+    tray_single_click_timer = QTimer(app)
+    tray_single_click_timer.setSingleShot(True)
+    tray_single_click_timer.setInterval(app.doubleClickInterval())
+    tray_single_click_timer.timeout.connect(_toggle_visibility)
+
+    def _on_tray_activated(reason: "QSystemTrayIcon.ActivationReason") -> None:
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            tray_single_click_timer.start()
+        elif reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            tray_single_click_timer.stop()
+            _minimize_window()
+
     show_action.triggered.connect(_toggle_visibility)
-    tray.activated.connect(
-        lambda reason: _toggle_visibility()
-        if reason == QSystemTrayIcon.ActivationReason.Trigger
-        else None
-    )
+    tray.activated.connect(_on_tray_activated)
     quit_action.triggered.connect(app.quit)
     tray.setContextMenu(tray_menu)
     tray.setToolTip("Alpha-OSK")

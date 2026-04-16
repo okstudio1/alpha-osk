@@ -1068,13 +1068,20 @@ class KeyboardBridge(QObject):
         recognizer normalises internally).
         """
         try:
+            # PySide6 hands JS objects across as QJSValue; convert to a
+            # native Python dict before iterating.
+            try:
+                from PySide6.QtQml import QJSValue
+                if isinstance(key_centers, QJSValue):
+                    key_centers = key_centers.toVariant()
+            except ImportError:
+                pass
+
             mapping: Dict[str, tuple] = {}
-            # QML JS objects come through as dicts; tolerate both.
             items = key_centers.items() if hasattr(key_centers, "items") else key_centers
             for key, value in items:
                 if value is None:
                     continue
-                # QML arrays come through as lists of floats
                 if isinstance(value, dict):
                     x, y = value.get("x", 0.0), value.get("y", 0.0)
                 else:
@@ -1095,6 +1102,16 @@ class KeyboardBridge(QObject):
         """
         if not self._swipe_enabled or self._privacy_mode:
             return
+
+        # PySide6 may hand JS arrays across as QJSValue; convert to native
+        # Python before iterating.
+        try:
+            from PySide6.QtQml import QJSValue
+            if isinstance(points, QJSValue):
+                points = points.toVariant()
+        except ImportError:
+            pass
+
         try:
             trace = [(float(p[0]), float(p[1])) for p in points]
         except (TypeError, ValueError, IndexError):

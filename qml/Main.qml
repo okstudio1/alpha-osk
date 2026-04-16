@@ -92,8 +92,8 @@ Window {
     }
 
     // Refresh the swipe-recognizer layout whenever the window is resized —
-    // key positions move with the layout.
-    onWidthChanged: swipeLayoutPushTimer.restart()
+    // key positions move with the layout.  (See the merged onWidthChanged
+    // handler further down which also handles minimumWidth clamping.)
     onHeightChanged: swipeLayoutPushTimer.restart()
 
     onSwipeEnabledChanged: {
@@ -228,9 +228,12 @@ Window {
     property real keyH: Math.max(34, keyW * 0.89)
 
     // Safety net: if the window width ever drops below minimumWidth (e.g. via
-    // OS window-snap, DPI change, or panel toggle), clamp it back up.
+    // OS window-snap, DPI change, or panel toggle), clamp it back up.  Also
+    // refreshes the swipe-recognizer's key-centre map since the keys move
+    // when the window resizes.
     onWidthChanged: {
         if (width < minimumWidth) width = minimumWidth
+        swipeLayoutPushTimer.restart()
     }
 
     // Multi-monitor DPI fix: when Qt moves the window to a screen with a
@@ -705,18 +708,6 @@ Window {
                     Layout.fillWidth: true
                     spacing: 2
 
-                    // Swipe overlay — covers the keyboard rows when swipe
-                    // typing is on.  Hidden + non-interactive otherwise so
-                    // KeyButtons handle their own presses normally.
-                    Comp.SwipeOverlay {
-                        id: swipeOverlay
-                        enabled: root.swipeEnabled
-                        keyboardBridge: keyboard
-                        keyRegistry: root.charKeyRegistry
-                        anchors.fill: parent
-                        anchors.margins: 0
-                    }
-
                     // ===== Function Row (F1-F12) =====
                     Comp.FunctionRow {
                         visible: root.showFunctionRow
@@ -853,6 +844,21 @@ Window {
                 borderColor: root.themeBorder
             }
             }
+        }
+
+        // Swipe overlay — covers the main keyboard area when swipe typing
+        // is on, otherwise invisible and non-interactive.  Declared
+        // OUTSIDE the ColumnLayout (mainKeyboard) and re-parented to it so
+        // the layout doesn't try to slot it like a real layout child —
+        // anchors must not mix with QtQuick.Layouts.
+        Comp.SwipeOverlay {
+            id: swipeOverlay
+            parent: mainKeyboard
+            anchors.fill: parent
+            z: 50
+            enabled: root.swipeEnabled
+            keyboardBridge: keyboard
+            keyRegistry: root.charKeyRegistry
         }
 
         // Custom styled context menu for prediction pills

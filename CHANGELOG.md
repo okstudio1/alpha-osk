@@ -22,6 +22,9 @@ All notable changes to Alpha-OSK are documented in this file.
 ### Changed
 - **Personal vocabulary now outranks dictionary words in predictions** — the n-gram unigram scoring now blends a separate base-dictionary table with the user's personal typing counts in probability space (`P = α·P_user + (1−α)·P_base`, α = 0.7 by default). Previously, a word typed 10 times scored ~10 while a common dictionary word scored ~5,000; now a few uses is enough for a personal word to rise to the top for its prefix. Tunable via `NgramPredictor.personal_weight`. See `docs/HYBRID_MERGING.md` → "Personal vs. Base Vocabulary".
 
+### Changed
+- **Tray icon double-click now minimizes** — single click still toggles show/hide, but a double-click on the system tray icon sends the keyboard to the minimized state (same as clicking the `−` button in the title bar). A short timer on the single-click action waits for the system's double-click interval so the two gestures don't fight.
+
 ### Fixed
 - **Double-typed keystrokes eliminated** — two separate causes were firing a single click as two characters:
   1. No software debounce on the MouseArea press, so hardware button bounce (common on cheap / worn / adaptive mice) would emit two press events.
