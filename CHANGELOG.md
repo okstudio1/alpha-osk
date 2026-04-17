@@ -2,6 +2,16 @@
 
 All notable changes to Alpha-OSK are documented in this file.
 
+## [1.0.7] — 2026-04-16
+
+### Fixed
+- **Auto-updater downloads no longer fail on the post-redirect host check.** GitHub's release-asset CDN moved from `objects.githubusercontent.com` to `release-assets.githubusercontent.com`; the MITM-defence host whitelist only knew about the historical name, so every legitimate v1.0.6 download was rejected with "Update download or signature verification failed". The new hostname is now in `_ALLOWED_DOWNLOAD_HOSTS`. The two pinned hostnames (plus `github.com`) are spelled out in `src/updater.py` rather than allowing `*.githubusercontent.com` so an attacker who finds a way to publish content under the wider umbrella can't redirect us there.
+- **Update banner now allows retry after failure.** `Install` was permanently disabled the moment `updateError !== ""`, so a transient network blip required dismissing the banner and waiting for the next auto-check to recover. The button now stays enabled and reads "Retry" after a failure; clicking it clears the error and re-enters the install path.
+- **Failed updates now name the failed step in the banner.** `download_and_install` returns a `(ok, error)` tuple; the bridge forwards the short step-specific message ("Download failed", "Signature check failed") instead of the generic "Update download or signature verification failed".
+
+### Required manual install
+v1.0.5 / v1.0.6 users have to install v1.0.7 by hand once because their auto-updater can't pull this build (their host whitelist is the broken one). Auto-update works for every release after that.
+
 ## [1.0.6] — 2026-04-16
 
 ### Fixed

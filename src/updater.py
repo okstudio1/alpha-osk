@@ -88,12 +88,21 @@ GITHUB_API_URL = (
 EV_CERT_SHA1_THUMBPRINT = "fc22b5221318f3f3f6b3eb2d969d7f99091557bf"
 EXPECTED_SIGNER_CN = "OK Studio Inc."
 
-# Hosts we accept download URLs from.  The first is GitHub itself; the
-# second is the CDN GitHub redirects release-asset downloads to.  Any
-# other host is treated as an attacker-controlled redirect.
+# Hosts we accept download URLs from.  GitHub itself plus the two
+# canonical CDN hostnames it redirects release-asset downloads to.
+# Any other host is treated as an attacker-controlled redirect.
+#
+# GitHub's release-asset CDN has migrated over the years —
+# ``objects.githubusercontent.com`` was the historical name and still
+# appears in older URLs; ``release-assets.githubusercontent.com`` is
+# the current production hostname (signed Azure-blob proxy).  We pin
+# the specific hostnames rather than allow ``*.githubusercontent.com``
+# so an attacker who finds a way to publish content under the wider
+# umbrella can't redirect us there.
 _ALLOWED_DOWNLOAD_HOSTS = frozenset({
     "github.com",
     "objects.githubusercontent.com",
+    "release-assets.githubusercontent.com",
 })
 
 # --- Bounds & timeouts ------------------------------------------------------
@@ -429,16 +438,18 @@ def download_and_install(
     *,
     progress: Optional[ProgressCb] = None,
     timeout: float = _HTTP_TIMEOUT_SECONDS * 4,  # downloads are slower than API
-) -> bool:
+) -> Tuple[bool, str]:
     """Download the installer, verify its signature, and exec it silently.
 
-    Returns True iff the installer was successfully launched (not whether
-    it succeeded — the installer kills us mid-run, so we never observe
-    its exit code).  Returns False on any failure, leaving no installer
-    process behind.
+    Returns a ``(ok, error)`` pair.  ``ok`` is True iff the installer
+    was successfully launched (not whether it succeeded — the installer
+    kills us mid-run, so we never observe its exit code).  On failure,
+    ``error`` is a short user-facing string identifying which step blew
+    up; the full details land in the log at ERROR level.  On success,
+    ``error`` is the empty string.
     """
     if not isinstance(info, UpdateInfo):
-        return False
+        return False, "Internal error: invalid update info"
 
     work_dir = _make_private_tempdir()
     dest = work_dir / info.asset_name
@@ -449,11 +460,11 @@ def download_and_install(
             timeout=timeout, progress=progress,
         )
         if not ok:
-            return False
+            return False, "Download failed (see log)"
 
         if not _verify_signature(dest):
             _logger.error("Aborting install — signature verification failed")
-            return False
+            return False, "Signature check failed (see log)"
 
         # /S = NSIS silent install; the installer kills the running
         # alpha-osk.exe, runs the old uninstaller, installs the new
@@ -464,10 +475,10 @@ def download_and_install(
             close_fds=True,
             creationflags=getattr(subprocess, "DETACHED_PROCESS", 0),
         )
-        return True
-    except Exception as e:
+        return True, ""
+    except Exception as e:                                # noqa: BLE001
         _logger.error("Install failed: %s", e)
-        return False
+        return False, f"Install failed: {e}"
     # NB: we deliberately don't rmtree work_dir — the installer process
     # is still reading from it.  Windows cleans %TEMP% on its own
     # cadence; leaving the file is fine.

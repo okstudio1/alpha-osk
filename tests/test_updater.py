@@ -81,8 +81,14 @@ class TestDownloadUrlWhitelist:
         )
 
     def test_github_cdn_allowed(self):
+        # Both historical and current CDN hostnames are accepted —
+        # GitHub redirects release-asset downloads to the latter today
+        # but older URLs / mirrors still use the former.
         assert _is_safe_download_url(
             "https://objects.githubusercontent.com/foo/bar.exe"
+        )
+        assert _is_safe_download_url(
+            "https://release-assets.githubusercontent.com/github-production-release-asset/foo?sig=abc"
         )
 
     def test_attacker_host_rejected(self):
@@ -357,8 +363,9 @@ class TestDownloadAndInstall:
             lambda *a, **kw: popen_calls.append((a, kw)),
         )
 
-        ok = updater.download_and_install(info)
+        ok, err = updater.download_and_install(info)
         assert ok is False
+        assert "signature" in err.lower(), f"error should name the failed step, got {err!r}"
         assert popen_calls == [], "installer must NOT launch on bad signature"
 
     def test_launches_only_after_signature_passes(self, monkeypatch, tmp_path):
@@ -379,8 +386,9 @@ class TestDownloadAndInstall:
             lambda *a, **kw: popen_calls.append((a, kw)),
         )
 
-        ok = updater.download_and_install(info)
+        ok, err = updater.download_and_install(info)
         assert ok is True
+        assert err == ""
         assert len(popen_calls) == 1
         cmd = popen_calls[0][0][0]
         # Silent install flag must be present.
@@ -403,6 +411,7 @@ class TestDownloadAndInstall:
             updater, "_verify_signature",
             lambda p: verify_calls.append(p) or True,
         )
-        ok = updater.download_and_install(info)
+        ok, err = updater.download_and_install(info)
         assert ok is False
+        assert "download" in err.lower(), f"error should name the failed step, got {err!r}"
         assert verify_calls == [], "must not verify a failed download"

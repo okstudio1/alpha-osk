@@ -726,16 +726,16 @@ class KeyboardBridge(QObject):
         def _worker(info: UpdateInfo) -> None:
             self.updateInstallStarted.emit()
             try:
-                ok = download_and_install(info)
+                ok, err = download_and_install(info)
             except Exception as e:                       # noqa: BLE001
                 _logger.error("Install raised: %s", e)
                 self.updateInstallFailed.emit(str(e))
                 return
             if not ok:
-                self.updateInstallFailed.emit(
-                    "Update download or signature verification failed. "
-                    "See logs for details."
-                )
+                # err is a short, step-specific message ("Download
+                # failed", "Signature check failed", ...) so the banner
+                # actually tells the user something useful.
+                self.updateInstallFailed.emit(err or "Update failed")
 
         threading.Thread(target=_worker, args=(info,),
                          name="alpha-osk-update-install", daemon=True).start()

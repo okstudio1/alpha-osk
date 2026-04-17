@@ -690,9 +690,16 @@ Window {
                     }
 
                     Button {
-                        text: qsTr("Install")
-                        enabled: !root.updateInstalling && root.updateError === ""
-                        onClicked: keyboard.installUpdate()
+                        // Stays enabled even after a failure — clicking
+                        // again clears the prior error and retries the
+                        // download / signature path so a transient
+                        // network blip is one click away from recovery.
+                        text: root.updateError !== "" ? qsTr("Retry") : qsTr("Install")
+                        enabled: !root.updateInstalling
+                        onClicked: {
+                            root.updateError = ""
+                            keyboard.installUpdate()
+                        }
                     }
                     Button {
                         text: qsTr("Later")
