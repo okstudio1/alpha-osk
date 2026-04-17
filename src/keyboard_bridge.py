@@ -28,6 +28,7 @@ try:
 except ImportError:
     _HAS_AUDIO = False
 
+from .__version__ import __version__ as APP_VERSION
 from .analytics import TypingAnalytics
 from .platform import create_key_synthesizer
 from .platform.base import KeySynthesizerBase
@@ -623,6 +624,10 @@ class KeyboardBridge(QObject):
     winActive = Property(bool, _get_win_active, notify=winActiveChanged)
     currentLayer = Property(str, _get_current_layer, notify=currentLayerChanged)
     synthAvailable = Property(bool, _get_synth_available, constant=True)
+    # Exposed so the Settings panel can show the running version next to
+    # the auto-update controls — easiest sanity-check that an upgrade
+    # actually landed.  Sourced from src/__version__.py at import time.
+    appVersion = Property(str, lambda self: APP_VERSION, constant=True)
 
     # --- Internal ---
 

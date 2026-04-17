@@ -74,8 +74,13 @@ _logger = logging.getLogger("Updater")
 # Anything you change here weakens or relocates the trust anchor.  Treat
 # these constants the same way you'd treat a TLS pin.
 GITHUB_API_URL = (
-    "https://api.github.com/repos/okstudio1/alpha-osk/releases/latest"
+    "https://api.github.com/repos/okstudio1/alpha-osk-releases/releases/latest"
 )
+# The repo above hosts only release binaries.  The application source
+# lives in a *separate, private* repo (``okstudio1/alpha-osk``); private
+# repos return 404 on ``/releases/latest`` to unauthenticated callers,
+# which is exactly what shipping update clients are.  The split keeps
+# the source private without breaking auto-update.
 # SHA1 thumbprint of the OK Studio Inc. EV code-signing certificate.
 # Lowercase, no spaces.  Matches what ``signtool sign /sha1`` uses and
 # what ``Get-AuthenticodeSignature .Thumbprint`` returns (we normalise
@@ -194,8 +199,14 @@ def check_for_update(
     """Hit the Releases API and return an UpdateInfo iff a newer
     properly-shaped release exists.  Returns None on any error — the
     updater path is best-effort and must never crash the app."""
-    if not api_url.startswith("https://api.github.com/"):
-        _logger.error("Refusing non-GitHub API URL: %s", api_url)
+    # Both checks are defensive — at runtime ``api_url`` is the constant
+    # above.  Tests pass the constant explicitly; refusing anything else
+    # stops a future careless override from pointing the updater at an
+    # attacker-controlled host.
+    if not api_url.startswith(
+        "https://api.github.com/repos/okstudio1/alpha-osk-releases/"
+    ):
+        _logger.error("Refusing non-pinned API URL: %s", api_url)
         return None
 
     try:

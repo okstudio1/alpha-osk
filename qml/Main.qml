@@ -1390,6 +1390,7 @@ Window {
             updateStatus: root.updateInstalling
                           ? "checking"
                           : (root.updateAvailable ? "available" : root._lastCheckStatus)
+            appVersion: keyboard ? keyboard.appVersion : ""
 
             onSettingChanged: function(setting, value) {
                 if (setting === "functionRow") {

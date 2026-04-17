@@ -2,9 +2,13 @@
 
 ## Current State
 
-**Implemented in v1.0.3.** Alpha-OSK checks GitHub Releases on startup (3 s after launch) and shows an in-app banner when a newer signed installer is available. Click *Install* and the app downloads the installer, verifies its Authenticode signature against our pinned EV-cert thumbprint, and runs it silently — the NSIS installer kills the running app, runs the previous uninstaller, and installs the new build.
+**Implemented in v1.0.3; updater endpoint corrected in v1.0.5.** Alpha-OSK checks GitHub Releases on startup (3 s after launch) and shows an in-app banner when a newer signed installer is available. Click *Install* and the app downloads the installer, verifies its Authenticode signature against our pinned EV-cert thumbprint, and runs it silently — the NSIS installer kills the running app, runs the previous uninstaller, and installs the new build.
 
 Code lives in `src/updater.py` (network + signature verification), `src/keyboard_bridge.py` (`checkForUpdate` / `installUpdate` / `dismissUpdate` slots, `updateAvailable` / `updateUnavailable` / `updateInstallStarted` / `updateInstallFailed` signals), `qml/Main.qml` (banner + Connections), `qml/components/UnifiedSettingsPanel.qml` (Updates section). Tests in `tests/test_updater.py`.
+
+### Public-vs-private repo split
+
+The source repo (`okstudio1/alpha-osk`) is **private**; release binaries live in a separate **public** repo (`okstudio1/alpha-osk-releases`). The auto-updater queries the public repo's `/releases/latest` endpoint — private repos return 404 to the unauthenticated requests update clients are. v1.0.3 and v1.0.4 shipped with the wrong endpoint hard-coded (the private source repo), so their updater always saw "no update available". v1.0.5 fixes the endpoint; v1.0.3 / v1.0.4 users need one final manual install of v1.0.5 to get on the working updater path.
 
 ## Threat model
 

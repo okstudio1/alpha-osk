@@ -287,10 +287,12 @@ Action types: `char`, `special`, `hotkey`, `text`, `macro`, `launch`, `layout`, 
 
 Implemented in `src/updater.py`. Design doc + threat model at `docs/AUTO_UPDATE.md`.
 
+> ⚠️ **Releases live in a separate public repo** — `okstudio1/alpha-osk-releases`. The source repo (`okstudio1/alpha-osk`) is private; private repos return 404 on `/releases/latest` to unauthenticated callers, which is exactly what update clients are. The split keeps the source private without breaking auto-update. Always cut releases with `gh release create v1.X.Y release/Alpha-OSK-Setup-1.X.Y.exe --repo okstudio1/alpha-osk-releases --title "v1.X.Y" --notes "..."`.
+
 ### Flow
 
 1. App startup — `qml/Main.qml` Component.onCompleted reads `appSettings.savedAutoCheckUpdates` (default on) and starts `updateCheckTimer` (3 s delay so the network call doesn't fight QML init).
-2. `keyboard.checkForUpdate()` slot launches a `threading.Thread` that calls `updater.check_for_update()` against `https://api.github.com/repos/okstudio1/alpha-osk/releases/latest`.
+2. `keyboard.checkForUpdate()` slot launches a `threading.Thread` that calls `updater.check_for_update()` against `https://api.github.com/repos/okstudio1/alpha-osk-releases/releases/latest`.
 3. If the response advertises a strictly higher MAJOR.MINOR.PATCH tag whose installer asset URL is on the host whitelist, bridge emits `updateAvailable(version, asset_name, notes)` and stores the `UpdateInfo` in `self._update_info`.
 4. QML shows the update banner at the top of the keyboard. User clicks "Install" → `keyboard.installUpdate()` → background thread downloads the installer (with byte-cap), **verifies its Authenticode signature against the EV cert thumbprint `fc22b522…`**, then `Popen([dest, "/S"])`. The NSIS installer kills the running app, runs the previous uninstaller, installs the new build.
 
@@ -439,11 +441,16 @@ git tag v1.0.2
 git push origin main --tags
 ```
 
-#### 8. Create GitHub release (optional)
+#### 8. Create GitHub release (in the **public** releases repo)
 
 ```bash
-gh release create v1.0.2 release/Alpha-OSK-Setup-1.0.2.exe --title "v1.0.2" --notes "See CHANGELOG.md"
+gh release create v1.0.2 release/Alpha-OSK-Setup-1.0.2.exe \
+  --repo okstudio1/alpha-osk-releases \
+  --title "v1.0.2" \
+  --notes "See https://github.com/okstudio1/alpha-osk/blob/main/CHANGELOG.md"
 ```
+
+**Important:** the `--repo okstudio1/alpha-osk-releases` flag is mandatory. The source repo is private and the auto-updater can't see private releases. Forgetting `--repo` will create the release in the source repo where end users' updaters won't find it. Tag the source repo (step 7) for changelog/version-history tracking; publish the binaries in the public repo.
 
 ### Signing details
 

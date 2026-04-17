@@ -77,7 +77,7 @@ class TestDownloadUrlWhitelist:
 
     def test_github_com_allowed(self):
         assert _is_safe_download_url(
-            "https://github.com/okstudio1/alpha-osk/releases/download/v1.0.3/Alpha-OSK-Setup-1.0.3.exe"
+            "https://github.com/okstudio1/alpha-osk-releases/releases/download/v1.0.3/Alpha-OSK-Setup-1.0.3.exe"
         )
 
     def test_github_cdn_allowed(self):
@@ -101,7 +101,7 @@ class TestDownloadUrlWhitelist:
     def test_http_rejected(self):
         # No plaintext, even to GitHub.
         assert not _is_safe_download_url(
-            "http://github.com/okstudio1/alpha-osk/releases/download/v1.0.3/Alpha-OSK-Setup-1.0.3.exe"
+            "http://github.com/okstudio1/alpha-osk-releases/releases/download/v1.0.3/Alpha-OSK-Setup-1.0.3.exe"
         )
 
     def test_other_schemes_rejected(self):
@@ -168,7 +168,7 @@ class TestCheckForUpdate:
         mock_urlopen.return_value = _stub_response(_api_response(
             tag="v1.0.3",
             asset_name="Alpha-OSK-Setup-1.0.3.exe",
-            asset_url="https://github.com/okstudio1/alpha-osk/releases/download/v1.0.3/Alpha-OSK-Setup-1.0.3.exe",
+            asset_url="https://github.com/okstudio1/alpha-osk-releases/releases/download/v1.0.3/Alpha-OSK-Setup-1.0.3.exe",
         ))
         info = check_for_update(current_version="1.0.2")
         assert info is not None
@@ -179,7 +179,7 @@ class TestCheckForUpdate:
         mock_urlopen.return_value = _stub_response(_api_response(
             tag="v1.0.2",
             asset_name="Alpha-OSK-Setup-1.0.2.exe",
-            asset_url="https://github.com/okstudio1/alpha-osk/releases/download/v1.0.2/Alpha-OSK-Setup-1.0.2.exe",
+            asset_url="https://github.com/okstudio1/alpha-osk-releases/releases/download/v1.0.2/Alpha-OSK-Setup-1.0.2.exe",
         ))
         assert check_for_update(current_version="1.0.2") is None
 
@@ -188,7 +188,7 @@ class TestCheckForUpdate:
         mock_urlopen.return_value = _stub_response(_api_response(
             tag="v1.0.0",
             asset_name="Alpha-OSK-Setup-1.0.0.exe",
-            asset_url="https://github.com/okstudio1/alpha-osk/releases/download/v1.0.0/Alpha-OSK-Setup-1.0.0.exe",
+            asset_url="https://github.com/okstudio1/alpha-osk-releases/releases/download/v1.0.0/Alpha-OSK-Setup-1.0.0.exe",
         ))
         assert check_for_update(current_version="1.0.2") is None
 
@@ -206,7 +206,7 @@ class TestCheckForUpdate:
         mock_urlopen.return_value = _stub_response(_api_response(
             tag="v1.0.3",
             asset_name="totally-legit.exe",
-            asset_url="https://github.com/okstudio1/alpha-osk/releases/download/v1.0.3/totally-legit.exe",
+            asset_url="https://github.com/okstudio1/alpha-osk-releases/releases/download/v1.0.3/totally-legit.exe",
         ))
         assert check_for_update(current_version="1.0.2") is None
 
@@ -214,7 +214,7 @@ class TestCheckForUpdate:
         mock_urlopen.return_value = _stub_response(_api_response(
             tag="v1.0.3-evil",
             asset_name="Alpha-OSK-Setup-1.0.3.exe",
-            asset_url="https://github.com/okstudio1/alpha-osk/releases/download/v1.0.3/Alpha-OSK-Setup-1.0.3.exe",
+            asset_url="https://github.com/okstudio1/alpha-osk-releases/releases/download/v1.0.3/Alpha-OSK-Setup-1.0.3.exe",
         ))
         assert check_for_update(current_version="1.0.2") is None
 
@@ -241,6 +241,18 @@ class TestCheckForUpdate:
         result = check_for_update(
             current_version="1.0.2",
             api_url="https://evil.example.com/releases/latest",
+        )
+        assert result is None
+        mock_urlopen.assert_not_called()
+
+    def test_refuses_other_github_repo(self, mock_urlopen):
+        # The api_url prefix is pinned to our specific releases repo.
+        # An attacker who could substitute the URL but only to another
+        # *github.com* repo would otherwise be able to swap the upgrade
+        # source for one they control.
+        result = check_for_update(
+            current_version="1.0.2",
+            api_url="https://api.github.com/repos/attacker/alpha-osk-releases/releases/latest",
         )
         assert result is None
         mock_urlopen.assert_not_called()
@@ -330,7 +342,7 @@ class TestDownloadAndInstall:
         # installer must NOT be launched.
         info = UpdateInfo(
             version="1.0.3",
-            download_url="https://github.com/okstudio1/alpha-osk/releases/download/v1.0.3/Alpha-OSK-Setup-1.0.3.exe",
+            download_url="https://github.com/okstudio1/alpha-osk-releases/releases/download/v1.0.3/Alpha-OSK-Setup-1.0.3.exe",
             asset_name="Alpha-OSK-Setup-1.0.3.exe",
             notes="",
         )
@@ -352,7 +364,7 @@ class TestDownloadAndInstall:
     def test_launches_only_after_signature_passes(self, monkeypatch, tmp_path):
         info = UpdateInfo(
             version="1.0.3",
-            download_url="https://github.com/okstudio1/alpha-osk/releases/download/v1.0.3/Alpha-OSK-Setup-1.0.3.exe",
+            download_url="https://github.com/okstudio1/alpha-osk-releases/releases/download/v1.0.3/Alpha-OSK-Setup-1.0.3.exe",
             asset_name="Alpha-OSK-Setup-1.0.3.exe",
             notes="",
         )
@@ -378,7 +390,7 @@ class TestDownloadAndInstall:
     def test_aborts_when_download_fails(self, monkeypatch):
         info = UpdateInfo(
             version="1.0.3",
-            download_url="https://github.com/okstudio1/alpha-osk/releases/download/v1.0.3/Alpha-OSK-Setup-1.0.3.exe",
+            download_url="https://github.com/okstudio1/alpha-osk-releases/releases/download/v1.0.3/Alpha-OSK-Setup-1.0.3.exe",
             asset_name="Alpha-OSK-Setup-1.0.3.exe",
             notes="",
         )

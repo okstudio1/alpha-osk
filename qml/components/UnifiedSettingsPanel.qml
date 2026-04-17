@@ -36,6 +36,9 @@ Item {
     property bool autoCheckUpdates: true
     // "Check now" feedback — set to "checking" / "uptodate" / "" by parent
     property string updateStatus: ""
+    // Running app version, surfaced in the Updates section so a user
+    // (or you, debugging) can confirm what's actually installed.
+    property string appVersion: ""
 
     signal settingChanged(string setting, var value)
     signal checkForUpdatesNowRequested()
@@ -839,6 +842,19 @@ Item {
                     SettingsSection {
                         title: "Updates"
                         Layout.fillWidth: true
+
+                        // Running version — read straight from the bridge
+                        // (src/__version__.py).  First place to look when
+                        // diagnosing "did the auto-update actually apply?"
+                        Text {
+                            Layout.fillWidth: true
+                            color: "#bbb"
+                            font.pixelSize: 12
+                            text: unifiedSettings.appVersion !== ""
+                                  ? "Installed: Alpha-OSK v" + unifiedSettings.appVersion
+                                  : ""
+                            visible: unifiedSettings.appVersion !== ""
+                        }
 
                         SettingsToggle {
                             Layout.fillWidth: true
