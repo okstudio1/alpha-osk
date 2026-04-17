@@ -25,7 +25,7 @@ The updater is the highest-value MITM target in the app — a successful attacke
 | Downgrade attack                                        | Strict semver compare (`is_newer`); equal/older silently refused                                       |
 | Pre-release/garbage tag confusion (`v1.0.3-evil`)       | Regex `^\d+\.\d+\.\d+$` only — pre-release/+build refused                                              |
 | Misnamed asset                                          | Filename pattern locked to `Alpha-OSK-Setup-{version}.exe`                                             |
-| Tag confusion across repos                              | Endpoint hard-pinned to `https://api.github.com/repos/okstudio1/alpha-osk/releases/latest`            |
+| Tag confusion across repos                              | Endpoint hard-pinned to `https://api.github.com/repos/okstudio1/alpha-osk-releases/releases/latest` and the `api_url` prefix is checked at call time |
 | QML-side URL injection                                  | QML never sees the URL — it only triggers `installUpdate()`; the bridge holds `self._update_info`     |
 | Release-notes injection                                 | `_sanitize_notes` strips C0 controls and caps length to 4 KB                                          |
 
@@ -39,10 +39,11 @@ The simplest path that leverages existing infrastructure.
 
 ### How It Works
 
-1. On startup (and optionally on a daily timer), the app calls the GitHub Releases API:
+1. On startup (3 s after launch, on a background thread), the app calls the GitHub Releases API:
    ```
-   GET https://api.github.com/repos/okstudio1/alpha-osk/releases/latest
+   GET https://api.github.com/repos/okstudio1/alpha-osk-releases/releases/latest
    ```
+   This is the **public release-binaries** repo; the source repo (`okstudio1/alpha-osk`) is private and would 404 unauthenticated callers.
 2. Compare the release tag (e.g., `v1.0.2`) against the running version.
 3. If newer, show a notification in the system tray: "Alpha-OSK v1.0.2 available — click to update."
 4. User clicks → app downloads the installer `.exe` from the release assets to `%TEMP%`.
@@ -60,7 +61,7 @@ import tempfile
 import logging
 from pathlib import Path
 
-GITHUB_API = "https://api.github.com/repos/okstudio1/alpha-osk/releases/latest"
+GITHUB_API = "https://api.github.com/repos/okstudio1/alpha-osk-releases/releases/latest"
 CURRENT_VERSION = "1.0.1"  # or read from a version file
 
 def check_for_update() -> dict | None:
@@ -146,7 +147,7 @@ PackageVersion: 1.0.1
 InstallerType: nsis
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/okstudio1/alpha-osk/releases/download/v1.0.1/Alpha-OSK-Setup-1.0.1.exe
+    InstallerUrl: https://github.com/okstudio1/alpha-osk-releases/releases/download/v1.0.1/Alpha-OSK-Setup-1.0.1.exe
     InstallerSha256: <sha256>
     InstallerSwitches:
       Silent: /S
