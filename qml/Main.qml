@@ -9,7 +9,7 @@ Window {
     id: root
     visible: true
     // Default size gives keyW ≈ 56px; user can freely resize and keys scale
-    width: 880
+    width: 940
     height: outerLayout.implicitHeight + 60  // Extra height for title bar + bottom padding
     minimumWidth: Math.round(30 * totalKeyUnits + layoutFixedPixels)  // keyW ≈ 30px — smallest usable touch target
     minimumHeight: 200
@@ -95,7 +95,7 @@ Window {
         root.layoutRows = keyboard ? keyboard.getLayoutRows() : []
 
         // Set initial width accounting for saved panel state
-        var w = 880
+        var w = 940
         if (root.showNavigation) w += 200
         if (root.showNumpad) w += 220
         root.width = w
@@ -242,14 +242,14 @@ Window {
     property real keySpacing: Math.max(1, Math.floor(root.width * 0.0025))
 
     // Total key-width units across all visible sections:
-    // Widest row is the number row: Esc(1) + `(1) + 10 nums + -(1) + Backspace(1.5) = 14.5 units
+    // Widest row is the number row (15 keys): Esc(1) + `(1) + 10 nums + -(1) + =(1) + Backspace(1.5) = 15.5 units
     // Nav panel: 3 keys × 0.9 = 2.7 units;  Numpad: 4 keys × 0.9 = 3.6 units
-    property real totalKeyUnits: 14.5
+    property real totalKeyUnits: 15.5
         + (showNavigation ? 2.7 : 0)
         + (showNumpad ? 3.6 : 0)
 
-    // Fixed-pixel overhead: margins(8×2=16) + number-row gaps(14×keySpacing)
-    // + per-panel: separator(1) + panel gaps + 2×RowLayout spacing(6)
+    // Fixed-pixel overhead: margins(8×2=16) + number-row gaps(15 keys → 14×keySpacing)
+    // + per-panel: separator(1) + 2 inner grid gaps + 2×RowLayout spacing(6)
     property real layoutFixedPixels: 16 + 14 * keySpacing
         + (showNavigation ? 1 + 2 * keySpacing + 12 : 0)
         + (showNumpad ? 1 + 3 * keySpacing + 12 : 0)
