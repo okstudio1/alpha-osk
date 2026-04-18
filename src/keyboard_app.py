@@ -283,13 +283,16 @@ def main() -> int:
             root.raise_()
 
     def _minimize_window() -> None:
-        """Send the window to the Windows taskbar minimized state.
+        """Hide the window on double-click, matching the in-window − button.
 
-        Matches the in-window ``−`` button (``Window.Minimized`` in QML).
-        Triggered by a double-click on the tray icon — the single-click
-        path still toggles show/hide.
+        The keyboard is a Qt.Tool + WindowStaysOnTopHint window with no
+        taskbar entry, so ``showMinimized()`` no-ops on most X11 WMs and
+        produces an orphan thumbnail on Windows toolwindows. ``hide()``
+        is the cross-platform behaviour that actually matches what the
+        user expects; the tray icon's single-click toggle is how they
+        bring it back.
         """
-        root.showMinimized()
+        root.hide()
 
     # Tray single-click vs. double-click: we want a single click to
     # toggle show/hide (current behaviour) and a double click to

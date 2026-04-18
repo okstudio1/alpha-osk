@@ -615,7 +615,12 @@ Window {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.visibility = Window.Minimized
+                        // Qt.Tool + WindowStaysOnTopHint windows have no
+                        // taskbar entry, so Window.Minimized silently
+                        // no-ops on most X11 WMs (GNOME/KDE). Hide
+                        // instead — the tray icon's single-click toggle
+                        // is the canonical way to bring the OSK back.
+                        onClicked: root.hide()
                     }
                 }
                 
