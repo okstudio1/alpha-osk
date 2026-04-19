@@ -120,7 +120,10 @@ class _LinuxATSPIDetector:
     def __init__(self) -> None:
         self.available = False
         self._is_password = False
-        self._Atspi = None  # type: ignore[assignment]
+        # Declared as Any because the gi.repository module is resolved
+        # at runtime only — mypy sees the None fallback and would flag
+        # every attribute access as an error otherwise.
+        self._Atspi: Any = None
 
         try:
             import gi
