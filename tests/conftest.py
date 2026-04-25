@@ -33,13 +33,16 @@ def sample_corpus() -> str:
 
 
 @pytest.fixture
-def small_dictionary() -> set[str]:
-    """Small word dictionary for testing fuzzy recognition."""
+def small_dictionary() -> dict[str, float]:
+    """Small word→frequency map for testing fuzzy recognition."""
     return {
-        "the", "quick", "brown", "fox", "jumps", "over", "lazy", "dog",
-        "cat", "sat", "mat", "hello", "help", "please", "thank", "thanks",
-        "want", "need", "going", "today", "weather", "nice", "work",
-        "store", "finish", "doing", "much", "your", "very", "with",
-        "this", "that", "have", "from", "they", "will", "would",
-        "there", "their", "what", "about", "which", "could", "should",
+        word: 1.0
+        for word in (
+            "the", "quick", "brown", "fox", "jumps", "over", "lazy", "dog",
+            "cat", "sat", "mat", "hello", "help", "please", "thank", "thanks",
+            "want", "need", "going", "today", "weather", "nice", "work",
+            "store", "finish", "doing", "much", "your", "very", "with",
+            "this", "that", "have", "from", "they", "will", "would",
+            "there", "their", "what", "about", "which", "could", "should",
+        )
     }

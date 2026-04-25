@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Tuple
 
 _logger = logging.getLogger("FuzzyRecognizer")
 
@@ -107,16 +107,22 @@ class SpatialKeyModel:
 
 
 class FuzzyWordGenerator:
-    """Expands a typed sequence into spatial-neighbour interpretations."""
+    """Expands a typed sequence into spatial-neighbour interpretations.
+
+    The dictionary is a mapping ``{word: frequency}`` so candidate
+    ranking can multiply spatial probability by ``log(freq + 1)``.
+    Without that, "the" and "tha" tied on a 3-letter spatial match;
+    with it, common words win the way Gboard ranks them.
+    """
 
     def __init__(
         self,
         spatial_model: Optional[SpatialKeyModel] = None,
-        dictionary: Optional[Set[str]] = None,
+        dictionary: Optional[Dict[str, float]] = None,
         max_candidates: int = 50,
     ):
         self.spatial_model = spatial_model or SpatialKeyModel()
-        self.dictionary = dictionary or set()
+        self.dictionary: Dict[str, float] = dict(dictionary) if dictionary else {}
         self.max_candidates = max_candidates
 
     def generate_candidates(
@@ -129,9 +135,16 @@ class FuzzyWordGenerator:
             return []
 
         fuzzy_sequences = self._generate_fuzzy_sequences(typed_sequence, min_prob)
-        candidates = [
-            (seq, prob) for seq, prob in fuzzy_sequences if seq in self.dictionary
-        ]
+        candidates: List[Tuple[str, float]] = []
+        for seq, prob in fuzzy_sequences:
+            freq = self.dictionary.get(seq)
+            if freq is None:
+                continue
+            # Multiply spatial probability by log-frequency so a
+            # high-frequency word with a slightly worse spatial match
+            # still beats a rare word with a perfect spatial match.
+            score = prob * math.log1p(freq)
+            candidates.append((seq, score))
         candidates.sort(key=lambda x: -x[1])
         return candidates[:self.max_candidates]
 
@@ -164,6 +177,12 @@ class FuzzyWordGenerator:
         return candidates[0] if candidates else None
 
     def load_dictionary(self, path) -> bool:
+        """Load a flat dictionary file (one word per line, optional count).
+
+        The fallback frequency for entries without a count is 1.0 — the
+        n-gram unigram counts get folded in separately by the hybrid
+        predictor (see ``set_frequencies``).
+        """
         from pathlib import Path
 
         path = Path(path)
@@ -172,15 +191,33 @@ class FuzzyWordGenerator:
         try:
             with open(path) as f:
                 for line in f:
-                    word = line.strip().lower()
-                    if word and not word.startswith("#"):
-                        # Frequency format: ``word count`` — keep the word.
-                        self.dictionary.add(word.split()[0])
+                    line = line.strip().lower()
+                    if not line or line.startswith("#"):
+                        continue
+                    parts = line.split()
+                    word = parts[0]
+                    freq = float(parts[1]) if len(parts) > 1 else 1.0
+                    # Don't overwrite a higher freq we already loaded.
+                    if freq > self.dictionary.get(word, 0.0):
+                        self.dictionary[word] = freq
             _logger.info("Fuzzy dictionary loaded: %d words", len(self.dictionary))
             return True
         except OSError as e:
             _logger.error("Failed to load dictionary: %s", e)
             return False
+
+    def set_frequencies(self, freqs: Dict[str, float]) -> None:
+        """Merge the given word→frequency map into the dictionary.
+
+        Used to inject n-gram unigram counts so candidate ranking
+        prefers common words over rare ones.  Words already in the
+        dictionary keep the larger of the two frequencies; new words
+        are added.
+        """
+        for word, freq in freqs.items():
+            word = word.lower()
+            if freq > self.dictionary.get(word, 0.0):
+                self.dictionary[word] = float(freq)
 
 
 class FuzzyRecognizer:
@@ -190,13 +227,13 @@ class FuzzyRecognizer:
     confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD
     prediction_weight: float = DEFAULT_PREDICTION_WEIGHT
 
-    def __init__(self, dictionary: Optional[Set[str]] = None):
+    def __init__(self, dictionary: Optional[Dict[str, float]] = None):
         self.spatial_model = SpatialKeyModel(
             uncertainty_radius=self.spatial_uncertainty,
         )
         self.word_generator = FuzzyWordGenerator(
             spatial_model=self.spatial_model,
-            dictionary=dictionary or set(),
+            dictionary=dictionary,
         )
 
     def get_fuzzy_predictions(
@@ -226,6 +263,10 @@ class FuzzyRecognizer:
 
     def load_dictionary(self, path) -> bool:
         return self.word_generator.load_dictionary(path)
+
+    def set_frequencies(self, freqs: Dict[str, float]) -> None:
+        """Merge n-gram-style frequency counts into the fuzzy dictionary."""
+        self.word_generator.set_frequencies(freqs)
 
     def get_stats(self) -> dict:
         return {

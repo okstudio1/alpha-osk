@@ -94,10 +94,18 @@ class HybridPredictor(QObject):
         self._fuzzy.load_dictionary(
             Path(__file__).parent.parent.parent / "data" / "base_dictionary.txt"
         )
+        # Inject n-gram unigram frequencies so candidate ranking
+        # prefers common words ("the") over rare ones ("tha").  Done
+        # before the training corpus runs since we want this snapshot
+        # at startup; learning during a session updates the n-gram
+        # model directly and re-injects via _refresh_fuzzy_frequencies.
+        self._fuzzy.set_frequencies(self._ngram.unigrams)
         _logger.info("Fuzzy recognizer initialized")
 
         # Load training corpus for better predictions
         self._load_training_corpus()
+        # Re-inject after corpus training expanded the unigram counts.
+        self._fuzzy.set_frequencies(self._ngram.unigrams)
 
         # Initialize vocabulary pack manager
         self._pack_manager = PackManager()
