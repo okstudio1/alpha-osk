@@ -1579,9 +1579,6 @@ class KeyboardBridge(QObject):
     def _get_prediction_count(self) -> int:
         return getattr(self, '_prediction_count', 5)
 
-    def _get_current_profile(self) -> str:
-        return self._predictor.get_current_profile()
-
     predictions = Property(list, _get_predictions, notify=predictionsChanged)
     llmEnabled = Property(bool, _get_llm_enabled, notify=llmEnabledChanged)
     llmAvailable = Property(bool, _get_llm_available, notify=llmAvailableChanged)

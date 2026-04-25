@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Mapping, Optional, Tuple
 
 _logger = logging.getLogger("FuzzyRecognizer")
 
@@ -276,13 +276,17 @@ class FuzzyWordGenerator:
             _logger.error("Failed to load dictionary: %s", e)
             return False
 
-    def set_frequencies(self, freqs: Dict[str, float]) -> None:
+    def set_frequencies(self, freqs: Mapping[str, float]) -> None:
         """Merge the given word→frequency map into the dictionary.
 
         Used to inject n-gram unigram counts so candidate ranking
         prefers common words over rare ones.  Words already in the
         dictionary keep the larger of the two frequencies; new words
         are added.
+
+        Accepts ``Mapping`` (covariant value type) so a
+        ``dict[str, int]`` from the n-gram model can be passed
+        directly without a coercion at every call site.
         """
         for word, freq in freqs.items():
             word = word.lower()
@@ -334,7 +338,7 @@ class FuzzyRecognizer:
     def load_dictionary(self, path) -> bool:
         return self.word_generator.load_dictionary(path)
 
-    def set_frequencies(self, freqs: Dict[str, float]) -> None:
+    def set_frequencies(self, freqs: Mapping[str, float]) -> None:
         """Merge n-gram-style frequency counts into the fuzzy dictionary."""
         self.word_generator.set_frequencies(freqs)
 

@@ -213,7 +213,7 @@ class TestWindowsReplaceText:
         ]]
 
     def test_non_terminal_uses_shift_left_path(self):
-        from src.platform.windows import VK_SHIFT, VK_LEFT
+        from src.platform.windows import VK_LEFT, VK_SHIFT
         synth, captured = self._make_synth("Chrome_WidgetWin_1")
         synth.replace_text(2, "hi")
         assert captured == [[
