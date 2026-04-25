@@ -380,20 +380,39 @@ class TestDownloadAndInstall:
             lambda *a, **kw: True,
         )
         monkeypatch.setattr(updater, "_verify_signature", lambda p: True)
-        popen_calls = []
-        monkeypatch.setattr(
-            updater.subprocess, "Popen",
-            lambda *a, **kw: popen_calls.append((a, kw)),
-        )
+        launch_calls = []
+
+        def fake_launch(dest):
+            launch_calls.append(dest)
+            return True, ""
+
+        monkeypatch.setattr(updater, "_launch_installer", fake_launch)
 
         ok, err = updater.download_and_install(info)
         assert ok is True
         assert err == ""
-        assert len(popen_calls) == 1
-        cmd = popen_calls[0][0][0]
-        # Silent install flag must be present.
-        assert cmd[-1] == "/S"
-        assert cmd[0].endswith(info.asset_name)
+        assert len(launch_calls) == 1
+        # The launch helper receives the path to the downloaded asset.
+        assert str(launch_calls[0]).endswith(info.asset_name)
+
+    def test_propagates_launch_failure(self, monkeypatch):
+        info = UpdateInfo(
+            version="1.0.3",
+            download_url="https://github.com/okstudio1/alpha-osk-releases/releases/download/v1.0.3/Alpha-OSK-Setup-1.0.3.exe",
+            asset_name="Alpha-OSK-Setup-1.0.3.exe",
+            notes="",
+        )
+        monkeypatch.setattr(updater, "_download_with_cap", lambda *a, **kw: True)
+        monkeypatch.setattr(updater, "_verify_signature", lambda p: True)
+        # Simulate the user declining the UAC prompt.
+        monkeypatch.setattr(
+            updater, "_launch_installer",
+            lambda dest: (False, "Update cancelled at UAC prompt"),
+        )
+
+        ok, err = updater.download_and_install(info)
+        assert ok is False
+        assert "UAC" in err
 
     def test_aborts_when_download_fails(self, monkeypatch):
         info = UpdateInfo(

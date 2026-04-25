@@ -517,7 +517,115 @@ Window {
                 anchors.rightMargin: 8
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 6
-                
+
+                // Update-available indicator (only visible when an update
+                // is pending). Click opens a small popup with version
+                // info and Install / Later buttons. Replaces the older
+                // full-width banner — taking up an OSK row for a passive
+                // notification was too much screen real estate.
+                Rectangle {
+                    id: updateIcon
+                    width: 28
+                    height: 24
+                    radius: 4
+                    visible: root.updateAvailable
+                    color: updateBtnArea.containsMouse ? "#444" : "transparent"
+                    border.color: root.updateError !== "" ? "#c33" : root.themeAccent
+                    border.width: 1
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: root.updateInstalling ? "…" : "↓"
+                        font.pixelSize: 14
+                        font.bold: true
+                        color: root.updateError !== "" ? "#c33" : root.themeAccent
+                    }
+
+                    MouseArea {
+                        id: updateBtnArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: updatePopup.open()
+                    }
+
+                    Popup {
+                        id: updatePopup
+                        // Anchor the popup's right edge to the icon's
+                        // right edge so it hangs down-and-to-the-left
+                        // and never overflows the window's right side.
+                        x: parent.width - width
+                        y: parent.height + 4
+                        width: 260
+                        // Bumps with content so we don't need explicit height math.
+                        padding: 12
+                        modal: false
+                        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
+
+                        background: Rectangle {
+                            color: root.themeBackground
+                            border.color: root.themeAccent
+                            border.width: 1
+                            radius: 6
+                        }
+
+                        contentItem: ColumnLayout {
+                            spacing: 8
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: root.updateError !== ""
+                                      ? qsTr("Update failed")
+                                      : (root.updateInstalling
+                                         ? qsTr("Installing v%1…").arg(root.updateVersion)
+                                         : qsTr("Alpha-OSK v%1 available").arg(root.updateVersion))
+                                color: root.themeTextColor
+                                font.pixelSize: 14
+                                font.bold: true
+                                wrapMode: Text.WordWrap
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: root.updateError !== ""
+                                      ? root.updateError
+                                      : qsTr("Installing will close and relaunch the app.")
+                                color: Qt.darker(root.themeTextColor, 1.4)
+                                font.pixelSize: 11
+                                wrapMode: Text.WordWrap
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Layout.topMargin: 4
+                                spacing: 6
+
+                                Item { Layout.fillWidth: true }
+
+                                Button {
+                                    text: root.updateError !== "" ? qsTr("Retry") : qsTr("Install")
+                                    enabled: !root.updateInstalling
+                                    onClicked: {
+                                        root.updateError = ""
+                                        keyboard.installUpdate()
+                                        updatePopup.close()
+                                    }
+                                }
+                                Button {
+                                    text: qsTr("Later")
+                                    enabled: !root.updateInstalling
+                                    onClicked: {
+                                        keyboard.dismissUpdate()
+                                        root.updateAvailable = false
+                                        root.updateError = ""
+                                        updatePopup.close()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Privacy mode toggle (play/pause learning)
                 Rectangle {
                     width: 28
@@ -657,66 +765,11 @@ Window {
             spacing: 0
 
             // ===== Update Banner =====
-            // Visible iff the bridge announced a signed newer release.
-            // Action buttons round-trip through the bridge — the QML
-            // never sees the download URL, so a compromised QML can't
-            // substitute one (see src/updater.py threat model).
-            Rectangle {
-                id: updateBanner
-                Layout.fillWidth: true
-                Layout.preferredHeight: root.updateAvailable ? 36 : 0
-                Layout.bottomMargin: root.updateAvailable ? 4 : 0
-                clip: true
-                radius: 6
-                color: Qt.rgba(root.themeAccent.r, root.themeAccent.g,
-                               root.themeAccent.b, 0.18)
-                border.color: root.themeAccent
-                border.width: 1
-                visible: root.updateAvailable
-
-                Behavior on Layout.preferredHeight { NumberAnimation { duration: 150 } }
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 10
-                    anchors.rightMargin: 6
-                    spacing: 8
-
-                    Text {
-                        Layout.fillWidth: true
-                        elide: Text.ElideRight
-                        color: root.themeTextColor
-                        font.pixelSize: 13
-                        text: root.updateInstalling
-                              ? qsTr("Installing v%1…").arg(root.updateVersion)
-                              : (root.updateError !== ""
-                                 ? qsTr("Update failed: %1").arg(root.updateError)
-                                 : qsTr("Alpha-OSK v%1 available — install will close + relaunch the app.").arg(root.updateVersion))
-                    }
-
-                    Button {
-                        // Stays enabled even after a failure — clicking
-                        // again clears the prior error and retries the
-                        // download / signature path so a transient
-                        // network blip is one click away from recovery.
-                        text: root.updateError !== "" ? qsTr("Retry") : qsTr("Install")
-                        enabled: !root.updateInstalling
-                        onClicked: {
-                            root.updateError = ""
-                            keyboard.installUpdate()
-                        }
-                    }
-                    Button {
-                        text: qsTr("Later")
-                        enabled: !root.updateInstalling
-                        onClicked: {
-                            keyboard.dismissUpdate()
-                            root.updateAvailable = false
-                            root.updateError = ""
-                        }
-                    }
-                }
-            }
+            // The update notification used to live here as a full-width
+            // banner. It's now a small ↓ icon in the title bar (next to
+            // the privacy toggle) that opens a popup; see updateIcon
+            // around line 521. Comment retained as a breadcrumb for
+            // future "where did the banner go" debugging.
 
             // ===== Prediction Bar (spans full width including nav/numpad) =====
             Item {

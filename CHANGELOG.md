@@ -4,6 +4,16 @@ All notable changes to Alpha-OSK are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.10] — 2026-04-25
+
+Auto-updater finally works end-to-end on Windows, plus a UI cleanup.
+
+### Fixed
+- **Auto-update install step now triggers UAC.** `subprocess.Popen([installer, "/S"])` was failing with `WinError 740: The requested operation requires elevation` — Windows refuses to launch a manifest-elevated process from a non-elevated parent without an explicit `runas`. Replaced with `ctypes.windll.shell32.ShellExecuteW(None, "runas", installer, "/S", None, SW_SHOWNORMAL)`, which surfaces the UAC consent prompt; if the user accepts, the installer launches elevated and `/S` runs it silently from there. If the user declines, we surface "Update cancelled at UAC prompt" instead of a generic failure. **v1.0.5 / v1.0.6 / v1.0.7 / v1.0.8 / v1.0.9 users have to install v1.0.10 by hand once** because their auto-updater can't elevate; auto-update works for every release after that. Pulled the launch into a `_launch_installer` helper so tests can mock the seam without faking `ctypes`.
+
+### Changed
+- **Update notification is a title-bar icon, not a full-width banner.** The banner ate a row of OSK real estate for a passive notification — replaced with a small ↓ icon next to the play/privacy toggle that opens a popup with version info and Install / Later buttons. Icon turns red and shows the failure reason inline if a previous install attempt failed (e.g. UAC declined). Popup uses `Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent` so OSK keystrokes don't dismiss it.
+
 ## [1.0.9] — 2026-04-25
 
 Fuzzy / autocorrect overhaul plus a Windows-terminal fix for prediction-pill replacement.

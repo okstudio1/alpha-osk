@@ -435,6 +435,53 @@ def _make_private_tempdir() -> Path:
     return d
 
 
+def _launch_installer(dest: Path) -> Tuple[bool, str]:
+    """Spawn the signed installer with admin elevation.
+
+    The NSIS installer needs admin to write to ``C:\\Program Files``.
+    ``subprocess.Popen`` doesn't honour the manifest's
+    ``RequestExecutionLevel admin`` — Windows refuses with
+    ``ERROR_ELEVATION_REQUIRED`` (WinError 740).  ``ShellExecuteW`` with
+    the ``runas`` verb explicitly requests elevation, which surfaces
+    the UAC consent prompt; if the user accepts, the installer
+    launches elevated and ``/S`` runs it silently from there.
+
+    Returns ``(ok, error_msg)``.  Pulled out of ``download_and_install``
+    so tests can monkey-patch a single seam without faking ctypes.
+    """
+    if sys.platform == "win32":
+        import ctypes
+
+        SW_SHOWNORMAL = 1
+        SE_ERR_ACCESSDENIED = 5  # User cancelled the UAC dialog.
+        shell32 = ctypes.windll.shell32  # type: ignore[attr-defined]
+        ret = shell32.ShellExecuteW(
+            None,                # parent hwnd — not tied to a window
+            "runas",             # verb: trigger UAC elevation
+            str(dest),           # installer path
+            "/S",                # silent flag (NSIS)
+            None,                # working directory
+            SW_SHOWNORMAL,
+        )
+        # ShellExecuteW returns >32 on success.
+        if ret <= 32:
+            if ret == SE_ERR_ACCESSDENIED:
+                _logger.info("User declined UAC elevation prompt")
+                return False, "Update cancelled at UAC prompt"
+            _logger.error("ShellExecuteW failed with code %d", ret)
+            return False, "Install launch failed (see log)"
+        return True, ""
+
+    # Non-Windows path — kept for tests/dev shells; production
+    # release pipeline is Windows-only since Authenticode is.
+    subprocess.Popen(
+        [str(dest), "/S"],
+        close_fds=True,
+        creationflags=getattr(subprocess, "DETACHED_PROCESS", 0),
+    )
+    return True, ""
+
+
 def download_and_install(
     info: UpdateInfo,
     *,
@@ -472,11 +519,9 @@ def download_and_install(
         # alpha-osk.exe, runs the old uninstaller, installs the new
         # build, and (per installer.nsh) optionally relaunches.
         _logger.info("Launching signed installer: %s", dest)
-        subprocess.Popen(
-            [str(dest), "/S"],
-            close_fds=True,
-            creationflags=getattr(subprocess, "DETACHED_PROCESS", 0),
-        )
+        ok, err = _launch_installer(dest)
+        if not ok:
+            return False, err
         return True, ""
     except Exception as e:                                # noqa: BLE001
         _logger.error("Install failed: %s", e)
