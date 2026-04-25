@@ -1118,31 +1118,6 @@ class KeyboardBridge(QObject):
             self._debug_log = self._debug_log[-100:]
         self.debugLogChanged.emit(self._debug_log)
 
-    # --- Accessibility Profile Management ---
-
-    @Slot(result=list)
-    def getAccessibilityProfiles(self) -> List[str]:
-        """Get list of available accessibility profile names."""
-        return self._predictor.get_accessibility_profiles()
-
-    @Slot(result=str)
-    def getCurrentProfile(self) -> str:
-        """Get current accessibility profile name."""
-        return self._predictor.get_current_profile()
-
-    @Slot(str, result=bool)
-    def setAccessibilityProfile(self, profile_name: str) -> bool:
-        """
-        Set accessibility profile for fuzzy recognition.
-
-        Profiles: precise, normal, mild_tremor, moderate_tremor,
-                  severe_tremor, limited_mobility
-        """
-        result = self._predictor.set_accessibility_profile(profile_name)
-        if result:
-            self._add_debug_log(f"Accessibility profile: {profile_name}")
-        return result
-
     @Slot(str, result=str)
     def checkAutocorrect(self, typed_word: str) -> str:
         """

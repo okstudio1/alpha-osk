@@ -431,24 +431,6 @@ class TestDebugLog:
         assert len(bridge._debug_log) == 0
 
 
-class TestAccessibilityProfile:
-    """Profile management via bridge."""
-
-    def test_get_profiles(self, bridge: KeyboardBridge):
-        profiles = bridge.getAccessibilityProfiles()
-        assert "normal" in profiles
-
-    def test_set_profile(self, bridge: KeyboardBridge):
-        assert bridge.setAccessibilityProfile("mild_tremor")
-
-    def test_set_invalid_profile(self, bridge: KeyboardBridge):
-        assert not bridge.setAccessibilityProfile("bogus")
-
-    def test_get_current_profile(self, bridge: KeyboardBridge):
-        profile = bridge.getCurrentProfile()
-        assert isinstance(profile, str)
-
-
 class TestSentenceLearning:
     """Sentence-level learning from typing."""
 

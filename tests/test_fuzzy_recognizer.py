@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from src.prediction.fuzzy_recognizer import (
-    PROFILES,
+    DEFAULT_CONFIDENCE_THRESHOLD,
+    DEFAULT_PREDICTION_WEIGHT,
+    DEFAULT_SPATIAL_UNCERTAINTY,
     QWERTY_POSITIONS,
-    AccessibilityProfile,
     FuzzyRecognizer,
     FuzzyWordGenerator,
     SpatialKeyModel,
@@ -30,41 +31,19 @@ class TestQWERTYLayout:
             assert col >= 0, f"Key {key} has negative col {col}"
 
 
-class TestAccessibilityProfiles:
-    """Profile configuration and factory methods."""
+class TestDefaults:
+    """The hardcoded constants that replaced the profile system."""
 
-    def test_all_profiles_exist(self):
-        expected = {"precise", "normal", "mild_tremor", "moderate_tremor",
-                    "severe_tremor", "limited_mobility"}
-        assert set(PROFILES.keys()) == expected
+    def test_spatial_uncertainty_is_generous(self):
+        # Larger than the original "Normal" profile's 1.0 — covers
+        # diagonal neighbours so a near-miss surfaces the right word.
+        assert DEFAULT_SPATIAL_UNCERTAINTY >= 1.2
 
-    def test_precise_has_lowest_uncertainty(self):
-        precise = AccessibilityProfile.precise()
-        normal = AccessibilityProfile.normal()
-        assert precise.spatial_uncertainty < normal.spatial_uncertainty
+    def test_confidence_threshold_in_sane_range(self):
+        assert 0.5 <= DEFAULT_CONFIDENCE_THRESHOLD <= 0.9
 
-    def test_severe_tremor_has_highest_uncertainty(self):
-        severe = AccessibilityProfile.severe_tremor()
-        for name, profile in PROFILES.items():
-            if name != "severe_tremor":
-                assert severe.spatial_uncertainty >= profile.spatial_uncertainty
-
-    def test_precise_disables_autocorrect(self):
-        assert not AccessibilityProfile.precise().autocorrect_enabled
-
-    def test_normal_enables_autocorrect(self):
-        assert AccessibilityProfile.normal().autocorrect_enabled
-
-    def test_profile_confidence_thresholds_decrease_with_severity(self):
-        profiles = [
-            AccessibilityProfile.precise(),
-            AccessibilityProfile.normal(),
-            AccessibilityProfile.mild_tremor(),
-            AccessibilityProfile.moderate_tremor(),
-            AccessibilityProfile.severe_tremor(),
-        ]
-        for i in range(len(profiles) - 1):
-            assert profiles[i].confidence_threshold >= profiles[i + 1].confidence_threshold
+    def test_prediction_weight_in_sane_range(self):
+        assert 0.3 <= DEFAULT_PREDICTION_WEIGHT <= 0.9
 
 
 class TestSpatialKeyModel:
@@ -181,30 +160,15 @@ class TestFuzzyWordGenerator:
 class TestFuzzyRecognizer:
     """Main fuzzy recognizer interface."""
 
-    def test_default_profile_is_normal(self):
+    def test_uses_default_constants(self):
         rec = FuzzyRecognizer()
-        assert rec.profile.name == "Normal"
+        assert rec.spatial_uncertainty == DEFAULT_SPATIAL_UNCERTAINTY
+        assert rec.confidence_threshold == DEFAULT_CONFIDENCE_THRESHOLD
+        assert rec.prediction_weight == DEFAULT_PREDICTION_WEIGHT
 
-    def test_set_profile_valid(self):
+    def test_spatial_model_uses_default_radius(self):
         rec = FuzzyRecognizer()
-        assert rec.set_profile("mild_tremor")
-        assert rec.profile.name == "Mild Tremor"
-
-    def test_set_profile_invalid(self):
-        rec = FuzzyRecognizer()
-        assert not rec.set_profile("nonexistent_profile")
-
-    def test_set_profile_updates_spatial_model(self):
-        rec = FuzzyRecognizer()
-        rec.set_profile("severe_tremor")
-        expected = AccessibilityProfile.severe_tremor().spatial_uncertainty
-        assert rec.spatial_model.uncertainty_radius == expected
-
-    def test_get_profile_names(self):
-        rec = FuzzyRecognizer()
-        names = rec.get_profile_names()
-        assert "normal" in names
-        assert "mild_tremor" in names
+        assert rec.spatial_model.uncertainty_radius == DEFAULT_SPATIAL_UNCERTAINTY
 
     def test_get_key_alternatives(self):
         rec = FuzzyRecognizer()
@@ -212,23 +176,10 @@ class TestFuzzyRecognizer:
         assert isinstance(alts, dict)
         assert "f" in alts
 
-    def test_autocorrect_disabled_in_precise(self, small_dictionary: set):
-        rec = FuzzyRecognizer(
-            profile=AccessibilityProfile.precise(),
-            dictionary=small_dictionary,
-        )
-        # Precise profile has autocorrect disabled
-        assert rec.should_autocorrect("rhe") is None
-
-    def test_autocorrect_enabled_in_normal(self, small_dictionary: set):
-        rec = FuzzyRecognizer(
-            profile=AccessibilityProfile.normal(),
-            dictionary=small_dictionary,
-        )
-        # May or may not correct, but should not crash
-        result = rec.should_autocorrect("the")
-        # "the" is valid, so no correction
-        assert result is None
+    def test_autocorrect_returns_none_for_valid_word(self, small_dictionary: set):
+        rec = FuzzyRecognizer(dictionary=small_dictionary)
+        # "the" is valid → no correction.
+        assert rec.should_autocorrect("the") is None
 
     def test_get_fuzzy_predictions_empty_text(self):
         rec = FuzzyRecognizer()
@@ -242,6 +193,7 @@ class TestFuzzyRecognizer:
     def test_get_stats(self):
         rec = FuzzyRecognizer()
         stats = rec.get_stats()
-        assert "profile" in stats
         assert "spatial_uncertainty" in stats
+        assert "confidence_threshold" in stats
+        assert "prediction_weight" in stats
         assert "dictionary_size" in stats

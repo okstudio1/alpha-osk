@@ -35,7 +35,7 @@ opt-in).  `predict()` calls them in turn, then hands off to
 is_next_word   = context ends with " "
 ngram_weight   = 3.0  if is_next_word else 1.0
 ppm_weight     = 0.3  if is_next_word else 0.8
-fuzzy_weight   = profile.prediction_weight   # 0.3–0.8 by profile
+fuzzy_weight   = FuzzyRecognizer.prediction_weight  # 0.6 default
 
 for i, word in enumerate(ngram):
     scores[word] += ngram_weight / (i + 1)
@@ -59,7 +59,7 @@ for word in scores:
 |-----------|--------|-----|-----|
 | **Next-word** (space at end) | 3.0 | 0.3 | N-gram *is* the next-word authority; PPM produces character fragments that look like words but aren't ranked by word frequency.  Trusting PPM here produces noise. |
 | **Mid-word** (completion) | 1.0 | 0.8 | N-gram still knows which dictionary words are common, but PPM is genuinely useful for partial prefixes the dictionary hasn't seen yet. |
-| Fuzzy | profile | profile | Precise users barely want fuzzy (0.3); severe-tremor users want it almost as loud as n-gram (0.8).  See `docs/FUZZY_RECOGNITION.md`. |
+| Fuzzy | 0.6 | 0.6 | Single tuned default — used to vary by accessibility profile, but the profile system was removed (see `docs/FUZZY_RECOGNITION.md`).  0.6 is loud enough that legitimate spatial-correction candidates can beat n-gram on a clear typo, quiet enough that they don't drown out a clean partial-prefix completion. |
 
 The `/ (i + 1)` is positional decay — rank-1 matters more than rank-5
 from the same source.  It's linear, not exponential, so rank-10
@@ -225,10 +225,11 @@ dominating predictions months later.  PPM does **not** currently decay
   PPM to contribute more to next-word, raise `ppm_weight` in
   `_merge_predictions`; the cost is noisier predictions when the
   context is clear.
-- **Fuzzy weight is profile-driven** — More tremor → more aggressive
-  spatial correction.  This is the single biggest user-facing knob;
-  the Precise profile effectively turns fuzzy off by weight (0.3) *and*
-  by disabling autocorrect.
+- **Fuzzy weight is fixed at 0.6** — Used to be profile-driven (0.3–0.8
+  across six "accessibility profiles") but the profile UI was confusing
+  and the per-user dials never carried their weight.  Now there's one
+  generous default tuned to surface diagonal-neighbour mistypes the way
+  Gboard does.  See `docs/FUZZY_RECOGNITION.md`.
 - **Positional decay is linear** — Rank-based, not probability-based.
   Fine for short lists; if `n` grew to 20+, an exponential decay
   would better reflect how users actually scan pill bars.
@@ -267,7 +268,6 @@ that needs raw data should use these forwarders:
 | `get_capitalized(word, sentence_start)` | `str` | same, to render "iPhone" / "Owen" correctly on decoded swipes |
 | `learn`, `learn_word`, `learn_from_selection`, `predict`, `predict_with_refinement` | — | all normal prediction paths |
 | `blacklist_word`, `unblacklist_word`, `mark_bad_suggestion`, `remove_dispreference` | — | right-click word suppression |
-| `set_accessibility_profile`, `get_accessibility_profiles`, `get_current_profile` | — | accessibility settings UI |
 | `enable_vocabulary_pack`, `disable_vocabulary_pack`, `import_vocabulary_pack` | — | vocabulary-pack UI |
 
 If you need data that isn't exposed, add a new forwarder here rather

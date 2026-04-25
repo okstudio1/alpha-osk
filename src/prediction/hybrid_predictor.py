@@ -45,7 +45,6 @@ class HybridPredictor(QObject):
     predictionsRefined = Signal(list)    # LLM-refined predictions
     modelLoading = Signal(bool)          # True when LLM is loading
     llmAvailableChanged = Signal(bool)   # LLM availability changed
-    profileChanged = Signal(str)         # Accessibility profile changed
     autocorrectSuggested = Signal(str, str)  # (typed, correction)
     packsChanged = Signal()              # Vocabulary packs enabled/disabled
 
@@ -95,8 +94,7 @@ class HybridPredictor(QObject):
         self._fuzzy.load_dictionary(
             Path(__file__).parent.parent.parent / "data" / "base_dictionary.txt"
         )
-        _logger.info("Fuzzy recognizer initialized with profile: %s",
-                     self._fuzzy.get_current_profile().name)
+        _logger.info("Fuzzy recognizer initialized")
 
         # Load training corpus for better predictions
         self._load_training_corpus()
@@ -242,8 +240,8 @@ class HybridPredictor(QObject):
             scores[word] = scores.get(word, 0) + score
             sources.setdefault(word, []).append("ppm")
 
-        # Fuzzy predictions (weight based on profile)
-        fuzzy_weight = self._fuzzy.profile.prediction_weight
+        # Fuzzy predictions weight (from FuzzyRecognizer constants).
+        fuzzy_weight = self._fuzzy.prediction_weight
         for i, word in enumerate(fuzzy):
             if not self._is_valid_word(word):
                 continue
@@ -471,31 +469,6 @@ class HybridPredictor(QObject):
         reach into ``_ngram``.
         """
         return self._ngram.get_capitalized(word, sentence_start)
-
-    # --- Accessibility Profile Management ---
-
-    def set_accessibility_profile(self, profile_name: str) -> bool:
-        """
-        Set accessibility profile for fuzzy recognition.
-
-        Args:
-            profile_name: Name of profile (e.g., "normal", "mild_tremor")
-
-        Returns:
-            True if profile found and set
-        """
-        if self._fuzzy.set_profile(profile_name):
-            self.profileChanged.emit(profile_name)
-            return True
-        return False
-
-    def get_accessibility_profiles(self) -> List[str]:
-        """Get list of available accessibility profile names."""
-        return self._fuzzy.get_profile_names()
-
-    def get_current_profile(self) -> str:
-        """Get current accessibility profile name."""
-        return self._fuzzy.get_current_profile().name.lower().replace(" ", "_")
 
     # --- PPM Control ---
 

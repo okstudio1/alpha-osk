@@ -73,27 +73,6 @@ class TestHybridLearning:
         assert predictor._ngram.unigrams["pizza"] > 0
 
 
-class TestHybridAccessibility:
-    """Accessibility profile management."""
-
-    def test_get_profiles(self, predictor: HybridPredictor):
-        profiles = predictor.get_accessibility_profiles()
-        assert "normal" in profiles
-        assert "mild_tremor" in profiles
-
-    def test_set_profile(self, predictor: HybridPredictor):
-        assert predictor.set_accessibility_profile("severe_tremor")
-        assert "severe" in predictor.get_current_profile()
-
-    def test_set_invalid_profile(self, predictor: HybridPredictor):
-        assert not predictor.set_accessibility_profile("nonexistent")
-
-    def test_get_current_profile_default(self, predictor: HybridPredictor):
-        profile = predictor.get_current_profile()
-        assert isinstance(profile, str)
-        assert len(profile) > 0
-
-
 class TestHybridAutocorrect:
     """Autocorrect integration."""
 
@@ -165,12 +144,9 @@ class TestHybridMergeWeighting:
         results = predictor.predict("I want ", n=5)
         assert isinstance(results, list)
 
-    def test_predictions_change_with_profile(self, predictor: HybridPredictor):
-        """Different profiles may produce different fuzzy results."""
-        predictor.set_accessibility_profile("precise")
-        precise_preds = predictor.predict("hel", n=5)
-        predictor.set_accessibility_profile("severe_tremor")
-        severe_preds = predictor.predict("hel", n=5)
-        # Both should be valid lists (may or may not differ)
-        assert isinstance(precise_preds, list)
-        assert isinstance(severe_preds, list)
+    def test_fuzzy_weight_is_a_float(self, predictor: HybridPredictor):
+        # The merger reads ``_fuzzy.prediction_weight`` directly now
+        # that profiles are gone — make sure it's still a usable float.
+        weight = predictor._fuzzy.prediction_weight
+        assert isinstance(weight, float)
+        assert 0 < weight < 1

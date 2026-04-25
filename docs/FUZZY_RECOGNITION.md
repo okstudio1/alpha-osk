@@ -14,7 +14,7 @@ Implementation: `src/prediction/fuzzy_recognizer.py`.
 |-------|----------------|
 | `SpatialKeyModel` | Given a clicked key, returns P(intended = k) for nearby keys. |
 | `FuzzyWordGenerator` | Expands a typed string into candidate strings using the spatial distribution, intersects with the dictionary. |
-| `FuzzyRecognizer` | Public entry point. Owns an `AccessibilityProfile`, wires the above together, and decides whether to *auto*-correct. |
+| `FuzzyRecognizer` | Public entry point. Wires the above together and decides whether to *auto*-correct. |
 
 ## Spatial Model — `SpatialKeyModel`
 
@@ -44,8 +44,9 @@ Gaussian mass sits inside the configured uncertainty radius.
 ### Neighbour cache
 
 Built once in `_build_neighbor_cache`: O(K²) in the number of keys
-(~676 pair checks for 26 letters — cheap).  Rebuilt when the profile
-changes (`set_uncertainty_radius`).
+(~676 pair checks for 26 letters — cheap).  Rebuilt only if
+`set_uncertainty_radius` is called at runtime; otherwise the cache
+is permanent.
 
 ## Candidate Generation — `FuzzyWordGenerator`
 
@@ -56,7 +57,7 @@ intersects with the dictionary.
 _generate_fuzzy_sequences("hel"):
   for each char c in typed:
     multiply every (prefix, p) in beam by every (c', p(c'|c))
-    prune: drop any combined probability < min_prob (default 0.01)
+    prune: drop any combined probability < min_prob (default 0.001)
     keep top 2 · max_candidates (100) by probability
 ```
 
@@ -74,45 +75,38 @@ by probability.
 Returns the top candidate **only if the typed word is not itself in the
 dictionary**.  (If the user typed a valid word, we don't "correct" it.)
 
-## Accessibility Profiles — `AccessibilityProfile`
+## Tunable Parameters
 
-Six pre-built profiles tune four interacting parameters.  All six live
-in `PROFILES: Dict[str, AccessibilityProfile]`.
+There used to be six pre-built "accessibility profiles" (Precise,
+Normal, Mild/Moderate/Severe Tremor, Limited Mobility) that swapped
+parameter sets at runtime.  They were confusing — most users picked
+"Normal" and never looked at the others, and the parameters that
+actually mattered (`spatial_uncertainty`, `confidence_threshold`,
+`prediction_weight`) are different shades of the same dial.  Now the
+recognizer uses one set of generous, Gboard-leaning constants:
 
-| Profile | spatial_uncertainty | confidence_threshold | prediction_weight | key_hold_delay | autocorrect |
-|---------|---------------------|----------------------|-------------------|----------------|-------------|
-| Precise | 0.5 | 0.9 | 0.3 | 0ms | off |
-| Normal | 1.0 | 0.8 | 0.5 | 0ms | on |
-| Mild Tremor | 1.5 | 0.7 | 0.6 | 100ms | on |
-| Moderate Tremor | 2.0 | 0.6 | 0.7 | 200ms | on |
-| Severe Tremor | 2.5 | 0.5 | 0.8 | 300ms | on |
-| Limited Mobility | 2.0 | 0.6 | 0.75 | 150ms | on |
+| Constant | Value | What it controls |
+|----------|-------|------------------|
+| `DEFAULT_SPATIAL_UNCERTAINTY` | 1.4 | Radius (in key-widths) the Gaussian covers.  Larger than the old "Normal" 1.0 — picks up diagonal neighbours so a near-miss still surfaces the right word. |
+| `DEFAULT_CONFIDENCE_THRESHOLD` | 0.65 | Auto-correct only if the top candidate's probability clears this.  Lower than the old "Normal" 0.8 — more willing to fix obvious typos. |
+| `DEFAULT_PREDICTION_WEIGHT` | 0.6 | How heavily `HybridPredictor._merge_predictions` trusts fuzzy candidates vs. n-gram. |
+| `DEFAULT_MIN_PROB` | 0.001 | Beam-search pruning threshold inside `_generate_fuzzy_sequences`.  Lower than the old 0.01 so a single-substitution path can survive across a 5+ character word. |
 
-| Parameter | What it controls |
-|-----------|------------------|
-| `spatial_uncertainty` | Radius (in key-widths) that the Gaussian covers.  Higher → more neighbours count as plausible. |
-| `confidence_threshold` | Auto-correct only if the top candidate's probability clears this.  Lower → more aggressive correction. |
-| `prediction_weight` | How heavily `HybridPredictor._merge_predictions` trusts fuzzy candidates vs. n-gram.  Feeds into the merge weight. |
-| `key_hold_delay` | Debounce window for tremor-induced double-taps.  (Wired into the platform layer / UI, not this file.) |
-| `autocorrect_enabled` | Master on/off for the `should_autocorrect` path. |
-
-More uncertainty / less precision → larger radius, **lower** confidence
-threshold (so we still auto-correct even though top probabilities are
-lower), **higher** prediction weight (trust the model more than the
-literal keys).  The Precise profile *turns autocorrect off entirely* —
-some users prefer to see their exact keystrokes and pick from
-predictions themselves.
+If you need to tune behaviour for a specific user, override these on
+the `FuzzyRecognizer` instance — they're class attributes, so a
+subclass or instance assignment is enough.  The profile UI in settings
+is gone.
 
 ## How it Plugs into the Hybrid Engine
 
 `HybridPredictor.predict` pulls fuzzy predictions for the current
 partial word via `get_fuzzy_predictions`.  Those candidates are merged
-with n-gram and PPM suggestions using `profile.prediction_weight` as
-the fuzzy score multiplier — see `docs/HYBRID_MERGING.md`.
+with n-gram and PPM suggestions using `FuzzyRecognizer.prediction_weight`
+as the fuzzy score multiplier — see `docs/HYBRID_MERGING.md`.
 
 `HybridPredictor.check_autocorrect` calls `should_autocorrect`, which
-returns a corrected word only if (a) autocorrect is enabled in the
-profile and (b) the top candidate's probability ≥ `confidence_threshold`.
+returns a corrected word only if the top candidate's probability ≥
+`confidence_threshold`.
 
 ## Known Gaps / Future Work
 

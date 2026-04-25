@@ -50,12 +50,12 @@ All in `src/prediction/`. Orchestrated by `hybrid_predictor.py`:
 |------|------|
 | `ngram_predictor.py` | Word-frequency model: unigrams, bigrams, trigrams. Learns from typing. |
 | `ppm_predictor.py` | Character-level PPM (Dasher algorithm). Predicts next characters. |
-| `fuzzy_recognizer.py` | Spatial error correction. Considers nearby keys as candidates. Has 6 accessibility profiles. |
+| `fuzzy_recognizer.py` | Spatial error correction. Considers nearby keys as candidates. Single tuned default (no profiles). |
 | `hybrid_predictor.py` | Merges all predictors. Manages model save/load. Emits Qt signals. |
 | `vocabulary_pack.py` | Domain vocab packs (medical, programming, etc.) + custom pack import |
 | `transformer_predictor.py` | Optional LLM re-ranking (disabled by default) |
 
-Deep-dive design docs for each algorithm: `docs/FUZZY_RECOGNITION.md` (spatial model + accessibility profiles), `docs/PPM.md` (variable-order character model + PPMD escape), `docs/HYBRID_MERGING.md` (merge weights + validation + capitalization), `docs/SWIPE_TYPING.md` (shape-matching swipe decoder).
+Deep-dive design docs for each algorithm: `docs/FUZZY_RECOGNITION.md` (spatial model + tunable constants), `docs/PPM.md` (variable-order character model + PPMD escape), `docs/HYBRID_MERGING.md` (merge weights + validation + capitalization), `docs/SWIPE_TYPING.md` (shape-matching swipe decoder).
 
 ## Auto-Capitalization & Proper Nouns
 
@@ -175,14 +175,15 @@ Modifier keys are **sticky** — tap once to activate, tap again to deactivate. 
 2. It's auto-discovered — the `components/` directory is imported as `"components" as Comp` in Main.qml
 3. Use as `Comp.MyComponent {}` in Main.qml
 
-## Accessibility Profiles
+## Fuzzy Recognition Defaults
 
-Defined in `src/prediction/fuzzy_recognizer.py`. Six profiles adjust:
-- **spatial_uncertainty**: How far off-center a keypress can be (in key-widths)
-- **confidence_threshold**: Minimum score to autocorrect
-- **prediction_weight**: How much fuzzy candidates influence ranking
-- **key_hold_delay**: Milliseconds to ignore jitter/tremor double-taps
-- **autocorrect_enabled**: Whether to auto-correct at all
+Hardcoded in `src/prediction/fuzzy_recognizer.py` as `DEFAULT_*` constants. Used to be six "accessibility profiles" (Precise / Normal / Mild Tremor / etc.) but they were confusing — the profile UI is gone and there's now one generous, Gboard-leaning default. Knobs:
+- **`spatial_uncertainty` (1.4)**: how far off-center a press still counts as the intended key, in key-widths.
+- **`confidence_threshold` (0.65)**: minimum score for `should_autocorrect` to fire.
+- **`prediction_weight` (0.6)**: weight applied to fuzzy candidates in the hybrid merge.
+- **`min_prob` (0.001)**: beam-search pruning threshold inside candidate generation — low enough that a single substitution survives across a 5+ char word.
+
+To tune, override the class attributes on `FuzzyRecognizer`. There's no UI for it.
 
 ## Testing
 
