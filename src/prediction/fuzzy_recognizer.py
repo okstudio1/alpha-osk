@@ -134,9 +134,16 @@ class FuzzyWordGenerator:
         if not typed_sequence:
             return []
 
-        fuzzy_sequences = self._generate_fuzzy_sequences(typed_sequence, min_prob)
-        candidates: List[Tuple[str, float]] = []
-        for seq, prob in fuzzy_sequences:
+        # Two complementary candidate sources:
+        # 1. Spatial-substitution beam search — covers near-key mistypes
+        #    ("g" instead of "h") through Gaussian neighbour probability.
+        # 2. Single-edit transformations — covers transpositions ("teh"
+        #    → "the"), deletions (typed has an extra char), and
+        #    insertions (typed missing a char), which the spatial path
+        #    can't express.
+        scored: Dict[str, float] = {}
+
+        for seq, prob in self._generate_fuzzy_sequences(typed_sequence, min_prob):
             freq = self.dictionary.get(seq)
             if freq is None:
                 continue
@@ -144,9 +151,72 @@ class FuzzyWordGenerator:
             # high-frequency word with a slightly worse spatial match
             # still beats a rare word with a perfect spatial match.
             score = prob * math.log1p(freq)
-            candidates.append((seq, score))
-        candidates.sort(key=lambda x: -x[1])
-        return candidates[:self.max_candidates]
+            if score > scored.get(seq, 0.0):
+                scored[seq] = score
+
+        for word, edit_prob in self._edit_distance_candidates(typed_sequence):
+            score = edit_prob * math.log1p(self.dictionary.get(word, 0.0))
+            if score > scored.get(word, 0.0):
+                scored[word] = score
+
+        return sorted(scored.items(), key=lambda x: -x[1])[:self.max_candidates]
+
+    # Per-edit penalties.  Tuned so a single-edit dictionary hit on a
+    # short word lands in the same score range as a perfect spatial
+    # match — high enough to surface as a real correction, low enough
+    # that they don't drown out a clean exact match when the user
+    # actually typed a word correctly.
+    _TRANSPOSITION_PROB = 0.30
+    _DELETION_PROB = 0.20
+    _INSERTION_PROB = 0.15
+    _ALPHABET = "abcdefghijklmnopqrstuvwxyz"
+
+    def _edit_distance_candidates(self, typed: str) -> List[Tuple[str, float]]:
+        """Return dictionary hits at edit distance 1 from ``typed``.
+
+        Three transformations:
+        - **Transposition** — swap each adjacent pair ("teh" → "the").
+        - **Deletion** — drop each char (user typed an extra letter).
+        - **Insertion** — insert each letter at each position (user
+          missed a letter).  Skipped for inputs over 12 chars to keep
+          the per-keystroke cost bounded.
+
+        Per-edit penalty is scaled by 1/length so longer words aren't
+        unfairly penalised — a 1-edit hit on a 10-letter word is still
+        a confident correction, not a noise candidate.
+        """
+        n = len(typed)
+        if n < 2:
+            return []
+
+        scored: Dict[str, float] = {}
+
+        for i in range(n - 1):
+            if typed[i] == typed[i + 1]:
+                continue
+            swapped = typed[:i] + typed[i + 1] + typed[i] + typed[i + 2:]
+            if swapped in self.dictionary:
+                score = self._TRANSPOSITION_PROB / n
+                if score > scored.get(swapped, 0.0):
+                    scored[swapped] = score
+
+        for i in range(n):
+            shorter = typed[:i] + typed[i + 1:]
+            if shorter and shorter in self.dictionary:
+                score = self._DELETION_PROB / n
+                if score > scored.get(shorter, 0.0):
+                    scored[shorter] = score
+
+        if n <= 12:
+            for i in range(n + 1):
+                for c in self._ALPHABET:
+                    longer = typed[:i] + c + typed[i:]
+                    if longer in self.dictionary:
+                        score = self._INSERTION_PROB / n
+                        if score > scored.get(longer, 0.0):
+                            scored[longer] = score
+
+        return list(scored.items())
 
     def _generate_fuzzy_sequences(
         self,

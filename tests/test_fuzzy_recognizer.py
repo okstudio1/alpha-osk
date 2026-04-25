@@ -157,6 +157,57 @@ class TestFuzzyWordGenerator:
             assert prob > 0
 
 
+class TestEditDistanceCandidates:
+    """Edit-distance variants (transposition / deletion / insertion)."""
+
+    def test_transposition_finds_word(self, small_dictionary: dict):
+        gen = FuzzyWordGenerator(dictionary=small_dictionary)
+        # "teh" → swap positions 1 and 2 → "the"
+        words = [w for w, _ in gen.generate_candidates("teh")]
+        assert "the" in words
+
+    def test_deletion_finds_word(self, small_dictionary: dict):
+        gen = FuzzyWordGenerator(dictionary=small_dictionary)
+        # "thee" → drop final 'e' → "the"
+        words = [w for w, _ in gen.generate_candidates("thee")]
+        assert "the" in words
+
+    def test_insertion_finds_word(self, small_dictionary: dict):
+        gen = FuzzyWordGenerator(dictionary=small_dictionary)
+        # "th" → insert 'e' at end → "the"
+        words = [w for w, _ in gen.generate_candidates("th")]
+        assert "the" in words
+
+    def test_transposition_skips_no_op_swap(self, small_dictionary: dict):
+        # "hheelp" has duplicate adjacent chars — swapping shouldn't
+        # claim "hheelp" as a candidate.
+        gen = FuzzyWordGenerator(dictionary=small_dictionary)
+        # Doesn't matter what's returned, just that it doesn't crash.
+        gen.generate_candidates("hheellp")
+
+    def test_no_edits_for_single_char(self, small_dictionary: dict):
+        gen = FuzzyWordGenerator(dictionary=small_dictionary)
+        # Length-1 input → edit-distance path returns nothing.
+        assert gen._edit_distance_candidates("h") == []
+
+    def test_insertion_skipped_for_long_input(self, small_dictionary: dict):
+        # Inputs over 12 chars skip the 26 × N insertion enumeration
+        # to keep per-keystroke cost bounded.
+        gen = FuzzyWordGenerator(dictionary=small_dictionary)
+        results = gen._edit_distance_candidates("a" * 13)
+        # No insertions should appear (all candidates would be length 14).
+        for word, _ in results:
+            assert len(word) <= 13
+
+    def test_common_word_beats_rare_word_via_frequency(self):
+        # "teh" → transposition could map to "the" or to a rarer word;
+        # frequency multiplier ensures the common word wins.
+        dictionary = {"the": 1000.0, "tha": 1.0}
+        gen = FuzzyWordGenerator(dictionary=dictionary)
+        candidates = gen.generate_candidates("teh")
+        assert candidates[0][0] == "the"
+
+
 class TestFuzzyRecognizer:
     """Main fuzzy recognizer interface."""
 
