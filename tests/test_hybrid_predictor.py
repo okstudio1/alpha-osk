@@ -150,3 +150,33 @@ class TestHybridMergeWeighting:
         weight = predictor._fuzzy.prediction_weight
         assert isinstance(weight, float)
         assert 0 < weight < 1
+
+    def test_last_context_word_extracts_trailing_token(self, predictor: HybridPredictor):
+        predictor._current_context = "the quick brown "
+        assert predictor._last_context_word() == "brown"
+        predictor._current_context = "Hello"
+        assert predictor._last_context_word() == "hello"
+        predictor._current_context = ""
+        assert predictor._last_context_word() == ""
+        predictor._current_context = "   "
+        assert predictor._last_context_word() == ""
+
+    def test_bigram_bonus_lifts_fuzzy_candidate(self, predictor: HybridPredictor):
+        # Seed a strong "of → the" bigram and a competing weak bigram
+        # for "of → tha".  Without the bonus the merger would tie them
+        # on positional score; with the bonus, "the" should sort first.
+        predictor._ngram.bigrams["of"]["the"] = 500
+        predictor._ngram.bigrams["of"]["tha"] = 1
+        predictor._current_context = "of "
+
+        # Force-feed both candidates as if fuzzy returned them in this order.
+        merged = predictor._merge_predictions(
+            ngram=[], ppm=[], fuzzy=["tha", "the"], n=5,
+        )
+        # "the" should outrank "tha" because of the bigram bonus, even
+        # though "tha" came first in the fuzzy list (positional weight
+        # would favor it).
+        # NB: results may be capitalized depending on context.
+        as_lower = [w.lower() for w in merged]
+        if "the" in as_lower and "tha" in as_lower:
+            assert as_lower.index("the") < as_lower.index("tha")

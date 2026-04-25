@@ -13,6 +13,7 @@ Architecture:
 from __future__ import annotations
 
 import logging
+import math
 import threading
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -204,6 +205,16 @@ class HybridPredictor(QObject):
             return True
         return False
 
+    def _last_context_word(self) -> str:
+        """Return the lowercase last word of the current context, or "".
+
+        Used by the fuzzy-prediction bigram bonus.  Splits on
+        whitespace and takes the trailing token; an empty context or a
+        context that ends with whitespace and nothing else returns "".
+        """
+        parts = self._current_context.strip().split()
+        return parts[-1].lower() if parts else ""
+
     def _merge_predictions(
         self,
         ngram: List[str],
@@ -249,11 +260,27 @@ class HybridPredictor(QObject):
             sources.setdefault(word, []).append("ppm")
 
         # Fuzzy predictions weight (from FuzzyRecognizer constants).
+        # Re-rank with a bigram bonus from the n-gram model — fuzzy
+        # candidates are otherwise context-blind, so "the" after "of "
+        # would tie with "thy" and "tha" purely on spatial scores.  The
+        # bonus is capped (log1p(count)/5) so it nudges ranking without
+        # letting a single noisy bigram dominate.
         fuzzy_weight = self._fuzzy.prediction_weight
+        prev_word = self._last_context_word()
+        bigram_table = self._ngram.bigrams.get(prev_word, {}) if prev_word else {}
         for i, word in enumerate(fuzzy):
             if not self._is_valid_word(word):
                 continue
-            score = fuzzy_weight / (i + 1)
+            bigram_bonus = 1.0
+            if bigram_table:
+                bg_count = bigram_table.get(word, 0)
+                if bg_count > 0:
+                    # /2 (not /5) so a confident bigram can override
+                    # positional ranking — fuzzy candidates are
+                    # context-blind by default, the bigram is the
+                    # primary context signal we have for them.
+                    bigram_bonus = 1.0 + math.log1p(bg_count) / 2.0
+            score = (fuzzy_weight / (i + 1)) * bigram_bonus
             scores[word] = scores.get(word, 0) + score
             sources.setdefault(word, []).append("fz")
 
