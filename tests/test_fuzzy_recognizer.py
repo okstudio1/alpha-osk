@@ -207,6 +207,29 @@ class TestEditDistanceCandidates:
         candidates = gen.generate_candidates("teh")
         assert candidates[0][0] == "the"
 
+    def test_apostrophe_insertion_finds_contraction(self):
+        # "im" → insert ' at position 1 → "i'm".  Apostrophe insertion
+        # gets a higher per-edit probability than the generic letter
+        # insertion path because missing apostrophes are by far the
+        # most common insertion error in real typing.
+        dictionary = {"i'm": 8000.0, "him": 100.0, "aim": 50.0}
+        gen = FuzzyWordGenerator(dictionary=dictionary)
+        candidates = gen.generate_candidates("im")
+        words = [w for w, _ in candidates]
+        assert "i'm" in words
+        # Should rank competitively (top 3) thanks to the boosted
+        # apostrophe-insertion prob + high frequency.
+        assert words.index("i'm") < 3
+
+    def test_apostrophe_insertion_beats_letter_insertion(self):
+        # Same input, two equally-frequent candidates: "i'm" via
+        # apostrophe insertion vs "him" via letter insertion. The
+        # apostrophe path should win because of the higher edit prob.
+        dictionary = {"i'm": 1000.0, "him": 1000.0}
+        gen = FuzzyWordGenerator(dictionary=dictionary)
+        candidates = gen.generate_candidates("im")
+        assert candidates[0][0] == "i'm"
+
 
 class TestFuzzyRecognizer:
     """Main fuzzy recognizer interface."""

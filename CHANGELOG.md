@@ -4,6 +4,13 @@ All notable changes to Alpha-OSK are documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Apostrophe-less contractions now autocomplete and autocorrect.** Typing `im` surfaces `I'm` in the predictions and replaces with `I'm` on space; same for `dont` → `don't`, `youre` → `you're`, `cant` → `can't`, etc. Three pieces:
+  - `'` added to `FuzzyWordGenerator._ALPHABET` so the insertion edit-distance path can produce contraction candidates from bare-form input.
+  - `FuzzyWordGenerator._APOSTROPHE_INSERTION_PROB = 0.50` — apostrophe insertion gets a much higher per-edit probability than the generic letter-insertion penalty (0.15) because missing apostrophes are the dominant insertion error in real OSK typing. Without this, `i'm` got buried at rank 9 below noisier candidates like `him`, `aim`, `um`.
+  - 42 common contractions added to `data/base_dictionary.txt` with realistic frequencies (8000 for `i'm`, comparable to `hello`/`the`); 32 unambiguous bare-form → with-apostrophe entries added to `data/common_misspellings.txt` for the autocorrect-on-space path. Skipped ambiguous bare forms that are valid words on their own (`its`, `lets`, `were`, `wed`, `id`, `ill`, `hes`).
+- **`load_base_dictionary` accepts a `word count` syntax** for entries that need a frequency higher than the default `+1` boost, so contractions can compete with the Google 10K wordlist's 1000–10000 range.
+
 ## [1.0.10] — 2026-04-25
 
 Auto-updater finally works end-to-end on Windows, plus a UI cleanup.

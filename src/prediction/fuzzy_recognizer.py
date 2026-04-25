@@ -169,7 +169,17 @@ class FuzzyWordGenerator:
     _TRANSPOSITION_PROB = 0.30
     _DELETION_PROB = 0.20
     _INSERTION_PROB = 0.15
-    _ALPHABET = "abcdefghijklmnopqrstuvwxyz"
+    # Apostrophe insertion gets a much higher probability than the
+    # generic letter-insertion penalty — missing apostrophes (typing
+    # "im" for "I'm", "dont" for "don't", "youre" for "you're") is the
+    # dominant insertion pattern in real use, especially for users who
+    # struggle with the apostrophe key on a low-precision OSK.  At 0.5
+    # an apostrophe-insertion candidate competes with a perfect spatial
+    # match instead of getting buried at rank 9.
+    _APOSTROPHE_INSERTION_PROB = 0.50
+    # Apostrophe is intentionally in the insertion alphabet so the
+    # path can suggest contractions when the user types the bare form.
+    _ALPHABET = "abcdefghijklmnopqrstuvwxyz'"
 
     def _edit_distance_candidates(self, typed: str) -> List[Tuple[str, float]]:
         """Return dictionary hits at edit distance 1 from ``typed``.
@@ -212,7 +222,12 @@ class FuzzyWordGenerator:
                 for c in self._ALPHABET:
                     longer = typed[:i] + c + typed[i:]
                     if longer in self.dictionary:
-                        score = self._INSERTION_PROB / n
+                        prob = (
+                            self._APOSTROPHE_INSERTION_PROB
+                            if c == "'"
+                            else self._INSERTION_PROB
+                        )
+                        score = prob / n
                         if score > scored.get(longer, 0.0):
                             scored[longer] = score
 

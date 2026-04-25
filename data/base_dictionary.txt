@@ -535,3 +535,52 @@ terrible
 awful
 okay
 fine
+
+# --- Common contractions ---
+# Stored lowercase (the always-capitalize map at output capitalises
+# I-prefixed forms like "i'm" → "I'm"). Other contractions stay as-is.
+# Frequencies are tuned to roughly match where these would land in the
+# Google 10K corpus if it included contractions — common (I'm, don't,
+# you're) get ~5000–8000; less common (we'd, when's) get ~500–1500.
+i'm 8000
+i'll 4000
+i've 3500
+i'd 2500
+you're 5500
+you've 2500
+you'll 2500
+you'd 1500
+he's 4500
+she's 4500
+that's 5500
+they're 3500
+they've 2000
+they'll 2000
+they'd 1500
+we're 4000
+we've 2500
+we'll 2500
+we'd 1500
+don't 7000
+doesn't 4500
+didn't 5000
+won't 4500
+can't 6500
+couldn't 3500
+wouldn't 3500
+shouldn't 2500
+isn't 3500
+wasn't 3500
+aren't 2500
+weren't 2000
+haven't 2500
+hasn't 2000
+hadn't 1500
+let's 3000
+what's 4500
+where's 2500
+who's 2000
+how's 1500
+when's 800
+there's 4500
+here's 2500

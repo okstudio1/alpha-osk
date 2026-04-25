@@ -775,12 +775,27 @@ class NgramPredictor:
             # Process each line — route through _learn_base so counts go
             # into _base_unigrams and do NOT inflate the user's personal
             # vocab (which would mask actual personal typing signal).
+            #
+            # Two line formats accepted:
+            #   word                  → +1 to unigrams via _learn_base
+            #   word count            → +count, set directly so high-freq
+            #                            entries (contractions, etc.) can
+            #                            compete with the Google 10K wordlist
             for line in content.split("\n"):
                 line = line.strip()
                 # Skip comments and empty lines
                 if not line or line.startswith("#"):
                     continue
-                self._learn_base(line)
+                parts = line.split()
+                if len(parts) >= 2 and parts[1].isdigit():
+                    word = parts[0].lower()
+                    count = int(parts[1])
+                    self.unigrams[word] += count
+                    self._base_unigrams[word] += count
+                    self._base_total += count
+                    self.total_words += count
+                else:
+                    self._learn_base(line)
 
             _logger.info("Base dictionary loaded: %d total words", self.total_words)
             return True

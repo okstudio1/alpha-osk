@@ -18,17 +18,26 @@ class TestBaseDictionary:
         assert (DATA_DIR / "base_dictionary.txt").exists()
 
     def test_no_multi_word_lines(self):
-        """Each non-comment line should be a single word (no spaces)."""
+        """Each non-comment line is either a single word or ``word count``.
+
+        The two-token ``word count`` form bypasses ``_learn_base`` (so
+        no fake bigrams are created — see test_loading_does_not_create_bigrams)
+        and is used for entries that need a frequency higher than the
+        +1 the default loader path provides (e.g. contractions).
+        """
         path = DATA_DIR / "base_dictionary.txt"
         with open(path) as f:
             for i, line in enumerate(f, 1):
                 line = line.strip()
                 if not line or line.startswith("#"):
                     continue
-                words = line.split()
-                assert len(words) == 1, (
+                parts = line.split()
+                # Allow either:  "word"  or  "word <integer>"
+                if len(parts) == 2 and parts[1].isdigit():
+                    continue
+                assert len(parts) == 1, (
                     f"Line {i} has multiple words: {line!r}. "
-                    "Use one word per line to avoid fake bigrams."
+                    "Use 'word' or 'word <count>' to avoid fake bigrams."
                 )
 
     def test_loading_does_not_create_bigrams(self):

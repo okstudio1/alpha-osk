@@ -68,7 +68,22 @@ a few hundred.
 
 `generate_candidates` then filters the surviving sequences to those
 that are in `self.dictionary`, returning `(word, probability)` sorted
-by probability.
+by probability.  In parallel, `_edit_distance_candidates(typed)` runs
+three single-edit transformations of the literal typed string —
+**transposition** (swap each adjacent pair: "teh" → "the"),
+**deletion** (drop each char: "thee" → "the"), and **insertion** (try
+each `a-z'` letter at each position: "th" → "the", "im" → "i'm") —
+and merges the dictionary hits into the same scored set.  The two
+sources never duplicate because the spatial path can't express
+length-changing edits.  Insertion is skipped for inputs over 12 chars
+to keep the per-keystroke cost bounded.
+
+The dictionary stores **frequencies**, not just membership: each
+candidate's spatial / edit probability is multiplied by `log(freq + 1)`
+before sorting.  Without this, "the" and "tha" tied on a 3-letter
+spatial match.  Frequencies are sourced from `NgramPredictor.unigrams`
+via `set_frequencies`, so the personal+base unigram counts feed
+directly into fuzzy ranking.
 
 ### `get_correction(typed_word, context)`
 
@@ -91,6 +106,10 @@ recognizer uses one set of generous, Gboard-leaning constants:
 | `DEFAULT_CONFIDENCE_THRESHOLD` | 0.65 | Auto-correct only if the top candidate's probability clears this.  Lower than the old "Normal" 0.8 — more willing to fix obvious typos. |
 | `DEFAULT_PREDICTION_WEIGHT` | 0.6 | How heavily `HybridPredictor._merge_predictions` trusts fuzzy candidates vs. n-gram. |
 | `DEFAULT_MIN_PROB` | 0.001 | Beam-search pruning threshold inside `_generate_fuzzy_sequences`.  Lower than the old 0.01 so a single-substitution path can survive across a 5+ character word. |
+| `_TRANSPOSITION_PROB` | 0.30 | Per-edit probability for `_edit_distance_candidates` when the typed string can be turned into a dictionary word by swapping two adjacent characters ("teh" → "the"). |
+| `_DELETION_PROB` | 0.20 | Same, for the "typed has an extra letter" path — drop each char and look up. |
+| `_INSERTION_PROB` | 0.15 | Same, for "typed is missing a letter" — try each `a-z` insertion at each position. |
+| `_APOSTROPHE_INSERTION_PROB` | 0.50 | Special case of insertion: when the inserted character is `'`. Bumped well above the generic letter-insertion penalty because missing apostrophes ("im" → "I'm", "dont" → "don't") are by far the dominant insertion error in real typing, especially for users who struggle with the apostrophe key on a low-precision OSK. |
 
 If you need to tune behaviour for a specific user, override these on
 the `FuzzyRecognizer` instance — they're class attributes, so a

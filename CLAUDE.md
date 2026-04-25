@@ -177,11 +177,13 @@ Modifier keys are **sticky** — tap once to activate, tap again to deactivate. 
 
 ## Fuzzy Recognition Defaults
 
-Hardcoded in `src/prediction/fuzzy_recognizer.py` as `DEFAULT_*` constants. Used to be six "accessibility profiles" (Precise / Normal / Mild Tremor / etc.) but they were confusing — the profile UI is gone and there's now one generous, Gboard-leaning default. Knobs:
+Hardcoded in `src/prediction/fuzzy_recognizer.py` as `DEFAULT_*` / `_*_PROB` constants. Used to be six "accessibility profiles" (Precise / Normal / Mild Tremor / etc.) but they were confusing — the profile UI is gone and there's now one generous, Gboard-leaning default. Knobs:
 - **`spatial_uncertainty` (1.4)**: how far off-center a press still counts as the intended key, in key-widths.
 - **`confidence_threshold` (0.65)**: minimum score for `should_autocorrect` to fire.
 - **`prediction_weight` (0.6)**: weight applied to fuzzy candidates in the hybrid merge.
 - **`min_prob` (0.001)**: beam-search pruning threshold inside candidate generation — low enough that a single substitution survives across a 5+ char word.
+- **`_TRANSPOSITION_PROB` (0.30) / `_DELETION_PROB` (0.20) / `_INSERTION_PROB` (0.15)**: per-edit penalties for the edit-distance candidate path (alongside the spatial beam search), so "teh" → "the", "thee" → "the", "th" → "the" all surface.
+- **`_APOSTROPHE_INSERTION_PROB` (0.50)**: insertion of `'` specifically, bumped well above the generic letter-insertion penalty because missing apostrophes ("im" → "I'm", "dont" → "don't") are by far the dominant insertion error in real typing on a low-precision OSK.
 
 To tune, override the class attributes on `FuzzyRecognizer`. There's no UI for it.
 
