@@ -400,6 +400,102 @@ The build script generates a proper NSIS installer that:
 The installer customizations live in `build/windows/installer.nsh`, following the
 same macro patterns as gitconnect's `build/windows/installer.nsh`.
 
+### Installer Upgrade Behavior
+
+| Scenario | Behavior |
+|----------|----------|
+| Same directory (default `C:\Program Files\Alpha-OSK`) | Silently runs old `uninstall.exe /S` before extracting new files. Preserves `%APPDATA%\alpha-osk` (learned vocabulary). |
+| Different directory | Prompts user: "Remove previous version?" If yes, runs old uninstaller. If no, both coexist. |
+| Running instance detected | Prompts to close, then kills `alpha-osk.exe` via `taskkill`. |
+| Interactive uninstall | Prompts whether to delete `%APPDATA%\alpha-osk` (learned vocabulary and settings). |
+
+---
+
+## Release Checklist
+
+End-to-end process for shipping a new Windows version. **Do not skip steps** — unsigned builds won't get UIAccess, and forgetting to bump the version means the installer overwrites without proper upgrade logic.
+
+### 1. Bump the version
+
+Single source of truth: `src/__version__.py`. `build/windows/build.py` reads from it; the auto-updater compares against it.
+
+```python
+__version__ = "1.0.8"  # was 1.0.7
+```
+
+This flows into the installer filename (`Alpha-OSK-Setup-1.0.8.exe`), NSIS `APP_VERSION` (Add/Remove Programs), and the registry `DisplayVersion`.
+
+### 2. Update `CHANGELOG.md`
+
+Add a new `## [x.y.z] — YYYY-MM-DD` section at the top under `[Unreleased]`. Categorize under `### Added` / `### Fixed` / `### Changed` / `### Chores`.
+
+### 3. Commit
+
+```bash
+git add src/__version__.py CHANGELOG.md
+git commit -m "chore: bump version to x.y.z"
+```
+
+### 4. Build + sign
+
+**From a normal (non-elevated) shell, with the eToken plugged in:**
+
+```bash
+python build/windows/build.py
+```
+
+The script: checks prereqs → runs PyInstaller → signs all `.exe` in `dist/alpha-osk/` → builds NSIS installer → signs installer → verifies signatures.
+
+### 5. Test the installer
+
+1. Run `release/Alpha-OSK-Setup-x.y.z.exe`.
+2. Verify it detects and removes the previous version (same directory: silent uninstall; different: prompts).
+3. Verify install to `C:\Program Files\Alpha-OSK` and Desktop + Start Menu shortcuts.
+4. Launch via the installer's "Launch Alpha-OSK" checkbox.
+5. **Test UIAccess**: open an elevated Command Prompt (Run as Admin) and verify keystrokes reach it.
+6. Verify `Settings → Updates` shows the new version.
+
+### 6. Tag
+
+```bash
+git tag vX.Y.Z
+git push origin main
+git push origin vX.Y.Z
+```
+
+### 7. Create the GitHub release — on the PUBLIC releases repo
+
+```bash
+gh release create vX.Y.Z release/Alpha-OSK-Setup-X.Y.Z.exe \
+  --repo okstudio1/alpha-osk-releases \
+  --title "vX.Y.Z" \
+  --notes "See https://github.com/okstudio1/alpha-osk/blob/main/CHANGELOG.md"
+```
+
+> ⚠️ **The `--repo okstudio1/alpha-osk-releases` flag is mandatory.** The source repo is private; the auto-updater can't see private releases (returns 404 to unauthenticated callers). Forgetting `--repo` will create the release in the source repo where end users' updaters won't find it. Tag the source repo for changelog tracking; publish binaries in the public repo.
+
+### Bundle size
+
+PyInstaller spec at `build/windows/alpha-osk.spec` excludes `Qt6WebEngineCore.dll` (193 MB by itself) and the WebEngine / WebView / WebChannel families. Installer is ~85 MB instead of ~165 MB. If you ever add an in-app browser, re-include them in `excludes` and re-measure — losing 100 MB of installer in one careless re-include is easy.
+
+To inspect the bundle:
+
+```bash
+du -sm dist/alpha-osk/PySide6/* | sort -rn | head -20
+```
+
+### Regenerating the app icon
+
+Source logos in `assets/`. To rebuild `build/windows/alpha-osk.ico` from a new PNG:
+
+```python
+from PIL import Image
+img = Image.open("assets/logo-1024.png").convert("RGBA")
+sizes = [(256,256),(128,128),(64,64),(48,48),(32,32),(16,16)]
+resized = [img.resize(s, Image.LANCZOS) for s in sizes]
+resized[0].save("build/windows/alpha-osk.ico", format="ICO", sizes=sizes, append_images=resized[1:])
+```
+
 ---
 
 ## Installation for UIAccess

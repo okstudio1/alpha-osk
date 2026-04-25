@@ -300,51 +300,11 @@ Action types: `char`, `special`, `hotkey`, `text`, `macro`, `launch`, `layout`, 
 
 ## Auto-Update
 
-Implemented in `src/updater.py`. Design doc + threat model at `docs/AUTO_UPDATE.md`.
+Implemented in `src/updater.py`. Flow walkthrough, threat model + defences table, and the per-defence rationale all live in `docs/AUTO_UPDATE.md`. Release checklist is in `docs/WINDOWS.md`.
 
-> ⚠️ **Releases live in a separate public repo** — `okstudio1/alpha-osk-releases`. The source repo (`okstudio1/alpha-osk`) is private; private repos return 404 on `/releases/latest` to unauthenticated callers, which is exactly what update clients are. The split keeps the source private without breaking auto-update. Always cut releases with `gh release create v1.X.Y release/Alpha-OSK-Setup-1.X.Y.exe --repo okstudio1/alpha-osk-releases --title "v1.X.Y" --notes "..."`.
+> ⚠️ **Releases live in a separate public repo** — `okstudio1/alpha-osk-releases`. The source repo is private (returns 404 on `/releases/latest` to unauthenticated update clients). Always pass `--repo okstudio1/alpha-osk-releases` to `gh release create`.
 
-### Flow
-
-1. App startup — `qml/Main.qml` Component.onCompleted reads `appSettings.savedAutoCheckUpdates` (default on) and starts `updateCheckTimer` (3 s delay so the network call doesn't fight QML init).
-2. `keyboard.checkForUpdate()` slot launches a `threading.Thread` that calls `updater.check_for_update()` against `https://api.github.com/repos/okstudio1/alpha-osk-releases/releases/latest`.
-3. If the response advertises a strictly higher MAJOR.MINOR.PATCH tag whose installer asset URL is on the host whitelist, bridge emits `updateAvailable(version, asset_name, notes)` and stores the `UpdateInfo` in `self._update_info`.
-4. QML shows the update banner at the top of the keyboard. User clicks "Install" → `keyboard.installUpdate()` → background thread downloads the installer (with byte-cap), **verifies its Authenticode signature against the EV cert thumbprint `fc22b522…`**, then `Popen([dest, "/S"])`. The NSIS installer kills the running app, runs the previous uninstaller, installs the new build.
-
-### Threat model & defences
-
-The updater is the highest-value MITM target — a successful attacker ships arbitrary signed code on the user's machine. Defences are layered so no single layer compromise unlocks code execution:
-
-| Threat                                                  | Defence                                                      |
-|---------------------------------------------------------|--------------------------------------------------------------|
-| TLS strip / MITM                                        | `urllib` cert validation + scheme whitelist (https only)     |
-| DNS hijack to attacker host                             | Authenticode pin — attacker can't sign with our key          |
-| Compromised GitHub asset                                | Authenticode pin (thumbprint + Status==Valid + signer CN)    |
-| Asset URL points off-host                               | Host whitelist: `github.com`, `objects.githubusercontent.com`, `release-assets.githubusercontent.com` (the two historical + current GitHub release-asset CDNs) |
-| Post-redirect host swap                                 | Re-validate `resp.geturl()` after `urlopen` follows redirects |
-| Disk-fill                                               | `_MAX_DOWNLOAD_BYTES = 500 MB` aborts runaway downloads       |
-| Downgrade attack                                        | Strict semver compare (`is_newer`); refuse equal/older       |
-| Pre-release/garbage tag confusion ("v1.0.3-evil")       | Regex `^\d+\.\d+\.\d+$` only — pre-release/+build refused     |
-| Misnamed asset                                          | Filename pattern locked to `Alpha-OSK-Setup-{version}.exe`    |
-| Tag confusion across repos                              | Endpoint hard-pinned to `releases/latest` of our repo only    |
-| QML-side URL injection                                  | QML never sees the URL — it only triggers `installUpdate()`, the bridge consults `self._update_info` for the URL |
-| Release-notes injection (control chars / oversized)     | `_sanitize_notes` strips C0 controls, caps length to 4 KB     |
-
-What's **not** covered: compromise of the EV signing key itself. That requires a build-pipeline / cert-rotation response, not a client-side fix.
-
-### Bumping the version
-
-Single source of truth: `src/__version__.py`. `build/windows/build.py` reads from it; the updater compares against it. To ship a new release:
-
-1. Edit `src/__version__.py` → bump `__version__`.
-2. Update `CHANGELOG.md`.
-3. Commit, run `python build/windows/build.py`, tag, `gh release create`.
-
-The release-asset filename **must** match `Alpha-OSK-Setup-{version}.exe` exactly — the updater rejects anything else.
-
-### Disabling
-
-User-facing toggle: *Settings → Updates → "Check for updates on startup"*. Manual "Check Now" button next to it. Persisted as `appSettings.savedAutoCheckUpdates`.
+Version source of truth is `src/__version__.py`. The release-asset filename **must** match `Alpha-OSK-Setup-{version}.exe` exactly — the updater rejects anything else. User-facing toggle: *Settings → Updates → "Check for updates on startup"* (persisted as `appSettings.savedAutoCheckUpdates`).
 
 ## Accessibility Ecosystem
 
@@ -367,171 +327,16 @@ Design doc at `docs/FEDERATED_LEARNING.md`. Not yet implemented — Phase 1 (loc
 
 ## Building & Signing a Release (Windows)
 
-This is the end-to-end process for shipping a new **Windows** version. For the Linux build pipeline see the [Linux build](#linux-build) section below or `docs/LINUX.md`. **Do not skip steps** — unsigned builds won't get UIAccess, and forgetting to bump the version means the installer overwrites without proper upgrade logic.
+Full step-by-step release checklist, signing details, troubleshooting table, and bundle-size notes are in `docs/WINDOWS.md` (sections "Building a Standalone Executable", "Code Signing", "Release Checklist"). Asset/icon regeneration in `docs/BRANDING.md`. Quick mental model:
 
-### Prerequisites (one-time setup)
+1. Bump `src/__version__.py` (single source of truth — `build/windows/build.py` reads from it).
+2. Update `CHANGELOG.md`, commit.
+3. Build + sign from a **non-elevated shell** with the eToken plugged in: `python build/windows/build.py`.
+4. Test the installer in `release/`, including UIAccess against an elevated shell.
+5. `git tag vX.Y.Z && git push origin main && git push origin vX.Y.Z`.
+6. **Public repo for binaries**: `gh release create vX.Y.Z release/Alpha-OSK-Setup-X.Y.Z.exe --repo okstudio1/alpha-osk-releases ...`. The `--repo` flag is mandatory — source repo is private and the auto-updater can't see private releases.
 
-| Requirement | Install | Verify |
-|-------------|---------|--------|
-| Python 3.9+ | `python.org` | `python --version` |
-| PyInstaller | `pip install pyinstaller` | `pyinstaller --version` |
-| NSIS 3.x | `winget install NSIS.NSIS` | `makensis /VERSION` |
-| Windows SDK (signtool) | Visual Studio Installer → Windows SDK | `where signtool.exe` |
-| SafeNet Authentication Client | Comes with the USB eToken hardware | Tray icon visible |
-| EV Certificate (OK Studio Inc.) | Already provisioned on eToken | `certutil -store -user My` → look for thumbprint `fc22b522...` |
-
-### Step-by-step release checklist
-
-#### 1. Bump the version
-
-The version string is in **one place**: `build/windows/build.py`, the `version` variable inside `build_nsis_installer()` (~line 317). Update it:
-
-```python
-version = "1.0.2"  # was "1.0.1"
-```
-
-This flows into:
-- Installer filename: `Alpha-OSK-Setup-1.0.2.exe`
-- NSIS `APP_VERSION` (shown in Add/Remove Programs)
-- Registry `DisplayVersion`
-
-#### 2. Update the CHANGELOG
-
-Edit `CHANGELOG.md`. Add a new `## [x.y.z] — YYYY-MM-DD` section at the top. Categorize changes under `### Added`, `### Fixed`, `### Changed`, `### Chores` as appropriate.
-
-#### 3. Commit the version bump + changelog
-
-```bash
-git add build/windows/build.py CHANGELOG.md
-git commit -m "chore: bump version to x.y.z"
-```
-
-#### 4. Run the full build
-
-**Must run from a normal (non-elevated) shell.** The eToken is not visible to admin processes.
-
-```bash
-python build/windows/build.py
-```
-
-This does, in order:
-1. Checks prerequisites (Python, PyInstaller, NSIS, signtool, eToken certificate)
-2. Runs PyInstaller with `build/windows/alpha-osk.spec` → `dist/alpha-osk/`
-3. Signs all `.exe` files in `dist/alpha-osk/` with the EV cert
-4. Generates NSIS installer → `release/Alpha-OSK-Setup-x.y.z.exe`
-5. Signs the installer
-6. Verifies all signatures
-
-**Common flags:**
-
-| Flag | When to use |
-|------|-------------|
-| `--no-sign` | Dev/test builds without the eToken plugged in |
-| `--skip-build` | Re-package/re-sign without re-running PyInstaller (faster) |
-| `--verify-only` | Just check existing signatures |
-| `--no-installer` | Produce portable exe only, skip NSIS |
-
-#### 5. Test the installer
-
-1. Run `release/Alpha-OSK-Setup-x.y.z.exe`
-2. Verify it detects and removes the previous version (same-directory: silent uninstall; different-directory: prompts)
-3. Verify it installs to `C:\Program Files\Alpha-OSK` by default
-4. Verify shortcuts are created (Desktop + Start Menu)
-5. Launch from the installer's "Launch Alpha-OSK" checkbox
-6. **Test UIAccess**: open an elevated Command Prompt (Run as Admin) and verify keystrokes reach it
-7. Verify the app icon appears correctly in the taskbar and Start Menu
-
-#### 6. Test the portable exe
-
-```bash
-dist/alpha-osk/alpha-osk.exe
-```
-
-This won't have UIAccess (not in Program Files), but should work for normal apps.
-
-#### 7. Tag the release
-
-```bash
-git tag v1.0.2
-git push origin main --tags
-```
-
-#### 8. Create GitHub release (in the **public** releases repo)
-
-```bash
-gh release create v1.0.2 release/Alpha-OSK-Setup-1.0.2.exe \
-  --repo okstudio1/alpha-osk-releases \
-  --title "v1.0.2" \
-  --notes "See https://github.com/okstudio1/alpha-osk/blob/main/CHANGELOG.md"
-```
-
-**Important:** the `--repo okstudio1/alpha-osk-releases` flag is mandatory. The source repo is private and the auto-updater can't see private releases. Forgetting `--repo` will create the release in the source repo where end users' updaters won't find it. Tag the source repo (step 7) for changelog/version-history tracking; publish the binaries in the public repo.
-
-### Signing details
-
-| Field | Value |
-|-------|-------|
-| Certificate | OK Studio Inc. (EV, Sectigo) |
-| Thumbprint | `fc22b5221318f3f3f6b3eb2d969d7f99091557bf` |
-| Timestamp server | `http://timestamp.digicert.com` |
-| Sign script | `build/windows/sign.py` (5 retries, exponential backoff for Defender locks) |
-| What gets signed | All `.exe` in `dist/alpha-osk/` + the final installer `.exe` |
-
-**Why non-elevated?** The SafeNet eToken driver exposes the cert to the current user session only. Elevated (admin) shells can't see it. Always build from a **normal shell**.
-
-### Installer upgrade behavior
-
-The NSIS installer handles upgrades as follows:
-
-| Scenario | Behavior |
-|----------|----------|
-| Same directory (default `C:\Program Files\Alpha-OSK`) | Silently runs old `uninstall.exe /S` before extracting new files. Preserves `%APPDATA%\alpha-osk` (learned vocabulary). |
-| Different directory | Prompts user: "Remove previous version?" If yes, runs old uninstaller. If no, both coexist. |
-| Running instance detected | Prompts to close, then kills `alpha-osk.exe` via `taskkill`. |
-| Interactive uninstall | Prompts whether to delete `%APPDATA%\alpha-osk` (learned vocabulary and settings). |
-
-Key files:
-- `build/windows/build.py` — orchestrates the full pipeline, generates the `.nsi` script
-- `build/windows/installer.nsh` — NSIS macros for init, install, and uninstall customization
-- `build/windows/sign.py` — signing with retry logic
-- `build/windows/alpha-osk.spec` — PyInstaller specification
-- `build/windows/alpha-osk.exe.manifest` — UIAccess manifest embedded in the exe
-- `build/windows/alpha-osk.ico` — app icon (multi-resolution: 16–256px)
-
-### Troubleshooting builds
-
-| Problem | Cause | Fix |
-|---------|-------|-----|
-| `Cannot find certificate` | Elevated shell, or eToken unplugged | Use normal shell; check eToken LED is on |
-| `SignTool Error: file being used` | Defender scanning the exe | `sign.py` retries automatically (5x) |
-| `signtool not found` | Windows SDK not installed | `winget install Microsoft.WindowsSDK` or install via VS Installer |
-| `makensis not found` | NSIS not installed or not on PATH | `winget install NSIS.NSIS` |
-| `ModuleNotFoundError` at runtime | Missing hidden import in spec | Add to `hiddenimports` in `build/windows/alpha-osk.spec` |
-| Installer doesn't remove old version | Same-directory upgrade path broken | Check `IfFileExists "$INSTDIR\\uninstall.exe"` block in generated NSI |
-| UIAccess not working after install | Not in Program Files, or unsigned | Verify: signed + installed to `C:\Program Files\Alpha-OSK` |
-
-### Bundle size
-
-The PySide6 wheel ships every Qt module — including a 193 MB `Qt6WebEngineCore.dll` we never use. `build/windows/alpha-osk.spec` explicitly excludes the WebEngine / WebView / WebChannel families to keep the installer around 100 MB instead of 165 MB. If you ever add an in-app browser (release-notes view, embedded help, etc.), re-include them in the `excludes` list and re-measure — losing 100 MB of installer in one careless re-include is easy.
-
-If you need to verify what's actually in the bundle::
-
-    du -sm dist/alpha-osk/PySide6/* | sort -rn | head -20
-
-### Assets & branding
-
-- Source logos: `assets/logo-1024.png`, `assets/logo-2048.png`
-- App icon: `build/windows/alpha-osk.ico` (generated from logo via Pillow)
-- Midjourney prompts and icon generation workflow: `docs/BRANDING.md`
-
-To regenerate the `.ico` from a new PNG:
-```python
-from PIL import Image
-img = Image.open("assets/logo-1024.png").convert("RGBA")
-sizes = [(256,256),(128,128),(64,64),(48,48),(32,32),(16,16)]
-resized = [img.resize(s, Image.LANCZOS) for s in sizes]
-resized[0].save("build/windows/alpha-osk.ico", format="ICO", sizes=sizes, append_images=resized[1:])
-```
+The eToken-non-elevated requirement is the single most common build trap: SafeNet exposes the cert to the user session only, so elevated shells get "Cannot find certificate."
 
 ## Linux build
 
