@@ -33,11 +33,18 @@ Window {
         property bool savedAutoSaveOnExit: true
         property bool savedSwipeEnabled: false
         property bool savedAutoCheckUpdates: true
-        // Window geometry — restored on launch, saved (debounced) on
-        // resize.  0 means "no saved value yet, use the binding-driven
-        // default" — that path runs on a fresh install.
+        // Window WIDTH — restored on launch, saved (debounced) on resize.
+        // 0 means "no saved value yet, use the binding-driven default"
+        // — that path runs on a fresh install.
+        //
+        // Height is deliberately NOT persisted: it's bound to the
+        // keyboard's content (`height: outerLayout.implicitHeight + 60`),
+        // so the only user-controllable dimension is width.  An earlier
+        // version saved both, which broke the height binding the moment
+        // it was imperatively restored on launch — the keyboard then
+        // either grew empty bands or clipped the bottom row depending
+        // on how the saved height compared to the content's needs.
         property int savedWindowWidth: 0
-        property int savedWindowHeight: 0
     }
 
     // Set when Component.onCompleted finishes restoring the saved
@@ -56,17 +63,15 @@ Window {
         onTriggered: {
             if (root._geometryRestored) {
                 appSettings.savedWindowWidth = root.width
-                appSettings.savedWindowHeight = root.height
             }
         }
     }
-    // NB: width/height-changed handlers live further down in the file
-    // (one near line 164 for height, one near 301 for width). Each
-    // calls saveGeometryTimer.restart() when _geometryRestored is true,
-    // so resize is persisted via that single seam. Don't redeclare
-    // onWidthChanged / onHeightChanged here — Qt rejects duplicate
-    // signal handlers on the same object with "Property value set
-    // multiple times" and the QML file fails to load.
+    // NB: the width-changed handler lives further down in the file
+    // (near line 301).  It calls saveGeometryTimer.restart() when
+    // _geometryRestored is true, so width persistence flows through
+    // that single seam.  Height isn't saved at all (see the Settings
+    // block above for why) and onHeightChanged only refreshes the
+    // swipe layout — no save call.
 
     // Auto-update — bridge fills these in when checkForUpdate() finds
     // a signed newer release.  See src/updater.py for the security model.
@@ -94,13 +99,15 @@ Window {
     // Position once at startup — do NOT bind x/y to width/height or resize
     // will feel inverted (window re-centers on every pixel change)
     Component.onCompleted: {
-        // Restore saved window geometry first so the user gets the
-        // size they had last time, not a flash of the default size
-        // followed by a resize.  0 means "no value persisted yet".
+        // Restore saved window WIDTH first so the user gets the size
+        // they had last time, not a flash of the default size followed
+        // by a resize.  0 means "no value persisted yet".  Height is
+        // intentionally NOT restored — it's bound to content height
+        // and an imperative assignment here would break that binding,
+        // which is exactly the bug that produced empty vertical bands
+        // and bottom-row clipping in earlier versions.
         if (appSettings.savedWindowWidth > 0)
             root.width = Math.max(root.minimumWidth, appSettings.savedWindowWidth)
-        if (appSettings.savedWindowHeight > 0)
-            root.height = Math.max(root.minimumHeight, appSettings.savedWindowHeight)
         root._geometryRestored = true
 
         // Load saved preferences
@@ -166,11 +173,10 @@ Window {
     // Refresh the swipe-recognizer layout whenever the window is resized —
     // key positions move with the layout.  (See the merged onWidthChanged
     // handler further down which also handles minimumWidth clamping.)
-    // Also debounces a save of the new height so the OSK comes back at
-    // this size next launch.
+    // Height is not persisted (it's bound to content) so there's no
+    // save call here.
     onHeightChanged: {
         swipeLayoutPushTimer.restart()
-        if (_geometryRestored) saveGeometryTimer.restart()
     }
 
     onSwipeEnabledChanged: {
@@ -302,6 +308,11 @@ Window {
         + (showNumpad ? 1 + 3 * keySpacing + 12 : 0)
 
     property real keyW: Math.max(30, (root.width - layoutFixedPixels) / totalKeyUnits)
+    // keyH simply tracks keyW at the keycap aspect ratio.  This works
+    // because the window's `height` is bound to `outerLayout.implicitHeight + 60`
+    // — i.e. the window auto-sizes to whatever the content needs.  The
+    // user only resizes width (the resize handles are SizeHorCursor),
+    // and height follows.  No height-budget arithmetic needed.
     property real keyH: Math.max(34, keyW * 0.89)
 
     // Safety net: if the window width ever drops below minimumWidth (e.g. via
@@ -820,8 +831,20 @@ Window {
 
             // ===== Prediction Bar (spans full width including nav/numpad) =====
             Item {
+                id: predBar
                 Layout.fillWidth: true
-                Layout.preferredHeight: root.suggestionsEnabled ? 40 : 0
+                // Pill geometry tracks the main keyboard so the bar stays
+                // proportional when the user resizes the window. At default
+                // keyH ≈ 50 / keyW ≈ 56 these collapse to the historical
+                // 36 px pill / 15 px font / 28 px horizontal padding /
+                // 60 px floor — so legacy sizing is preserved at the
+                // default geometry and only departs from it once the
+                // user actually resizes.
+                property real predPillHeight: Math.max(28, root.keyH * 0.72)
+                property real predFontSize: Math.max(12, root.keyH * 0.30)
+                property real predHorizontalPad: Math.max(20, root.keyW * 0.5)
+                property real predMinWidth: Math.max(40, root.keyW * 1.07)
+                Layout.preferredHeight: root.suggestionsEnabled ? predPillHeight + 4 : 0
                 Layout.bottomMargin: root.suggestionsEnabled ? 4 : 0
                 clip: true
 
@@ -860,16 +883,16 @@ Window {
                     Repeater {
                         model: root.suggestionsEnabled && !root.privacyMode && root.predictions.length > 0 ? root.predictions : []
                         delegate: Rectangle {
-                            property real naturalWidth: Math.max(60, predText.implicitWidth + 28)
+                            property real naturalWidth: Math.max(predBar.predMinWidth, predText.implicitWidth + predBar.predHorizontalPad)
                             property real maxPillWidth: {
                                 var count = root.predictions.length
                                 if (count <= 0) return naturalWidth
                                 var avail = root.width - 32 - (count - 1) * predRow.spacing
-                                return Math.max(50, avail / count)
+                                return Math.max(predBar.predPillHeight * 1.4, avail / count)
                             }
                             width: Math.min(naturalWidth, maxPillWidth)
-                            height: 36
-                            radius: 8
+                            height: predBar.predPillHeight
+                            radius: Math.max(4, predBar.predPillHeight * 0.22)
                             color: predMouse.containsMouse ? Qt.lighter(root.themeKeyColor, 1.3) : root.themeKeyColor
                             border.color: predMouse.containsMouse ? Qt.lighter(root.themeAccent, 1.2) : root.themeAccent
                             border.width: predMouse.containsMouse ? 2 : 1
@@ -890,12 +913,12 @@ Window {
                                 anchors.verticalCenter: parent.verticalCenter
                                 anchors.left: parent.left
                                 anchors.right: parent.right
-                                anchors.leftMargin: 8
-                                anchors.rightMargin: 8
+                                anchors.leftMargin: Math.max(6, predBar.predHorizontalPad * 0.28)
+                                anchors.rightMargin: Math.max(6, predBar.predHorizontalPad * 0.28)
                                 horizontalAlignment: Text.AlignHCenter
                                 text: modelData
                                 color: predMouse.containsMouse ? Qt.lighter(root.themeTextColor, 1.3) : root.themeTextColor
-                                font.pixelSize: 15
+                                font.pixelSize: predBar.predFontSize
                                 font.weight: Font.Medium
                                 font.family: "Ubuntu, Noto Sans, sans-serif"
                                 elide: Text.ElideRight

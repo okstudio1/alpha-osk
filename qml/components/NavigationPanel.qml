@@ -25,12 +25,12 @@ Item {
         property real cellW: navPanel.keyW
         property real cellH: navPanel.keyH
 
-        // Row 1: PrtSc, ScrLk, Pause (system keys — shorter height)
+        // Row 1: PrtSc, ScrLk, Pause — full cell height, same as Ins/Home/PgUp
         KeyButton {
             keyText: "print"; displayText: "PrtSc"
-            keyWidth: navGrid.cellW; keyHeight: navGrid.cellH * 0.72
-            Layout.preferredWidth: navGrid.cellW; Layout.preferredHeight: navGrid.cellH * 0.72
-            fontSize: 9; isSpecial: true; keyColor: navPanel.keyColor
+            keyWidth: navGrid.cellW; keyHeight: navGrid.cellH
+            Layout.preferredWidth: navGrid.cellW; Layout.preferredHeight: navGrid.cellH
+            fontSize: 10; isSpecial: true; keyColor: navPanel.keyColor
             keyPressedColor: navPanel.keyPressedColor
             keyTextColor: navPanel.keyTextColor
             accentColor: navPanel.accentColor
@@ -39,9 +39,9 @@ Item {
         }
         KeyButton {
             keyText: "scrolllock"; displayText: "ScrLk"
-            keyWidth: navGrid.cellW; keyHeight: navGrid.cellH * 0.72
-            Layout.preferredWidth: navGrid.cellW; Layout.preferredHeight: navGrid.cellH * 0.72
-            fontSize: 9; isSpecial: true; keyColor: navPanel.keyColor
+            keyWidth: navGrid.cellW; keyHeight: navGrid.cellH
+            Layout.preferredWidth: navGrid.cellW; Layout.preferredHeight: navGrid.cellH
+            fontSize: 10; isSpecial: true; keyColor: navPanel.keyColor
             keyPressedColor: navPanel.keyPressedColor
             keyTextColor: navPanel.keyTextColor
             accentColor: navPanel.accentColor
@@ -50,9 +50,9 @@ Item {
         }
         KeyButton {
             keyText: "pause"; displayText: "Pause"
-            keyWidth: navGrid.cellW; keyHeight: navGrid.cellH * 0.72
-            Layout.preferredWidth: navGrid.cellW; Layout.preferredHeight: navGrid.cellH * 0.72
-            fontSize: 9; isSpecial: true; keyColor: navPanel.keyColor
+            keyWidth: navGrid.cellW; keyHeight: navGrid.cellH
+            Layout.preferredWidth: navGrid.cellW; Layout.preferredHeight: navGrid.cellH
+            fontSize: 10; isSpecial: true; keyColor: navPanel.keyColor
             keyPressedColor: navPanel.keyPressedColor
             keyTextColor: navPanel.keyTextColor
             accentColor: navPanel.accentColor

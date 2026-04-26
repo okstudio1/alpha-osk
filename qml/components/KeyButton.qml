@@ -40,6 +40,15 @@ Item {
     property int debounceMs: 150
     property real _lastAcceptedPress: 0
 
+    // Explicit pressed-state tracking — do NOT bind visuals directly to
+    // mouseArea.pressed.  On Windows the OSK has WS_EX_NOACTIVATE, and
+    // when the user drags off a key onto another app's window Qt
+    // occasionally never sees the release event, leaving pressed=true
+    // and the key visibly latched down.  We drive visuals off this
+    // property instead and clear it on release, cancel, drag-off, AND
+    // a safety timeout so a missed event can't strand the key visually.
+    property bool _visualPressed: false
+
     // Signals
     signal keyPressed()
 
@@ -63,13 +72,27 @@ Item {
         }
     }
 
+    // Final safety net for stuck visuals — even with the explicit clear
+    // paths in the MouseArea handlers below, force the key back to its
+    // resting state after 5 s.  No reasonable OSK interaction lasts that
+    // long, so if we're still here it means an event was dropped.
+    Timer {
+        id: pressSafetyTimer
+        interval: 5000
+        repeat: false
+        onTriggered: {
+            keyRoot._visualPressed = false
+            repeatTimer.stop()
+        }
+    }
+
     Rectangle {
         id: keyBackground
         anchors.fill: parent
         anchors.margins: 2
         radius: keyRoot.radius
         clip: true
-        color: mouseArea.pressed ? keyPressedColor
+        color: keyRoot._visualPressed ? keyPressedColor
              : isActive ? accentColor
              : mouseArea.containsMouse ? Qt.lighter(keyColor, 1.25)
              : keyColor
@@ -85,8 +108,8 @@ Item {
             anchors.margins: 1
             radius: parent.radius - 1
             gradient: Gradient {
-                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, mouseArea.pressed ? 0.02 : 0.06) }
-                GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, mouseArea.pressed ? 0.14 : 0.08) }
+                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, keyRoot._visualPressed ? 0.02 : 0.06) }
+                GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, keyRoot._visualPressed ? 0.14 : 0.08) }
             }
         }
 
@@ -124,10 +147,10 @@ Item {
             text: keyRoot.displayText
             // Ensure readable contrast: use dark text on bright backgrounds, white on dark
             color: {
-                var bg = mouseArea.pressed ? keyPressedColor : isActive ? accentColor : keyColor
+                var bg = keyRoot._visualPressed ? keyPressedColor : isActive ? accentColor : keyColor
                 // Luminance approximation: bright backgrounds need dark text
                 var lum = bg.r * 0.299 + bg.g * 0.587 + bg.b * 0.114
-                if (mouseArea.pressed || isActive) {
+                if (keyRoot._visualPressed || isActive) {
                     return lum > 0.5 ? "#111111" : "#ffffff"
                 }
                 return keyTextColor
@@ -149,8 +172,8 @@ Item {
             id: scaleTransform
             origin.x: keyBackground.width / 2
             origin.y: keyBackground.height / 2
-            xScale: mouseArea.pressed ? 0.94 : 1.0
-            yScale: mouseArea.pressed ? 0.94 : 1.0
+            xScale: keyRoot._visualPressed ? 0.94 : 1.0
+            yScale: keyRoot._visualPressed ? 0.94 : 1.0
             Behavior on xScale { NumberAnimation { duration: 100; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
             Behavior on yScale { NumberAnimation { duration: 100; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
         }
@@ -173,6 +196,12 @@ Item {
             }
             keyRoot._lastAcceptedPress = now
 
+            // Visual press is driven explicitly so a missed release
+            // can't strand the key looking pressed-down (see the
+            // _visualPressed comment up top).
+            keyRoot._visualPressed = true
+            pressSafetyTimer.restart()
+
             // Trigger ripple from press point
             ripple.centerX = mouse.x - keyBackground.anchors.margins
             ripple.centerY = mouse.y - keyBackground.anchors.margins
@@ -192,22 +221,30 @@ Item {
         }
 
         onReleased: {
+            keyRoot._visualPressed = false
+            pressSafetyTimer.stop()
             repeatTimer.stop()
             repeatTimer.interval = keyRoot.repeatDelay
             repeatTimer.repeat = false
         }
 
         onCanceled: {
+            keyRoot._visualPressed = false
+            pressSafetyTimer.stop()
             repeatTimer.stop()
             repeatTimer.interval = keyRoot.repeatDelay
             repeatTimer.repeat = false
         }
 
-        // Stop key repeat the moment the cursor drags off the key — even
-        // if the user is still holding the mouse button.  Prevents a
-        // held key from continuing to fire while the pointer wanders.
+        // Cursor leaving the key clears the visual press AND stops
+        // repeat — covers two cases: (1) the user dragged off to abort
+        // the keypress, (2) Qt never delivered the release because the
+        // cursor went onto another app's window (WS_EX_NOACTIVATE
+        // sometimes drops that event).  Either way, the key's no longer
+        // being interacted with, so it shouldn't look held down.
         onContainsMouseChanged: {
             if (!containsMouse) {
+                keyRoot._visualPressed = false
                 repeatTimer.stop()
                 repeatTimer.interval = keyRoot.repeatDelay
                 repeatTimer.repeat = false
