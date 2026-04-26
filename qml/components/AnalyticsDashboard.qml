@@ -7,6 +7,11 @@ Item {
 
     property var stats: ({})
 
+    // Lifetime is the default view — typing patterns, savings, and
+    // quality only become meaningful over many sessions.  Session view
+    // is still useful for "how am I doing right now."
+    property bool showLifetime: true
+
     // Poll analytics every 2 seconds while visible
     Timer {
         running: dashboard.visible
@@ -70,13 +75,13 @@ Item {
             }
         }
 
-        // ===== PREDICTION QUALITY =====
+        // ===== PREDICTION QUALITY (lifetime — stable signal over time) =====
         Rectangle {
             Layout.fillWidth: true
             implicitHeight: 32
             radius: 6
             color: "#252525"
-            visible: (dashboard.stats.qualityScore || 0) > 0
+            visible: (dashboard.stats.alltimeQualityScore || 0) > 0
 
             RowLayout {
                 anchors.fill: parent
@@ -97,11 +102,11 @@ Item {
                     color: "#1a1a1a"
 
                     Rectangle {
-                        width: parent.width * Math.min(1, (dashboard.stats.qualityScore || 0) / 100)
+                        width: parent.width * Math.min(1, (dashboard.stats.alltimeQualityScore || 0) / 100)
                         height: parent.height
                         radius: parent.radius
                         color: {
-                            var q = dashboard.stats.qualityScore || 0
+                            var q = dashboard.stats.alltimeQualityScore || 0
                             if (q >= 70) return "#66dd88"
                             if (q >= 40) return "#ddcc66"
                             return "#dd6666"
@@ -111,11 +116,11 @@ Item {
                 }
 
                 Text {
-                    text: (dashboard.stats.qualityScore || 0) + "/100"
+                    text: (dashboard.stats.alltimeQualityScore || 0) + "/100"
                     font.pixelSize: 12
                     font.weight: Font.Bold
                     color: {
-                        var q = dashboard.stats.qualityScore || 0
+                        var q = dashboard.stats.alltimeQualityScore || 0
                         if (q >= 70) return "#66dd88"
                         if (q >= 40) return "#ddcc66"
                         return "#dd6666"
@@ -135,15 +140,24 @@ Item {
             Layout.bottomMargin: 2
         }
 
-        // ===== THIS SESSION =====
-        Text {
-            text: "This Session"
-            font.pixelSize: 11
-            font.weight: Font.DemiBold
-            color: "#888"
+        // ===== Session / Lifetime toggle =====
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 4
+
+            ScopeTab {
+                label: "Lifetime"
+                selected: dashboard.showLifetime
+                onClicked: dashboard.showLifetime = true
+            }
+            ScopeTab {
+                label: "This Session"
+                selected: !dashboard.showLifetime
+                onClicked: dashboard.showLifetime = false
+            }
         }
 
-        // Session stats grid
+        // Stats grid — bound to the active scope
         GridLayout {
             Layout.fillWidth: true
             columns: 2
@@ -152,38 +166,60 @@ Item {
 
             StatBox {
                 label: "Speed"
-                value: (dashboard.stats.wpm || 0).toFixed(1)
-                unit: "wpm"
+                value: dashboard.showLifetime
+                       ? (dashboard.stats.alltimeWpm || 0).toFixed(1)
+                       : (dashboard.stats.wpm || 0).toFixed(1)
+                unit: dashboard.showLifetime ? "avg wpm" : "wpm"
                 accent: "#4a9eff"
             }
 
             StatBox {
                 label: "Saved"
-                value: String(dashboard.stats.keystrokesSaved || 0)
-                unit: (dashboard.stats.savingsPercent || 0).toFixed(0) + "% of typing"
+                value: dashboard.showLifetime
+                       ? formatNumber(dashboard.stats.alltimeKeystrokesSaved || 0)
+                       : String(dashboard.stats.keystrokesSaved || 0)
+                unit: (dashboard.showLifetime
+                       ? (dashboard.stats.alltimeSavingsPercent || 0)
+                       : (dashboard.stats.savingsPercent || 0)
+                      ).toFixed(0) + "% of typing"
                 accent: "#66dd88"
             }
 
             StatBox {
                 label: "Predictions Used"
-                value: (dashboard.stats.predictionHitRate || 0).toFixed(0) + "%"
-                unit: (dashboard.stats.predictionHits || 0) + " of " + (dashboard.stats.totalWords || 0) + " words"
+                value: (dashboard.showLifetime
+                        ? (dashboard.stats.alltimePredictionHitRate || 0)
+                        : (dashboard.stats.predictionHitRate || 0)
+                       ).toFixed(0) + "%"
+                unit: dashboard.showLifetime
+                      ? formatNumber(dashboard.stats.alltimePredictionHits || 0) + " of " + formatNumber(dashboard.stats.alltimeWords || 0) + " words"
+                      : (dashboard.stats.predictionHits || 0) + " of " + (dashboard.stats.totalWords || 0) + " words"
                 accent: "#bb88ff"
             }
 
             StatBox {
                 label: "Corrections"
-                value: (dashboard.stats.backspaceRate || 0).toFixed(0) + "%"
+                value: (dashboard.showLifetime
+                        ? (dashboard.stats.alltimeBackspaceRate || 0)
+                        : (dashboard.stats.backspaceRate || 0)
+                       ).toFixed(0) + "%"
                 unit: "backspace rate"
-                accent: dashboard.stats.backspaceRate > 20 ? "#ffaa66" : "#888"
+                accent: {
+                    var rate = dashboard.showLifetime
+                               ? (dashboard.stats.alltimeBackspaceRate || 0)
+                               : (dashboard.stats.backspaceRate || 0)
+                    return rate > 20 ? "#ffaa66" : "#888"
+                }
             }
         }
 
-        // WPM sparkline
+        // WPM sparkline — session only.  Lifetime aggregate has no
+        // per-minute history; the hourly WPM is already in the Speed
+        // tile above.
         Item {
             Layout.fillWidth: true
             implicitHeight: 40
-            visible: (dashboard.stats.wpmSamples || []).length > 1
+            visible: !dashboard.showLifetime && (dashboard.stats.wpmSamples || []).length > 1
 
             Canvas {
                 id: sparkCanvas
@@ -235,11 +271,19 @@ Item {
             }
         }
 
-        // Top words
+        // Top words — bound to the active scope
         ColumnLayout {
+            id: topWordsCol
             Layout.fillWidth: true
             spacing: 3
-            visible: (dashboard.stats.topWords || []).length > 0
+
+            // The active list of {word,count}.  Bound twice (here + in
+            // the Repeater's model) rather than referencing through
+            // `parent` so the binding survives any future restructuring.
+            property var activeTopWords: dashboard.showLifetime
+                                         ? (dashboard.stats.alltimeTopWords || [])
+                                         : (dashboard.stats.topWords || [])
+            visible: activeTopWords.length > 0
 
             Text {
                 text: "Top Words"
@@ -249,7 +293,7 @@ Item {
             }
 
             Repeater {
-                model: dashboard.stats.topWords || []
+                model: topWordsCol.activeTopWords
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -284,6 +328,36 @@ Item {
         if (n >= 10000) return (n / 1000).toFixed(1) + "k"
         if (n >= 1000) return (n / 1000).toFixed(1) + "k"
         return String(n)
+    }
+
+    // Toggle pill for "Lifetime" vs "This Session"
+    component ScopeTab: Rectangle {
+        property string label: ""
+        property bool selected: false
+        signal clicked()
+
+        Layout.fillWidth: true
+        implicitHeight: 26
+        radius: 5
+        color: selected ? "#3a3a3a" : (tabHover.containsMouse ? "#2a2a2a" : "transparent")
+        border.color: selected ? "#555" : "transparent"
+        border.width: 1
+
+        Text {
+            anchors.centerIn: parent
+            text: parent.label
+            font.pixelSize: 11
+            font.weight: parent.selected ? Font.DemiBold : Font.Normal
+            color: parent.selected ? "#e0e0e0" : "#888"
+        }
+
+        MouseArea {
+            id: tabHover
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: parent.clicked()
+        }
     }
 
     // All-time stat pill (compact, inline)
