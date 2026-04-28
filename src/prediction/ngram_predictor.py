@@ -239,9 +239,20 @@ class NgramPredictor:
         for words that aren't already known proper nouns).  Single-character
         words are skipped (handled by _always_capitalize).
 
+        All-uppercase typings ("HELLO", "WORLD") are skipped — those
+        almost always come from Caps Lock being on, not a deliberate
+        signal that the word is canonically uppercase. Without this
+        guard, every word the user types with caps lock on would
+        pollute the capitalisation table, and predictions would come
+        back shouty. Genuine acronyms (HBO, IBM, NASA) are loaded via
+        `_load_proper_nouns` directly into ``self.capitalization``,
+        bypassing this learn path, so they still work.
+
         Returns True if a new or updated capitalization was saved.
         """
         if not word or len(word) < 2:
+            return False
+        if word.isupper():
             return False
         lower = word.lower()
         existing = self.capitalization.get(lower)

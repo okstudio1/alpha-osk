@@ -294,6 +294,30 @@ class TestCapitalization:
         predictor.learn_capitalization("iPhone")
         assert predictor.get_capitalized("iphone", sentence_start=False) == "iPhone"
 
+    def test_all_uppercase_typing_not_learned(self):
+        """All-caps typing is almost always Caps Lock being on, not a
+        deliberate "this word is uppercase" signal. The capitalisation
+        table should not be polluted with shouty forms of every word
+        the user types under caps lock.
+        """
+        predictor = NgramPredictor()
+        # The user typed "HELLO" with Caps Lock on.
+        result = predictor.learn_capitalization("HELLO")
+        assert result is False, "all-caps typing should not be learned"
+        # And the prediction comes back lowercase (or sentence-start
+        # cap), not "HELLO".
+        assert predictor.get_capitalized("hello", sentence_start=False) == "hello"
+
+    def test_legitimate_acronym_via_proper_nouns_still_works(self):
+        """Built-in acronyms like NASA, IBM, HBO are loaded directly
+        into self.capitalization via _load_proper_nouns — they don't
+        go through learn_capitalization, so the all-caps guard above
+        doesn't break them."""
+        predictor = NgramPredictor()
+        # _load_proper_nouns ran during __init__ and populated these.
+        assert predictor.get_capitalized("nasa", sentence_start=False) == "NASA"
+        assert predictor.get_capitalized("ibm", sentence_start=False) == "IBM"
+
 
 class TestPersonalVocabRanking:
     """Personal typing should outrank dictionary-only words on partial match."""
