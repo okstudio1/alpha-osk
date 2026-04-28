@@ -143,25 +143,31 @@ Window {
         }
         root.layoutRows = keyboard ? keyboard.getLayoutRows() : []
 
-        // Set initial width accounting for saved panel state
-        var w = 940
-        if (root.showNavigation) w += 200
-        if (root.showNumpad) w += 220
-        root.width = w
+        // Compute the panel-state-aware default width ONLY on a
+        // fresh install (no persisted width). Otherwise the
+        // savedWindowWidth restore above gets clobbered every
+        // launch — the user's resized width never sticks.
+        if (appSettings.savedWindowWidth <= 0) {
+            var w = 940
+            if (root.showNavigation) w += 220
+            if (root.showNumpad) w += 250
+            root.width = w
+        }
 
         root.x = (Screen.width - root.width) / 2
         root.y = Screen.height - root.height - 40
         root._loaded = true
     }
 
-    // When side panels toggle, grow/shrink from the right edge (left stays put)
-    // Deltas sized to keep main keys ~same size (≈ 2.7*keyW+17 for nav, 3.6*keyW+19 for numpad at default scale)
+    // When side panels toggle, grow/shrink from the right edge (left stays put).
+    // Deltas sized to keep main keys ~same size at the default scale:
+    // nav = 3.0*keyW + per-panel fixed (≈ 220), numpad = 4.0*keyW + per-panel fixed (≈ 250).
     onShowNavigationChanged: {
-        if (_loaded) root.width += showNavigation ? 200 : -200
+        if (_loaded) root.width += showNavigation ? 220 : -220
         appSettings.savedShowNavigation = showNavigation
     }
     onShowNumpadChanged: {
-        if (_loaded) root.width += showNumpad ? 220 : -220
+        if (_loaded) root.width += showNumpad ? 250 : -250
         appSettings.savedShowNumpad = showNumpad
     }
 
@@ -296,10 +302,13 @@ Window {
 
     // Total key-width units across all visible sections:
     // Widest row is the number row (15 keys): Esc(1) + `(1) + 10 nums + -(1) + =(1) + Backspace(1.5) = 15.5 units
-    // Nav panel: 3 keys × 0.9 = 2.7 units;  Numpad: 4 keys × 0.9 = 3.6 units
+    // Nav panel: 3 keys × 1.0 = 3.0 units;  Numpad: 4 keys × 1.0 = 4.0 units
+    // (The 0.9× multiplier on nav/numpad keys was bumped to 1.0× so
+    // labels like "PrtSc"/"PgDn" don't clip — keep this in sync with
+    // the keyW bindings on the panels themselves below.)
     property real totalKeyUnits: 15.5
-        + (showNavigation ? 2.7 : 0)
-        + (showNumpad ? 3.6 : 0)
+        + (showNavigation ? 3.0 : 0)
+        + (showNumpad ? 4.0 : 0)
 
     // Fixed-pixel overhead: margins(8×2=16) + number-row gaps(15 keys → 14×keySpacing)
     // + per-panel: separator(1) + 2 inner grid gaps + 2×RowLayout spacing(6)
@@ -840,10 +849,10 @@ Window {
                 // 60 px floor — so legacy sizing is preserved at the
                 // default geometry and only departs from it once the
                 // user actually resizes.
-                property real predPillHeight: Math.max(28, root.keyH * 0.72)
-                property real predFontSize: Math.max(12, root.keyH * 0.30)
-                property real predHorizontalPad: Math.max(20, root.keyW * 0.5)
-                property real predMinWidth: Math.max(40, root.keyW * 1.07)
+                property real predPillHeight: Math.max(34, root.keyH * 0.86)
+                property real predFontSize: Math.max(14, root.keyH * 0.36)
+                property real predHorizontalPad: Math.max(24, root.keyW * 0.58)
+                property real predMinWidth: Math.max(48, root.keyW * 1.25)
                 Layout.preferredHeight: root.suggestionsEnabled ? predPillHeight + 4 : 0
                 Layout.bottomMargin: root.suggestionsEnabled ? 4 : 0
                 clip: true
@@ -1073,8 +1082,8 @@ Window {
             
             Comp.NavigationPanel {
                 visible: root.showNavigation
-                keyW: root.keyW * 0.9
-                keyH: root.keyH * 0.9
+                keyW: root.keyW
+                keyH: root.keyH
                 keySpacing: root.keySpacing
                 keyColor: Qt.darker(root.themeKeyColor, 1.15)
                 keyPressedColor: root.themeKeyPressed
@@ -1093,8 +1102,8 @@ Window {
             
             Comp.NumpadPanel {
                 visible: root.showNumpad
-                keyW: root.keyW * 0.9
-                keyH: root.keyH * 0.9
+                keyW: root.keyW
+                keyH: root.keyH
                 keySpacing: root.keySpacing
                 keyColor: root.themeKeyColor
                 specialKeyColor: Qt.darker(root.themeKeyColor, 1.15)

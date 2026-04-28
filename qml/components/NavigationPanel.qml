@@ -30,7 +30,7 @@ Item {
             keyText: "print"; displayText: "PrtSc"
             keyWidth: navGrid.cellW; keyHeight: navGrid.cellH
             Layout.preferredWidth: navGrid.cellW; Layout.preferredHeight: navGrid.cellH
-            fontSize: 10; isSpecial: true; keyColor: navPanel.keyColor
+            fontSize: 12; isSpecial: true; keyColor: navPanel.keyColor
             keyPressedColor: navPanel.keyPressedColor
             keyTextColor: navPanel.keyTextColor
             accentColor: navPanel.accentColor
@@ -41,7 +41,7 @@ Item {
             keyText: "scrolllock"; displayText: "ScrLk"
             keyWidth: navGrid.cellW; keyHeight: navGrid.cellH
             Layout.preferredWidth: navGrid.cellW; Layout.preferredHeight: navGrid.cellH
-            fontSize: 10; isSpecial: true; keyColor: navPanel.keyColor
+            fontSize: 12; isSpecial: true; keyColor: navPanel.keyColor
             keyPressedColor: navPanel.keyPressedColor
             keyTextColor: navPanel.keyTextColor
             accentColor: navPanel.accentColor
@@ -52,7 +52,7 @@ Item {
             keyText: "pause"; displayText: "Pause"
             keyWidth: navGrid.cellW; keyHeight: navGrid.cellH
             Layout.preferredWidth: navGrid.cellW; Layout.preferredHeight: navGrid.cellH
-            fontSize: 10; isSpecial: true; keyColor: navPanel.keyColor
+            fontSize: 12; isSpecial: true; keyColor: navPanel.keyColor
             keyPressedColor: navPanel.keyPressedColor
             keyTextColor: navPanel.keyTextColor
             accentColor: navPanel.accentColor
@@ -65,7 +65,7 @@ Item {
             keyText: "insert"; displayText: "Ins"
             keyWidth: navGrid.cellW; keyHeight: navGrid.cellH
             Layout.preferredWidth: navGrid.cellW; Layout.preferredHeight: navGrid.cellH
-            fontSize: 10; isSpecial: true; keyColor: navPanel.keyColor
+            fontSize: 12; isSpecial: true; keyColor: navPanel.keyColor
             keyPressedColor: navPanel.keyPressedColor
             keyTextColor: navPanel.keyTextColor
             accentColor: navPanel.accentColor
@@ -76,7 +76,7 @@ Item {
             keyText: "home"; displayText: "Home"
             keyWidth: navGrid.cellW; keyHeight: navGrid.cellH
             Layout.preferredWidth: navGrid.cellW; Layout.preferredHeight: navGrid.cellH
-            fontSize: 10; isSpecial: true; keyColor: navPanel.keyColor
+            fontSize: 12; isSpecial: true; keyColor: navPanel.keyColor
             keyPressedColor: navPanel.keyPressedColor
             keyTextColor: navPanel.keyTextColor
             accentColor: navPanel.accentColor
@@ -87,7 +87,7 @@ Item {
             keyText: "pageup"; displayText: "PgUp"
             keyWidth: navGrid.cellW; keyHeight: navGrid.cellH
             Layout.preferredWidth: navGrid.cellW; Layout.preferredHeight: navGrid.cellH
-            fontSize: 10; isSpecial: true; keyColor: navPanel.keyColor
+            fontSize: 12; isSpecial: true; keyColor: navPanel.keyColor
             keyPressedColor: navPanel.keyPressedColor
             keyTextColor: navPanel.keyTextColor
             accentColor: navPanel.accentColor
@@ -101,7 +101,7 @@ Item {
             keyText: "delete"; displayText: "Del"
             keyWidth: navGrid.cellW; keyHeight: navGrid.cellH
             Layout.preferredWidth: navGrid.cellW; Layout.preferredHeight: navGrid.cellH
-            fontSize: 10; isSpecial: true; keyColor: navPanel.keyColor
+            fontSize: 12; isSpecial: true; keyColor: navPanel.keyColor
             keyPressedColor: navPanel.keyPressedColor
             keyTextColor: navPanel.keyTextColor
             accentColor: navPanel.accentColor
@@ -113,7 +113,7 @@ Item {
             keyText: "end"; displayText: "End"
             keyWidth: navGrid.cellW; keyHeight: navGrid.cellH
             Layout.preferredWidth: navGrid.cellW; Layout.preferredHeight: navGrid.cellH
-            fontSize: 10; isSpecial: true; keyColor: navPanel.keyColor
+            fontSize: 12; isSpecial: true; keyColor: navPanel.keyColor
             keyPressedColor: navPanel.keyPressedColor
             keyTextColor: navPanel.keyTextColor
             accentColor: navPanel.accentColor
@@ -124,7 +124,7 @@ Item {
             keyText: "pagedown"; displayText: "PgDn"
             keyWidth: navGrid.cellW; keyHeight: navGrid.cellH
             Layout.preferredWidth: navGrid.cellW; Layout.preferredHeight: navGrid.cellH
-            fontSize: 10; isSpecial: true; keyColor: navPanel.keyColor
+            fontSize: 12; isSpecial: true; keyColor: navPanel.keyColor
             keyPressedColor: navPanel.keyPressedColor
             keyTextColor: navPanel.keyTextColor
             accentColor: navPanel.accentColor

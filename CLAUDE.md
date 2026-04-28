@@ -111,14 +111,17 @@ Caps Lock and Shift are **independent toggles**. Toggling caps no longer also fl
 
 - **Uppercase output** in `pressKey`: `key.upper()` if `_shift_active OR _caps_lock_active`.
 - **Upper layer**: `_update_layer()` switches to `"upper"` if `_shift_active OR _caps_lock_active`. Same for the displayed glyph in `Main.qml`.
-- **Auto-release**: Shift auto-releases after a single keypress; caps stays on until explicitly toggled. Caps is unaffected by the auto-release path.
+- **OS-level hold**: `toggleShift` calls `_synth.hold_modifier("shift")` / `release_modifier("shift")` so the OS sees Shift physically held while the toggle is active. This is what makes Shift+click and Shift+drag in the target app extend the text selection — same as the Windows on-screen keyboard. Without it, Shift only attached to synthesised keystrokes as a chord modifier and a click between toggle and the next typed character would land without Shift held.
+- **Auto-release**: Shift auto-releases after a single keypress; caps stays on until explicitly toggled. Auto-release paths also call `release_modifier("shift")` so the OS-held shift drops together with the Python state. Caps is unaffected by the auto-release path.
 - **Visual highlight**: only the toggled key is highlighted — toggling caps does NOT also highlight the Shift key (it used to, that was a bug).
 
 The shifted *glyph* on a key (e.g. `!` on the `1` key) follows shift only — caps lock uppercases letters but does not pick the shifted variant of symbol/number keys, matching standard keyboard behavior.
 
 ### Caps Lock and the prediction bar
 
-When Caps Lock is on, the prediction pills also render uppercase. The pills must match what the user is typing *and* what the pill will insert when clicked — showing "hello" while the user has typed "HELL" and then inserting lowercase next to the uppercase prefix was the pre-fix bug. Implementation: `KeyboardBridge._display_cased()` uppercases the engine's output when `_caps_lock_active`, and every emit site (`_on_predictions_ready`, `_on_predictions_refined`, next-word-after-selection, `editPrediction`, swipe) routes through it. `toggleCapsLock` re-queries the engine so currently-visible pills flip case immediately — we can't just `.upper()` / `.lower()` the stored list in place because once "iPhone" becomes "IPHONE" the original casing is lost. Shift is deliberately not mirrored — it's one-shot auto-releasing and sentence-start capitalisation is already handled upstream by `NgramPredictor.get_capitalized`.
+When Caps Lock is on, the prediction pills also render uppercase. The pills must match what the user is typing *and* what the pill will insert when clicked — showing "hello" while the user has typed "HELL" and then inserting lowercase next to the uppercase prefix was the pre-fix bug. Implementation: `KeyboardBridge._display_cased()` uppercases the engine's output when `_caps_lock_active`, and every emit site (`_on_predictions_ready`, `_on_predictions_refined`, next-word-after-selection, `editPrediction`, swipe) routes through it. `toggleCapsLock` re-queries the engine so currently-visible pills flip case immediately — we can't just `.upper()` / `.lower()` the stored list in place because once "iPhone" becomes "IPHONE" the original casing is lost.
+
+`_display_cased` *also* mirrors a one-shot Shift on the first letter of the partial word: if the user typed "Hel" the pills show "Hello"/"Help", not "hello"/"help". Two reasons: (1) the displayed pill must match what the user typed so they can tell which pill matches their prefix, and (2) the suffix-only insert path uses a case-sensitive `startswith`, so "hello".startswith("Hel") is False and the click would fall through to a full replace, clobbering the user's capital H. Sentence-start and proper-noun capitalisation still flow through `NgramPredictor.get_capitalized` upstream; this layer only mirrors the *typed* prefix back into the displayed form.
 
 ## Editing a Prediction (OSK-friendly edit popup)
 
@@ -144,16 +147,16 @@ Drag the mouse across letters to type a whole word in one gesture, like Gboard. 
 
 When the toggle is on, a transparent overlay covers the keyboard rows and intercepts all gestures. Press → drag past 60 px → swipe; press → release on a key → tap fall-through (the overlay hit-tests the registry and forwards to the underlying `KeyButton.keyPressed`). The recogniser pre-filters by start/end key, then scores remaining candidates with `log(freq+1) − 8 · mean_normalized_distance`. Top result is typed via `send_text` + space; alternates appear in the prediction bar so the user can repick.
 
-## Sticky Modifiers (Ctrl, Alt, Win)
+## Sticky Modifiers (Shift, Ctrl, Alt, Win)
 
 Modifier keys are **sticky** — tap once to activate, tap again to deactivate. While active, the modifier is held at the OS level via `hold_modifier()` / `release_modifier()` on the platform synthesizer. This means:
 
-- **Modifier+click works**: e.g., Ctrl+click to open hyperlinks in terminals/browsers.
+- **Modifier+click works**: e.g., Ctrl+click to open hyperlinks, Shift+click and Shift+drag to extend text selection in the target app — same model as the Windows on-screen keyboard.
 - **Modifier+key combos work**: e.g., tap Ctrl, then tap C → sends Ctrl+C.
-- **Auto-release**: After any key press (character or special), active modifiers are released at the OS level and deactivated.
+- **Auto-release**: After any key press (character or special), active modifiers are released at the OS level and deactivated. Shift specifically auto-releases after one keypress (caps lock pins it on instead) — Ctrl/Alt/Win behave the same way.
 
 ### Implementation
-- `keyboard_bridge.py`: `toggleCtrl()` / `toggleAlt()` / `toggleWin()` call `_synth.hold_modifier()` on activate and `_synth.release_modifier()` on deactivate. All auto-release paths in `pressKey()` and `pressSpecialKey()` also call `release_modifier()`.
+- `keyboard_bridge.py`: `toggleShift()` / `toggleCtrl()` / `toggleAlt()` / `toggleWin()` call `_synth.hold_modifier()` on activate and `_synth.release_modifier()` on deactivate. All auto-release paths in `pressKey()` and `pressSpecialKey()` also call `release_modifier()`. `shutdown()` releases any still-held modifiers so quitting with one "active" doesn't pin it at the X server / Wayland compositor / Windows kernel.
 - `platform/base.py`: `hold_modifier()` and `release_modifier()` — default no-op.
 - `platform/windows.py`: Sends `VK_CONTROL` / `VK_MENU` / `VK_LWIN` key-down or key-up via `SendInput`.
 - `platform/linux.py`: Uses `xdotool keydown/keyup` or `ydotool key --key-down/--key-up`.
@@ -290,7 +293,7 @@ Commercial keyboards (Gboard/LatinIME, Presage) treat prediction and spell-check
 - **Spatial error correction**: `fuzzy_recognizer.py` considers nearby keys (same concept as LatinIME's key-distance weighting)
 - **Three-tier capitalization**: always-capitalize ("I"), sentence-start-only (ambiguous names), always (proper nouns)
 - **Linear-interpolation n-gram scoring**: `NgramPredictor.predict()` ranks candidates with `score(w) = λ₃·P(w|w₋₂,w₋₁) + λ₂·P(w|w₋₁) + λ₁·P_uni(w)` (λ = 0.5 / 0.3 / 0.2). Trigram / bigram / unigram all live in probability space, so bigram evidence can actually beat the global unigram favourite after a trained context (e.g. "I want " → "to", not "the"). When there's no preceding word, the formula collapses to `P_uni` at full weight so partial-prefix completion isn't flattened. (Pre-fix bug: bigram added `freq·2`, unigram added `p·100_000` — unigram dominated by 1000×.)
-- **Fragment filter on learning**: `NgramPredictor.learn()` rejects obvious keyboard-slip fragments (`_is_plausible_word`: length ≤ 2 must be in a short whitelist; length ≥ 3 needs both a vowel and a non-`aeiou` letter — `y` counts as both so "eye" and "cry" pass but "aaaa" and "xqz" don't). Surviving unknown words go through a repetition gate: counted in `_candidate_counts` until 3 sightings, then promoted into `user_vocab`. Known base-dict words and `learn_word()` bypass the gate. Candidate counts decay with the rest of user vocab and persist across save/load.
+- **Fragment filter on learning AND on dictionary load**: `_is_plausible_word` (length ≤ 2 must be in a short whitelist; length ≥ 3 needs both a vowel and a non-`aeiou` letter — `y` counts as both so "eye" and "cry" pass but "aaaa" and "xqz" don't) is applied in three places: (1) `NgramPredictor.learn()` rejects obvious keyboard-slip fragments before they enter the candidate pool, (2) `_load_frequency_wordlist` filters the Google 10K + 20K supplement dumps on first load — those wordlists are scraped from web search corpora and contain every letter of the alphabet plus ~370 two-letter abbreviations / state codes / fragments at high frequency, which would otherwise flood the pills when typing a one-letter prefix, and (3) `load()` strips fragments out of saved `unigrams` and `user_vocab` so existing users' models get cleaned up on the first launch after the filter shipped. Surviving unknown words from `learn()` go through a repetition gate: counted in `_candidate_counts` until 3 sightings, then promoted into `user_vocab`. Known base-dict words and `learn_word()` bypass the gate. Candidate counts decay with the rest of user vocab and persist across save/load.
 
 ### Known gaps (future work, priority order)
 1. **SymSpell for fuzzy matching** — Replace Levenshtein edit-distance in `fuzzy_recognizer.py` with SymSpell's precomputed-deletion approach. ~1000x faster, O(1) lookup, ~30MB RAM. (Garbe, 2012)

@@ -152,6 +152,23 @@ class TestModifierState:
         bridge.pressKey("a")
         assert not bridge._shift_active  # Auto-released
 
+    def test_toggle_shift_holds_at_os_level(self, bridge: KeyboardBridge):
+        """Shift+click in the target app only works if the OS sees
+        Shift held — same model as Ctrl/Alt/Win. Without this the
+        synthesised input has Shift attached as a chord modifier on
+        each keystroke, but a mouse click between Shift-toggle and
+        the next typed character lands without Shift held."""
+        bridge.toggleShift()
+        bridge._synth.hold_modifier.assert_called_with("shift")
+        bridge.toggleShift()
+        bridge._synth.release_modifier.assert_called_with("shift")
+
+    def test_shift_auto_release_releases_os_modifier(self, bridge: KeyboardBridge):
+        bridge.toggleShift()
+        bridge._synth.release_modifier.reset_mock()
+        bridge.pressKey("a")
+        bridge._synth.release_modifier.assert_called_with("shift")
+
     def test_caps_lock_persists_after_key(self, bridge: KeyboardBridge):
         bridge.toggleCapsLock()
         bridge.pressKey("a")
@@ -338,6 +355,31 @@ class TestPredictionCapsDisplay:
         bridge._update_predictions = lambda: called.__setitem__("count", called["count"] + 1)
         bridge.toggleCapsLock()
         assert called["count"] == 0
+
+    def test_display_cased_matches_shift_typed_first_letter(self, bridge: KeyboardBridge):
+        """One-shot Shift typed an uppercase H; pills must match so
+        the suffix-only insert path's case-sensitive startswith fires
+        and the user's capital isn't clobbered by a full replace."""
+        bridge._current_word = "Hel"
+        assert bridge._display_cased(["hello", "help"]) == ["Hello", "Help"]
+
+    def test_display_cased_leaves_already_capitalised_alone(self, bridge: KeyboardBridge):
+        """Proper-noun predictions (already title-cased) must not be
+        touched — the upstream get_capitalized() already did the right
+        thing, and re-casing would be a no-op at best."""
+        bridge._current_word = "Mar"
+        assert bridge._display_cased(["Mary", "march"]) == ["Mary", "March"]
+
+    def test_display_cased_skips_predictions_not_matching_prefix(self, bridge: KeyboardBridge):
+        """Defensive: predictions whose lowercase form doesn't start
+        with the typed prefix shouldn't be re-cased."""
+        bridge._current_word = "Hel"
+        assert bridge._display_cased(["world"]) == ["world"]
+
+    def test_display_cased_lowercase_prefix_unchanged(self, bridge: KeyboardBridge):
+        """No shift means no case-matching — pure pass-through."""
+        bridge._current_word = "hel"
+        assert bridge._display_cased(["hello", "help"]) == ["hello", "help"]
 
 
 class TestEditModeIntercept:

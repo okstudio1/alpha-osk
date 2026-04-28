@@ -164,17 +164,29 @@ class NgramPredictor:
             with open(wordlist_path, "r") as f:
                 words = [line.strip().lower() for line in f if line.strip()]
 
-            # Assign frequency based on position (higher = more common)
-            # Top word gets 10000, second gets 9999, etc.
+            # The Google 10K list is scraped from web search corpora and
+            # contains every letter of the alphabet plus ~370 two-letter
+            # abbreviations / state codes / fragments (pm, cd, uk, tx,
+            # th, re, de, etc.). Each lands at frequency ~9700, so a
+            # one-letter prefix surfaces all 26 letters in the pills.
+            # Apply the same plausibility filter we use for learned
+            # words so the OSK doesn't suggest "c", "x", "tv", "uk".
+            kept = 0
             max_freq = len(words)
             for rank, word in enumerate(words):
+                if not self._is_plausible_word(word):
+                    continue
                 frequency = max_freq - rank
                 self.unigrams[word] = frequency
                 self._base_unigrams[word] = frequency
                 self._base_total += frequency
                 self.total_words += frequency
+                kept += 1
 
-            _logger.info("Google 10K wordlist loaded: %d words", len(words))
+            _logger.info(
+                "Google 10K wordlist loaded: %d words (%d filtered as fragments)",
+                kept, len(words) - kept,
+            )
         except Exception as e:
             _logger.warning("Failed to load Google 10K wordlist: %s", e)
 
@@ -186,7 +198,10 @@ class NgramPredictor:
             try:
                 with open(supplement_path, "r") as f:
                     supplement = [line.strip().lower() for line in f if line.strip()]
+                kept = 0
                 for rank, word in enumerate(supplement):
+                    if not self._is_plausible_word(word):
+                        continue
                     if word not in self.unigrams:
                         # Lower frequency tier: these words rank below the 10K list
                         frequency = max(1, 500 - rank // 20)
@@ -194,7 +209,11 @@ class NgramPredictor:
                         self._base_unigrams[word] = frequency
                         self._base_total += frequency
                         self.total_words += frequency
-                _logger.info("Supplement wordlist loaded: %d words", len(supplement))
+                    kept += 1
+                _logger.info(
+                    "Supplement wordlist loaded: %d words (%d filtered as fragments)",
+                    kept, len(supplement) - kept,
+                )
             except Exception as e:
                 _logger.warning("Failed to load supplement wordlist: %s", e)
 
@@ -720,6 +739,23 @@ class NgramPredictor:
                 )
                 return
 
+            # Strip fragments from older saved models. The dictionary
+            # loaders apply this filter at startup so fresh installs
+            # are clean, but a long-running user's model.json was
+            # saved before the filter existed and still contains every
+            # letter of the alphabet plus ~370 two-letter abbreviations
+            # at high frequencies. Drop them on load and the next save
+            # writes the cleaned model back.
+            unigrams = {
+                w: c for w, c in unigrams.items()
+                if self._is_plausible_word(w)
+            }
+            user_vocab_raw = data.get("user_vocab", {})
+            user_vocab_clean = {
+                w: c for w, c in user_vocab_raw.items()
+                if self._is_plausible_word(w)
+            }
+
             self.unigrams = defaultdict(int, unigrams)
             self.bigrams = defaultdict(
                 lambda: defaultdict(int),
@@ -729,7 +765,7 @@ class NgramPredictor:
                 lambda: defaultdict(int),
                 {k: defaultdict(int, v) for k, v in data.get("trigrams", {}).items()}
             )
-            self.user_vocab = defaultdict(int, data.get("user_vocab", {}))
+            self.user_vocab = defaultdict(int, user_vocab_clean)
             # Rebuild incremental running total from loaded counts.
             self._user_total = sum(self.user_vocab.values())
             self.total_words = data.get("total_words", 0)

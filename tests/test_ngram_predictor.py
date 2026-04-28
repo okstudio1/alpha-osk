@@ -497,6 +497,74 @@ class TestFragmentFilter:
         # Explicit user add — the gate doesn't apply.
         assert p.user_vocab.get("zephyrish", 0) > 0
 
+
+class TestBaseWordlistFiltering:
+    """The shape filter applies to the base wordlists too, not just learn().
+
+    The Google 10K dump contains every letter of the alphabet plus
+    ~370 two-letter abbreviations / state codes / fragments at high
+    frequency. Without filtering, a one-letter prefix surfaces all 26
+    letters in the prediction pills.
+    """
+
+    def test_single_letters_not_loaded(self):
+        p = NgramPredictor()
+        # "c", "x", "n", etc. are in the Google 10K dump but should be
+        # filtered. Only "a" and "i" survive (in the short whitelist).
+        for letter in "bcdefghjklmnopqrstuvwxyz":
+            assert letter not in p.unigrams, (
+                f"single letter {letter!r} should be filtered from base dict"
+            )
+        # "a" and "i" are real one-letter words and ARE in the whitelist.
+        assert "a" in p.unigrams
+        assert "i" in p.unigrams
+
+    def test_two_letter_fragments_not_loaded(self):
+        p = NgramPredictor()
+        # State codes / abbreviations that the Google list includes but
+        # aren't in the short-word whitelist.
+        for frag in ("tx", "ca", "ny", "kb", "pp", "th", "re"):
+            assert frag not in p.unigrams, (
+                f"fragment {frag!r} should be filtered from base dict"
+            )
+
+    def test_real_short_words_still_loaded(self):
+        p = NgramPredictor()
+        # All survive because they're in _SHORT_WORD_WHITELIST.
+        for word in ("of", "to", "in", "is", "it", "be", "by", "we", "ok"):
+            assert word in p.unigrams, f"real word {word!r} should be in base dict"
+
+    def test_load_strips_fragments_from_old_save(self, tmp_path):
+        """A saved model from before this filter existed contains junk.
+        Loading it should silently strip the junk so existing users
+        don't have to manually clear data."""
+        import json
+        path = tmp_path / "old_model.json"
+        path.write_text(json.dumps({
+            "unigrams": {
+                "hello": 100, "world": 100,  # real
+                "c": 9000, "x": 9000,        # single-letter junk
+                "tx": 5000, "kb": 5000,      # 2-letter junk
+            },
+            "user_vocab": {"hello": 5, "qq": 3},  # qq is junk
+            "bigrams": {}, "trigrams": {},
+            "total_words": 100,
+        }))
+        p = NgramPredictor()
+        p.load(path)
+        assert "hello" in p.unigrams
+        assert "world" in p.unigrams
+        assert "c" not in p.unigrams
+        assert "x" not in p.unigrams
+        assert "tx" not in p.unigrams
+        assert "kb" not in p.unigrams
+        # And user_vocab is also cleaned.
+        assert p.user_vocab.get("hello") == 5
+        assert "qq" not in p.user_vocab
+        # _user_total reflects only the surviving entries (an invariant
+        # the prediction path depends on).
+        assert p._user_total == sum(p.user_vocab.values())
+
     def test_gated_word_does_not_form_bigrams(self):
         p = NgramPredictor()
         p.learn("the xqz fox")

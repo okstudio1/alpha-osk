@@ -301,6 +301,7 @@ class KeyboardBridge(QObject):
             # Auto-release shift after one keypress (caps lock persists).
             if self._shift_active and not self._caps_lock_active:
                 self._shift_active = False
+                self._synth.release_modifier("shift")
                 self._update_layer()
                 self.shiftActiveChanged.emit(False)
             return
@@ -336,6 +337,7 @@ class KeyboardBridge(QObject):
             # Auto-release shift after one keypress (not caps lock)
             if self._shift_active and not self._caps_lock_active:
                 self._shift_active = False
+                self._synth.release_modifier("shift")
                 self._update_layer()
                 self.shiftActiveChanged.emit(self._shift_active)
             # Auto-release ctrl/alt/win after one keypress
@@ -410,6 +412,7 @@ class KeyboardBridge(QObject):
         # Auto-release shift after one keypress (not caps lock)
         if self._shift_active and not self._caps_lock_active:
             self._shift_active = False
+            self._synth.release_modifier("shift")
             self._update_layer()
             self.shiftActiveChanged.emit(self._shift_active)
 
@@ -573,8 +576,25 @@ class KeyboardBridge(QObject):
 
     @Slot()
     def toggleShift(self) -> None:
-        """Toggle shift state."""
+        """Toggle shift state and hold/release it at the OS level.
+
+        Holding shift at the OS level (the same way Ctrl/Alt/Win work)
+        is what makes Shift+click and Shift+drag in the target app
+        extend the text selection — same behaviour as the Windows
+        on-screen keyboard. Without `hold_modifier`, the OS only sees
+        Shift when we attach it as a chord modifier on a synthesised
+        keystroke, so a click between Shift-toggle and the next typed
+        character lands without Shift held.
+
+        The auto-release sites in `pressKey` mirror the OS-level
+        release so a single character keystroke still drops Shift the
+        same way it always did.
+        """
         self._shift_active = not self._shift_active
+        if self._shift_active:
+            self._synth.hold_modifier("shift")
+        else:
+            self._synth.release_modifier("shift")
         self._update_layer()
         self.shiftActiveChanged.emit(self._shift_active)
 
@@ -773,22 +793,40 @@ class KeyboardBridge(QObject):
     def _display_cased(self, predictions: List[str]) -> List[str]:
         """Transform predictions to match the user's active case mode.
 
-        When Caps Lock is on, every character the user types is being
-        sent uppercase, and `_current_word` accumulates uppercase too.
-        If the pills still showed "hello" while the user had typed
-        "HELL", the user couldn't tell which pill matched what they
-        typed — and clicking the pill would send the lowercase
-        replacement, which looks wrong next to the uppercase prefix
-        they already typed. Uppercase the pills so display and insert
-        behaviour match.
+        Two cases:
 
-        Shift is deliberately *not* mirrored here: it's a one-shot
-        auto-releasing modifier, and sentence-start capitalisation
-        already flows through :func:`NgramPredictor.get_capitalized`
-        upstream.
+        1. Caps Lock on — every character the user types is being sent
+           uppercase, and `_current_word` accumulates uppercase too.
+           Pills must match: showing "hello" while the user typed
+           "HELL" misleads about which pill matches the prefix, and
+           clicking sends the lowercase form next to an uppercase
+           prefix.
+        2. One-shot Shift on the first letter — the user typed e.g.
+           "Hel" and wants "Hello", not "hello". The display has to
+           match for two reasons: (a) the user expects what they see
+           to match what they typed, and (b) the suffix-only insert
+           path uses a case-sensitive `startswith`, so "hello".
+           startswith("Hel") is False and the click would fall through
+           to a full replace, clobbering the user's capital H.
+
+        Sentence-start and proper-noun capitalisation are handled
+        upstream by :func:`NgramPredictor.get_capitalized`; this layer
+        only mirrors the *typed* prefix back into the displayed form.
         """
-        if predictions and self._caps_lock_active:
+        if not predictions:
+            return predictions
+        if self._caps_lock_active:
             return [w.upper() for w in predictions]
+        cw = self._current_word
+        if cw and cw[0].isupper():
+            prefix_lower = cw.lower()
+            result = []
+            for w in predictions:
+                if w and w[0].islower() and w.lower().startswith(prefix_lower):
+                    result.append(w[0].upper() + w[1:])
+                else:
+                    result.append(w)
+            return result
         return predictions
 
     def _on_predictions_ready(self, predictions: List[str]) -> None:
@@ -910,10 +948,11 @@ class KeyboardBridge(QObject):
         timers are stopped while the bridge is still intact.
 
         Also releases any modifier keys that were held at the OS level
-        via sticky toggles (Ctrl, Alt, Win). Without this, quitting with
-        Ctrl "active" leaves the X server / Wayland compositor thinking
-        Ctrl is physically held — so the user's real keyboard behaves as
-        though Ctrl is stuck until they press and release it manually.
+        via sticky toggles (Shift, Ctrl, Alt, Win). Without this,
+        quitting with one "active" leaves the X server / Wayland
+        compositor thinking it's physically held — so the user's real
+        keyboard behaves as though the modifier is stuck until they
+        press and release it manually.
         """
         for timer in (
             getattr(self, "_password_timer", None),
@@ -925,6 +964,9 @@ class KeyboardBridge(QObject):
                 except RuntimeError:
                     pass  # already deleted by Qt; harmless
 
+        if self._shift_active:
+            self._synth.release_modifier("shift")
+            self._shift_active = False
         if self._ctrl_active:
             self._synth.release_modifier("ctrl")
             self._ctrl_active = False

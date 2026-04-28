@@ -31,7 +31,7 @@ Item {
             displayText: "Num"
             keyWidth: numpadPanel.keyW
             keyHeight: numpadPanel.keyH
-            fontSize: 10
+            fontSize: 12
             isSpecial: true
             isActive: numpadPanel.numLockOn
             keyColor: numpadPanel.specialKeyColor
@@ -89,7 +89,7 @@ Item {
             displayText: numpadPanel.numLockOn ? "7" : "Home"
             keyWidth: numpadPanel.keyW
             keyHeight: numpadPanel.keyH
-            fontSize: numpadPanel.numLockOn ? 14 : 10
+            fontSize: numpadPanel.numLockOn ? 14 : 12
             keyColor: numpadPanel.keyColor
             keyPressedColor: numpadPanel.keyPressedColor
             keyTextColor: numpadPanel.keyTextColor
@@ -113,7 +113,7 @@ Item {
             displayText: numpadPanel.numLockOn ? "9" : "PgUp"
             keyWidth: numpadPanel.keyW
             keyHeight: numpadPanel.keyH
-            fontSize: numpadPanel.numLockOn ? 14 : 10
+            fontSize: numpadPanel.numLockOn ? 14 : 12
             keyColor: numpadPanel.keyColor
             keyPressedColor: numpadPanel.keyPressedColor
             keyTextColor: numpadPanel.keyTextColor
@@ -179,7 +179,7 @@ Item {
             displayText: numpadPanel.numLockOn ? "1" : "End"
             keyWidth: numpadPanel.keyW
             keyHeight: numpadPanel.keyH
-            fontSize: numpadPanel.numLockOn ? 14 : 10
+            fontSize: numpadPanel.numLockOn ? 14 : 12
             keyColor: numpadPanel.keyColor
             keyPressedColor: numpadPanel.keyPressedColor
             keyTextColor: numpadPanel.keyTextColor
@@ -203,7 +203,7 @@ Item {
             displayText: numpadPanel.numLockOn ? "3" : "PgDn"
             keyWidth: numpadPanel.keyW
             keyHeight: numpadPanel.keyH
-            fontSize: numpadPanel.numLockOn ? 14 : 10
+            fontSize: numpadPanel.numLockOn ? 14 : 12
             keyColor: numpadPanel.keyColor
             keyPressedColor: numpadPanel.keyPressedColor
             keyTextColor: numpadPanel.keyTextColor
@@ -231,7 +231,7 @@ Item {
             displayText: numpadPanel.numLockOn ? "0" : "Ins"
             keyWidth: numpadPanel.keyW * 2 + numpadPanel.keySpacing
             keyHeight: numpadPanel.keyH
-            fontSize: numpadPanel.numLockOn ? 14 : 10
+            fontSize: numpadPanel.numLockOn ? 14 : 12
             keyColor: numpadPanel.keyColor
             keyPressedColor: numpadPanel.keyPressedColor
             keyTextColor: numpadPanel.keyTextColor
@@ -244,7 +244,7 @@ Item {
             displayText: numpadPanel.numLockOn ? "." : "Del"
             keyWidth: numpadPanel.keyW
             keyHeight: numpadPanel.keyH
-            fontSize: numpadPanel.numLockOn ? 14 : 10
+            fontSize: numpadPanel.numLockOn ? 14 : 12
             keyColor: numpadPanel.keyColor
             keyPressedColor: numpadPanel.keyPressedColor
             keyTextColor: numpadPanel.keyTextColor
