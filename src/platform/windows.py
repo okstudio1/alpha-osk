@@ -60,7 +60,7 @@ from __future__ import annotations
 import ctypes
 import ctypes.wintypes as wintypes
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from .base import KeySynthesizerBase
 
@@ -304,6 +304,14 @@ class WindowsKeySynthesizer(KeySynthesizerBase):
         ]
         self._user32.GetClassNameW.restype = ctypes.c_int
 
+        # VkKeyScanW maps a Unicode character to the VK + shift state that
+        # would type it on the current keyboard layout.  Used in send_key
+        # so that modifier+punctuation chords (Ctrl+-, Ctrl+=, Ctrl+/, ...)
+        # produce real WM_KEYDOWN(VK_OEM_*) events instead of Unicode
+        # injection — apps' shortcut handlers listen for the former.
+        self._user32.VkKeyScanW.argtypes = [wintypes.WCHAR]
+        self._user32.VkKeyScanW.restype = wintypes.SHORT
+
         # Check UIAccess status
         self._has_ui_access = self._check_ui_access()
         if self._has_ui_access:
@@ -352,33 +360,48 @@ class WindowsKeySynthesizer(KeySynthesizerBase):
             modifiers: Optional modifier names (``"ctrl"``, ``"alt"``,
                        ``"shift"``, ``"win"``).
         """
-        modifiers = modifiers or []
+        modifiers = list(modifiers or [])
+
+        # Resolve the action key.  For single-char keys not in the
+        # explicit map (punctuation: -, =, /, [, etc.), fall back to
+        # VkKeyScanW so chords like Ctrl+- produce a real
+        # WM_KEYDOWN(VK_OEM_MINUS) — Unicode injection alone wouldn't
+        # trigger app shortcut handlers (browser zoom, etc.).
+        vk = self._resolve_vk(key_name)
+        unicode_fallback = False
+        if vk is None and len(key_name) == 1:
+            resolved = self._resolve_char_vk(key_name)
+            if resolved is not None:
+                vk, needs_shift = resolved
+                if needs_shift and "shift" not in modifiers:
+                    modifiers.insert(0, "shift")
+            else:
+                unicode_fallback = True
+        elif vk is None:
+            _logger.warning("Unknown key name: %s", key_name)
+            return
+
         events: List[INPUT] = []
 
         # Press modifiers
         for mod in modifiers:
-            vk = _KEY_MAP.get(mod)
-            if vk is not None:
-                events.append(self._make_key_event(vk, key_down=True))
+            mod_vk = _KEY_MAP.get(mod)
+            if mod_vk is not None:
+                events.append(self._make_key_event(mod_vk, key_down=True))
 
         # Press + release action key
-        vk = self._resolve_vk(key_name)
-        if vk is not None:
+        if unicode_fallback:
+            events.extend(self._make_unicode_events(key_name))
+        else:
+            assert vk is not None
             events.append(self._make_key_event(vk, key_down=True))
             events.append(self._make_key_event(vk, key_down=False))
-        else:
-            # Fallback: treat as single Unicode character
-            if len(key_name) == 1:
-                events.extend(self._make_unicode_events(key_name))
-            else:
-                _logger.warning("Unknown key name: %s", key_name)
-                return
 
         # Release modifiers (reverse order)
         for mod in reversed(modifiers):
-            vk = _KEY_MAP.get(mod)
-            if vk is not None:
-                events.append(self._make_key_event(vk, key_down=False))
+            mod_vk = _KEY_MAP.get(mod)
+            if mod_vk is not None:
+                events.append(self._make_key_event(mod_vk, key_down=False))
 
         self._inject(events)
         self._log_send(
@@ -546,6 +569,43 @@ class WindowsKeySynthesizer(KeySynthesizerBase):
                 return code
 
         return None
+
+    def _resolve_char_vk(self, char: str) -> Optional[Tuple[int, bool]]:
+        """Resolve a single character to a (vk, needs_shift) pair via the
+        active keyboard layout.
+
+        Used as a fallback for punctuation keys (``-``, ``=``, ``/`` ...)
+        that don't have a direct ASCII→VK mapping.  Letting the OS
+        translate via ``VkKeyScanW`` makes us layout-aware (US, UK,
+        German, ...) without enumerating every layout's OEM codes.
+
+        Returns:
+            ``(vk, needs_shift)`` if the character is typeable on the
+            current layout, else ``None``.  ``needs_shift`` is True for
+            characters that require Shift on this layout (e.g. ``+``
+            on US is Shift+VK_OEM_PLUS).
+        """
+        if len(char) != 1:
+            return None
+        try:
+            result = self._user32.VkKeyScanW(char)
+        except (OSError, ValueError):
+            return None
+        # VkKeyScanW returns -1 (0xFFFF as SHORT) when the char has no
+        # single-keystroke mapping on this layout.
+        if result == -1:
+            return None
+        vk = result & 0xFF
+        shift_state = (result >> 8) & 0xFF
+        if vk == 0xFF:
+            return None
+        # bit 0 = shift, bit 1 = ctrl, bit 2 = alt.  We only honour
+        # shift here — a layout that needs Ctrl+Alt (AltGr) to type a
+        # character is too exotic for our chord path; fall back to
+        # Unicode in that case by returning None.
+        if shift_state & 0b110:
+            return None
+        return vk, bool(shift_state & 1)
 
     def _make_key_event(self, vk: int, key_down: bool) -> INPUT:
         """

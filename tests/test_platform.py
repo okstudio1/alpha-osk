@@ -162,6 +162,65 @@ class TestLinuxReplaceText:
         assert calls == []
 
 
+class TestLinuxSendKeyPunctuationChord:
+    """Modifier+punctuation chords on Linux must rewrite the literal
+    char to its X11 keysym name — xdotool's chord parser uses ``+`` as
+    the separator, so ``ctrl+-`` is malformed and the canonical form
+    ``ctrl+minus`` is what triggers the app's shortcut handler.
+    """
+
+    def _make_synth(self, tool: str, monkeypatch):
+        from src.platform import linux as linux_mod
+
+        calls: list[list[str]] = []
+        monkeypatch.setattr(linux_mod, "_run", lambda cmd: calls.append(cmd))
+        synth = linux_mod.LinuxKeySynthesizer.__new__(linux_mod.LinuxKeySynthesizer)
+        synth._tool = tool
+        return synth, calls
+
+    def test_xdotool_ctrl_minus_uses_keysym(self, monkeypatch):
+        synth, calls = self._make_synth("xdotool", monkeypatch)
+        synth.send_key("-", modifiers=["ctrl"])
+        assert calls == [["xdotool", "key", "--clearmodifiers", "ctrl+minus"]]
+
+    def test_xdotool_ctrl_equals_uses_keysym(self, monkeypatch):
+        synth, calls = self._make_synth("xdotool", monkeypatch)
+        synth.send_key("=", modifiers=["ctrl"])
+        assert calls == [["xdotool", "key", "--clearmodifiers", "ctrl+equal"]]
+
+    def test_xdotool_ctrl_slash_uses_keysym(self, monkeypatch):
+        # VS Code / many editors: comment toggle.
+        synth, calls = self._make_synth("xdotool", monkeypatch)
+        synth.send_key("/", modifiers=["ctrl"])
+        assert calls == [["xdotool", "key", "--clearmodifiers", "ctrl+slash"]]
+
+    def test_xdotool_letter_passes_through(self, monkeypatch):
+        # Letters need no remap — xdotool accepts ``a`` verbatim.
+        synth, calls = self._make_synth("xdotool", monkeypatch)
+        synth.send_key("a", modifiers=["ctrl"])
+        assert calls == [["xdotool", "key", "--clearmodifiers", "ctrl+a"]]
+
+    def test_xdotool_digit_passes_through(self, monkeypatch):
+        # Digits need no remap either.
+        synth, calls = self._make_synth("xdotool", monkeypatch)
+        synth.send_key("1", modifiers=["ctrl"])
+        assert calls == [["xdotool", "key", "--clearmodifiers", "ctrl+1"]]
+
+    def test_xdotool_no_modifiers_still_remaps(self, monkeypatch):
+        # ``xdotool key -`` is also ambiguous — the dash looks like a
+        # flag.  Always remap to the keysym name regardless of chord.
+        synth, calls = self._make_synth("xdotool", monkeypatch)
+        synth.send_key("-")
+        assert calls == [["xdotool", "key", "--clearmodifiers", "minus"]]
+
+    def test_ydotool_ctrl_minus_remaps(self, monkeypatch):
+        # ydotool would see ``-`` as a CLI flag start; keysym name
+        # avoids that and is also closer to a real key name.
+        synth, calls = self._make_synth("ydotool", monkeypatch)
+        synth.send_key("-", modifiers=["ctrl"])
+        assert calls == [["ydotool", "key", "minus"]]
+
+
 class TestWindowsReplaceText:
     """WindowsKeySynthesizer.replace_text() — terminal-aware select-and-replace.
 
@@ -245,6 +304,83 @@ class TestWindowsReplaceText:
         # Empty class name (e.g. GetClassNameW failed) → safe default
         # is the existing Shift+Left path, not BackSpace.
         assert ("vk", VK_SHIFT, True) in captured[0]
+
+
+class TestWindowsSendKeyPunctuationChord:
+    """Modifier+punctuation chords (Ctrl+-, Ctrl+=) must produce a real
+    VK keystroke, not a Unicode injection — apps' shortcut handlers
+    listen for WM_KEYDOWN(VK_OEM_*), and Unicode events alone don't
+    trigger zoom/etc. when a modifier is held.
+    """
+
+    def _make_synth(self, vk_scan_results: dict):
+        from src.platform import windows as win_mod
+
+        synth = win_mod.WindowsKeySynthesizer.__new__(win_mod.WindowsKeySynthesizer)
+        captured: list = []
+        synth._inject = lambda events: captured.append(list(events))
+        synth._make_key_event = lambda vk, key_down: ("vk", vk, key_down)
+        synth._make_unicode_events = lambda c: [("uni", c)]
+
+        class _StubUser32:
+            def VkKeyScanW(self_inner, ch):
+                return vk_scan_results.get(ch, -1)
+        synth._user32 = _StubUser32()
+        return synth, captured
+
+    def test_ctrl_minus_uses_vk_oem_minus(self):
+        from src.platform.windows import VK_CONTROL
+        # US-layout VkKeyScanW('-') = (low=VK_OEM_MINUS=0xBD, high=0)
+        synth, captured = self._make_synth({"-": 0x00BD})
+        synth.send_key("-", modifiers=["ctrl"])
+        # Ctrl-down → VK_OEM_MINUS-down → VK_OEM_MINUS-up → Ctrl-up,
+        # all virtual-key events (no Unicode injection).
+        assert captured == [[
+            ("vk", VK_CONTROL, True),
+            ("vk", 0xBD, True), ("vk", 0xBD, False),
+            ("vk", VK_CONTROL, False),
+        ]]
+
+    def test_ctrl_equals_uses_vk_oem_plus(self):
+        from src.platform.windows import VK_CONTROL
+        # US-layout VkKeyScanW('=') = (low=VK_OEM_PLUS=0xBB, high=0)
+        synth, captured = self._make_synth({"=": 0x00BB})
+        synth.send_key("=", modifiers=["ctrl"])
+        assert captured == [[
+            ("vk", VK_CONTROL, True),
+            ("vk", 0xBB, True), ("vk", 0xBB, False),
+            ("vk", VK_CONTROL, False),
+        ]]
+
+    def test_shift_required_char_prepends_shift(self):
+        from src.platform.windows import VK_CONTROL, VK_SHIFT
+        # US-layout VkKeyScanW('+') = (low=VK_OEM_PLUS=0xBB, high=1) —
+        # '+' is Shift+'=' physically, so the synth must add a Shift
+        # press around the chord.
+        synth, captured = self._make_synth({"+": 0x01BB})
+        synth.send_key("+", modifiers=["ctrl"])
+        # Shift gets prepended, so order is Shift→Ctrl press, then key,
+        # then Ctrl→Shift release.
+        assert captured == [[
+            ("vk", VK_SHIFT, True),
+            ("vk", VK_CONTROL, True),
+            ("vk", 0xBB, True), ("vk", 0xBB, False),
+            ("vk", VK_CONTROL, False),
+            ("vk", VK_SHIFT, False),
+        ]]
+
+    def test_unmappable_char_falls_back_to_unicode(self):
+        from src.platform.windows import VK_CONTROL
+        # VkKeyScanW returns -1 for chars not on the active layout.
+        synth, captured = self._make_synth({})  # everything → -1
+        synth.send_key("ñ", modifiers=["ctrl"])
+        # Ctrl is still wrapped around the keystroke; the action key
+        # falls through to the Unicode path.
+        assert captured == [[
+            ("vk", VK_CONTROL, True),
+            ("uni", "ñ"),
+            ("vk", VK_CONTROL, False),
+        ]]
 
 
 class TestPlatformInfo:

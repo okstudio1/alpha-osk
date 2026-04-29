@@ -37,11 +37,62 @@ import logging
 import os
 import shutil
 import subprocess
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from .base import KeySynthesizerBase
 
 _logger = logging.getLogger("LinuxKeySynthesizer")
+
+
+# Map punctuation characters to their X11 keysym names.  xdotool's chord
+# syntax (``ctrl+key``) uses ``+`` as the modifier separator and parses
+# the action key as a keysym name — passing the literal ``-`` builds an
+# ambiguous ``ctrl+-`` that doesn't trigger app shortcuts.  Mapping
+# ``-`` → ``minus`` produces the canonical ``ctrl+minus`` form which
+# browsers/editors handle as Ctrl+OEM_MINUS (zoom out, etc.).  Same
+# story for ``=`` → ``equal`` and the rest of the symbol row.  Letters
+# and digits don't need translation — xdotool accepts ``a`` and ``1``
+# verbatim — so the map only carries the characters that conflict with
+# the chord parser.
+_CHAR_TO_KEYSYM: Dict[str, str] = {
+    # Unshifted symbol row (US layout)
+    "-": "minus",
+    "=": "equal",
+    "[": "bracketleft",
+    "]": "bracketright",
+    "\\": "backslash",
+    ";": "semicolon",
+    "'": "apostrophe",
+    ",": "comma",
+    ".": "period",
+    "/": "slash",
+    "`": "grave",
+    " ": "space",
+    # Shifted variants — the OSK upper layer routes these through
+    # send_key when a non-shift modifier is also active (e.g. user has
+    # Ctrl held and Shift toggled, then taps ``1`` which displays ``!``).
+    "_": "underscore",
+    "+": "plus",
+    "{": "braceleft",
+    "}": "braceright",
+    "|": "bar",
+    ":": "colon",
+    '"': "quotedbl",
+    "<": "less",
+    ">": "greater",
+    "?": "question",
+    "~": "asciitilde",
+    "!": "exclam",
+    "@": "at",
+    "#": "numbersign",
+    "$": "dollar",
+    "%": "percent",
+    "^": "asciicircum",
+    "&": "ampersand",
+    "*": "asterisk",
+    "(": "parenleft",
+    ")": "parenright",
+}
 
 
 def _run(cmd: List[str]) -> None:
@@ -155,17 +206,23 @@ class LinuxKeySynthesizer(KeySynthesizerBase):
         # Map "win" → "super" for xdotool
         mapped_mods = [("super" if m == "win" else m) for m in modifiers]
 
+        # Translate literal punctuation to the X11 keysym name so the
+        # chord parser doesn't trip on the ``+`` separator (``ctrl+-``
+        # is malformed; ``ctrl+minus`` is canonical).  Letters/digits
+        # pass through unchanged.
+        action_key = _CHAR_TO_KEYSYM.get(key_name, key_name)
+
         if self._tool == "xdotool":
             if mapped_mods:
-                combo = "+".join(mapped_mods + [key_name])
+                combo = "+".join(mapped_mods + [action_key])
                 self._log_send(f"xdotool key {combo}")
                 _run(["xdotool", "key", "--clearmodifiers", combo])
             else:
-                self._log_send(f"xdotool key {key_name}")
-                _run(["xdotool", "key", "--clearmodifiers", key_name])
+                self._log_send(f"xdotool key {action_key}")
+                _run(["xdotool", "key", "--clearmodifiers", action_key])
         elif self._tool == "ydotool":
-            self._log_send(f"ydotool key {key_name}")
-            _run(["ydotool", "key", key_name])
+            self._log_send(f"ydotool key {action_key}")
+            _run(["ydotool", "key", action_key])
 
     def send_text(self, text: str) -> None:
         """
