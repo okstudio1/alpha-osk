@@ -157,7 +157,7 @@ PackageName: Alpha-OSK
 Publisher: OK Studio Inc.
 ShortDescription: AI-powered on-screen keyboard for accessibility
 License: Proprietary
-PackageUrl: https://github.com/owenpkent/alpha-osk
+PackageUrl: https://github.com/okstudio1/alpha-osk
 ```
 
 ### Option D — Microsoft Store

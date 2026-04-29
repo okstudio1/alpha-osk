@@ -1,7 +1,5 @@
 # Alpha-OSK
 
-[![CI](https://github.com/owenpkent/alpha-osk/actions/workflows/ci.yml/badge.svg)](https://github.com/owenpkent/alpha-osk/actions/workflows/ci.yml)
-
 **AI-Powered On-Screen Keyboard for Linux & Windows**
 
 An accessible on-screen keyboard designed for users with motor disabilities, featuring AI-enabled predictive text, voice dictation, and federated learning for personalized adaptation. Runs natively on both **Linux** (X11/Wayland) and **Windows** (with optional UIAccess for elevated-window support via EV code signing).

@@ -246,7 +246,7 @@ DEB_PACKAGE = "alpha-osk"
 DEB_ARCH = "amd64"
 DEB_SECTION = "utils"
 DEB_MAINTAINER = "Owen Kent <Owenpkent@gmail.com>"
-DEB_HOMEPAGE = "https://github.com/owenpkent/alpha-osk"
+DEB_HOMEPAGE = "https://github.com/okstudio1/alpha-osk"
 
 
 def _write_deb_control(staging: Path, version: str, installed_bytes: int) -> None:

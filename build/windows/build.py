@@ -422,7 +422,7 @@ def _generate_nsi_script(version: str, installer_name: str) -> str:
 !define APP_NAME "Alpha-OSK"
 !define APP_VERSION "{version}"
 !define APP_PUBLISHER "OK Studio Inc."
-!define APP_URL "https://github.com/owenpkent/alpha-osk"
+!define APP_URL "https://github.com/okstudio1/alpha-osk"
 !define APP_EXE "alpha-osk.exe"
 !define APP_GUID "alpha-osk-keyboard"
 !define INSTALL_DIR "$PROGRAMFILES64\\Alpha-OSK"

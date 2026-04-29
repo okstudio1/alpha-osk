@@ -34,7 +34,7 @@ Complete guide to running, building, and deploying Alpha-OSK on Windows.
 
 ```powershell
 # Clone the repository
-git clone https://github.com/owenpkent/alpha-osk.git
+git clone https://github.com/okstudio1/alpha-osk.git
 cd alpha-osk
 
 # Launch the keyboard (auto-creates venv, installs PySide6)
