@@ -28,8 +28,12 @@ Item {
     // the character twice, and "type 'aaaa' by holding the button" is
     // not a real use case for mouse-driven typing.
     property bool enableRepeat: false
-    property int repeatDelay: 400    // ms before repeat starts
-    property int repeatInterval: 50  // ms between repeats
+    property int repeatDelay: 500    // ms before repeat starts
+    property int repeatInterval: 120 // ms between repeats (~8/sec — slow
+                                     // enough that a slightly-too-long
+                                     // press doesn't blast through extra
+                                     // chars, fast enough to bulk-delete
+                                     // a word in ~1 s)
 
     // Debounce window (ms).  Consecutive MouseArea presses within this
     // window count as a single press — covers hardware button bounce
@@ -76,13 +80,20 @@ Item {
             interval = keyRoot.repeatInterval
             repeat = true
             start()
+            // Push the safety deadline forward.  The safety timer only
+            // exists to recover from a *stranded* press (Qt dropped the
+            // release under WS_EX_NOACTIVATE) — but if repeats are
+            // firing, the press is genuinely held, not stranded.  Reset
+            // each tick so a long-held key (e.g. backspace deleting a
+            // paragraph) doesn't get cut off mid-hold.
+            pressSafetyTimer.restart()
         }
     }
 
     // Final safety net for stuck visuals — even with the explicit clear
     // paths in the MouseArea handlers below, force the key back to its
-    // resting state after 5 s.  No reasonable OSK interaction lasts that
-    // long, so if we're still here it means an event was dropped.
+    // resting state after 5 s of inactivity.  Restarted on each repeat
+    // tick so it only fires when nothing is happening.
     Timer {
         id: pressSafetyTimer
         interval: 5000

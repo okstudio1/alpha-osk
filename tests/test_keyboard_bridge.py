@@ -535,13 +535,23 @@ class TestSentenceLearning:
 class TestPunctuationSpacing:
     """Smart punctuation spacing — removes space before punctuation."""
 
-    def test_no_space_before_period(self, bridge: KeyboardBridge):
+    def test_user_typed_space_before_period_is_preserved(self, bridge: KeyboardBridge):
+        """A space the user typed manually must NOT be backspaced when
+        they then type punctuation — the visible flicker is surprising
+        and in some apps undoes selection / breaks undo history. Only
+        our own auto-space (after a prediction or punctuation) gets
+        cleaned up; see test_space_removed_before_comma_after_prediction.
+        """
         bridge.pressKey("h")
         bridge.pressKey("i")
         bridge.pressSpecialKey("space")
-        # Context buffer now has "hi ", pressing "." should remove the space
+        bridge._synth.send_key.reset_mock()
         bridge.pressKey(".")
-        bridge._synth.send_key.assert_any_call("BackSpace", modifiers=None)
+        backspace_calls = [
+            c for c in bridge._synth.send_key.call_args_list
+            if c[0][0] == "BackSpace"
+        ]
+        assert len(backspace_calls) == 0
 
     def test_auto_space_after_comma(self, bridge: KeyboardBridge):
         bridge._auto_space_after_punctuation = True

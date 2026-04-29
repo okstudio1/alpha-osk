@@ -1374,8 +1374,10 @@ Window {
                         predEditField.insert(predEditField.cursorPosition, " ")
                     } else if (name === "return" || name === "enter") {
                         // Accept the edit
-                        if (predEditField.text.trim() && keyboard)
+                        if (predEditField.text.trim() && keyboard) {
                             keyboard.editPrediction(predEditField.originalWord, predEditField.text.trim())
+                            editSavedToast.flash()
+                        }
                         predEditPopup.close()
                     } else if (name === "escape") {
                         predEditPopup.close()
@@ -1418,6 +1420,7 @@ Window {
                     onAccepted: {
                         if (text.trim() && keyboard) {
                             keyboard.editPrediction(originalWord, text.trim())
+                            editSavedToast.flash()
                         }
                         predEditPopup.close()
                     }
@@ -1450,6 +1453,7 @@ Window {
                         onClicked: {
                             if (predEditField.text.trim() && keyboard) {
                                 keyboard.editPrediction(predEditField.originalWord, predEditField.text.trim())
+                                editSavedToast.flash()
                             }
                             predEditPopup.close()
                         }
@@ -1481,6 +1485,56 @@ Window {
                         onClicked: predEditPopup.close()
                     }
                 }
+            }
+        }
+
+        // "Saved" confirmation toast — appears briefly after a successful
+        // prediction edit so the user knows the change persisted. Auto-
+        // dismisses after ~1.4 s.
+        Popup {
+            id: editSavedToast
+            parent: Overlay.overlay
+            x: (root.width - width) / 2
+            y: 36
+            width: 110
+            height: 32
+            modal: false
+            dim: false
+            closePolicy: Popup.NoAutoClose
+
+            background: Rectangle {
+                color: "#1e3e1e"
+                border.color: "#4a4"
+                border.width: 1
+                radius: 8
+            }
+
+            contentItem: Row {
+                spacing: 6
+                Text {
+                    text: "✓"
+                    color: "#6f6"
+                    font.pixelSize: 14
+                    font.weight: Font.Bold
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                Text {
+                    text: "Saved"
+                    color: "#cfc"
+                    font.pixelSize: 13
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+            }
+
+            Timer {
+                id: editSavedToastTimer
+                interval: 1400
+                onTriggered: editSavedToast.close()
+            }
+
+            function flash() {
+                open()
+                editSavedToastTimer.restart()
             }
         }
 

@@ -177,6 +177,13 @@ class KeyboardBridge(QObject):
         self._auto_space_after_punctuation = True
         self._auto_capitalize_after_punctuation = False
         self._auto_save_on_exit = True
+        # True iff the most recent character sent to the OS was a space
+        # that *we* auto-inserted (after a prediction click or after
+        # punctuation).  Used to decide whether the punctuation-spacing
+        # cleanup ("hello " + "." → "hello.") should fire: only clean up
+        # our own auto-space, never the user's manually-typed space.
+        # Reset on any subsequent keystroke.
+        self._auto_space_pending = False
         # Space-time autocorrect — replace the typed word with a known
         # correction when space lands.  Falls through silently if the
         # word is in the dictionary (no false positives) or no good
@@ -343,15 +350,25 @@ class KeyboardBridge(QObject):
         else:
             char = key.lower()
 
-        # Handle punctuation spacing - remove preceding space only if the
-        # space is actually the last thing on screen (no partial word after it)
+        # Handle punctuation spacing — remove preceding space only if WE
+        # auto-inserted it (after a prediction click or punctuation auto-
+        # space).  Never undo a space the user typed manually: a visible
+        # backspace flicker after their own keystroke is surprising and
+        # in some apps (rich-text editors, web fields) has side effects
+        # like clobbering selection state or undo history.
         if (char in self._NO_SPACE_BEFORE
+                and self._auto_space_pending
                 and self._context_buffer.endswith(" ")
                 and not self._current_word):
-            # Delete the trailing space before typing punctuation
             self._send_key("BackSpace")
             self._context_buffer = self._context_buffer[:-1]
-            _logger.info("Removed space before '%s'", char)
+            _logger.info("Removed auto-space before '%s'", char)
+
+        # Any keystroke clears the flag — it tracks one specific window:
+        # the moment between us inserting an auto-space and the user's
+        # immediate next keystroke.  Set again below if this keystroke
+        # itself adds an auto-space (after . , ; : ! ?).
+        self._auto_space_pending = False
 
         # Use _send_key for modifier combos (Ctrl+C, Win+Shift+S, etc.)
         # Send the lowercase key — Shift is included as a modifier by _send_key
@@ -403,6 +420,7 @@ class KeyboardBridge(QObject):
                 self._current_word = ""
                 if self._auto_space_after_punctuation:
                     self._send_text(" ")
+                    self._auto_space_pending = True
                 self._context_buffer += char + " "
                 # Auto-capitalize next letter
                 if self._auto_capitalize_after_punctuation:
@@ -424,6 +442,7 @@ class KeyboardBridge(QObject):
                 self._current_word = ""
                 if self._auto_space_after_punctuation:
                     self._send_text(" ")
+                    self._auto_space_pending = True
                 if len(self._context_buffer) > 200:
                     self._context_buffer = self._context_buffer[-200:]
 
@@ -468,6 +487,11 @@ class KeyboardBridge(QObject):
 
         self._check_password_field_sync()
         self._play_click()
+        # Any user-driven special key invalidates the auto-space window —
+        # they pressed space themselves, or they're backspacing, or
+        # navigating cursor; any subsequent punctuation should not undo
+        # whatever space is on screen.
+        self._auto_space_pending = False
         key_map = {
             "backspace": "BackSpace",
             "return": "Return",
@@ -559,10 +583,18 @@ class KeyboardBridge(QObject):
             self._current_word = ""
             self._update_predictions()
         elif key_name == "backspace":
-            # Remove last character from current word
             self._analytics.record_backspace()
             if self._current_word:
                 self._current_word = self._current_word[:-1]
+                self._update_predictions()
+            elif self._context_buffer:
+                # Stay in sync with on-screen text: backspace pops one
+                # char from the committed context too.  Without this, a
+                # stale "." from an earlier sentence stays in the buffer
+                # after the user wipes the screen, and the next prediction
+                # fires with sentence_start=True (capitalized candidates)
+                # on what looks like an empty document.
+                self._context_buffer = self._context_buffer[:-1]
                 self._update_predictions()
         elif key_name == "return":
             # Sentence boundary - learn full sentence, then reset sentence buffer
@@ -712,6 +744,9 @@ class KeyboardBridge(QObject):
             # Casing differs (e.g. "iph"→"iPhone") or prefix mismatch —
             # select the typed letters and overwrite with the correct word.
             self._synth.replace_text(len(self._current_word), word + " ")
+        # All three paths append an auto-space; flag it so the next
+        # keystroke (if it's punctuation) can elide it cleanly.
+        self._auto_space_pending = True
 
         # Learn from selection — use context_buffer only, not the typed
         # fragment (_current_word) which is being *replaced* by the prediction.
@@ -1508,9 +1543,13 @@ class KeyboardBridge(QObject):
             return
 
         # Apply learned/built-in capitalisation to each candidate so that
-        # picking the top word respects "iPhone" vs. "iphone".
+        # picking the top word respects "iPhone" vs. "iphone".  Sentence
+        # start fires only when the trimmed context actually ends with
+        # .!? — empty context is *not* a sentence start (matches the
+        # n-gram path in HybridPredictor._merge_predictions; see
+        # CLAUDE.md "Auto-Capitalization & Proper Nouns" for the why).
         trimmed = self._context_buffer.rstrip()
-        sentence_start = not trimmed or trimmed.endswith((".", "!", "?"))
+        sentence_start = bool(trimmed) and trimmed.endswith((".", "!", "?"))
         capitalised = [
             self._predictor.get_capitalized(w, sentence_start) for w in results
         ]
