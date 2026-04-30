@@ -372,14 +372,55 @@ class TestRemoteCompatMode:
     introduce.
     """
 
-    def test_default_disabled(self, bridge: KeyboardBridge):
-        assert bridge._remote_compat_mode is False
+    def test_default_state(self, bridge: KeyboardBridge):
+        # Manual off, auto on (covers TeamViewer/RDP without user toggle),
+        # not currently active because no remote window detected.
+        assert bridge._remote_compat_manual is False
+        assert bridge._remote_compat_auto_enabled is True
+        assert bridge._remote_compat_auto_active is False
+        assert bridge._in_remote_compat_mode() is False
 
     def test_set_remote_compat_mode(self, bridge: KeyboardBridge):
         bridge.setRemoteCompatMode(True)
-        assert bridge._remote_compat_mode is True
+        assert bridge._remote_compat_manual is True
+        assert bridge._in_remote_compat_mode() is True
         bridge.setRemoteCompatMode(False)
-        assert bridge._remote_compat_mode is False
+        assert bridge._remote_compat_manual is False
+
+    def test_set_remote_compat_auto(self, bridge: KeyboardBridge):
+        bridge.setRemoteCompatAuto(False)
+        assert bridge._remote_compat_auto_enabled is False
+        assert bridge._remote_compat_auto_active is False
+        bridge.setRemoteCompatAuto(True)
+        assert bridge._remote_compat_auto_enabled is True
+
+    def test_in_compat_mode_or_semantics(self, bridge: KeyboardBridge):
+        # manual OR (auto_enabled AND auto_active)
+        bridge._remote_compat_manual = False
+        bridge._remote_compat_auto_enabled = False
+        bridge._remote_compat_auto_active = False
+        assert bridge._in_remote_compat_mode() is False
+        # Manual on alone wins.
+        bridge._remote_compat_manual = True
+        assert bridge._in_remote_compat_mode() is True
+        bridge._remote_compat_manual = False
+        # Auto enabled + active wins.
+        bridge._remote_compat_auto_enabled = True
+        bridge._remote_compat_auto_active = True
+        assert bridge._in_remote_compat_mode() is True
+        # Auto enabled but not active — off.
+        bridge._remote_compat_auto_active = False
+        assert bridge._in_remote_compat_mode() is False
+        # Active but auto disabled — off (auto must be enabled).
+        bridge._remote_compat_auto_enabled = False
+        bridge._remote_compat_auto_active = True
+        assert bridge._in_remote_compat_mode() is False
+
+    def test_disabling_auto_clears_active(self, bridge: KeyboardBridge):
+        bridge._remote_compat_auto_enabled = True
+        bridge._remote_compat_auto_active = True
+        bridge.setRemoteCompatAuto(False)
+        assert bridge._remote_compat_auto_active is False
 
     def test_press_prediction_uses_backspace_plus_word_in_compat_mode(
         self, bridge: KeyboardBridge,

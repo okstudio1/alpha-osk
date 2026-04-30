@@ -36,6 +36,117 @@ from .platform.password_detect import is_password_field
 from .prediction import HybridPredictor, SwipeRecognizer
 from .updater import UpdateInfo, check_for_update, download_and_install
 
+# Window classes / process exes used to auto-detect a remote-desktop
+# client window in the foreground.  Conservative whitelist — only
+# entries observed in the wild for tools the user is plausibly typing
+# THROUGH (not "into" — Chrome's normal browser windows are not on
+# this list even though Chrome can host Chrome Remote Desktop, because
+# the host viewer surfaces a distinct child window class which we'd
+# need to enumerate separately to differentiate).
+_REMOTE_DESKTOP_WINDOW_CLASSES = frozenset({
+    # Microsoft Remote Desktop Connection
+    "TscShellContainerClass",
+    "RDPViewer",
+    "UIMainClass",
+    # TeamViewer
+    "TV_TitleBar",
+    "TV_Client",
+    "TV_FullScreen",
+    "#32770TVMainForm",
+    # AnyDesk
+    "AnyDeskMainWindow",
+    "AnyDeskMainView",
+    # VNC variants
+    "TightVNCClassName",
+    "VNCMDI_Window",
+    "VNCviewer",
+    "RealVNCClass",
+    "UltraVNCClass",
+    "TVNVncCtrl",
+    # RustDesk
+    "RustDesk",
+    # Parsec
+    "ParsecHostWindow",
+    # Splashtop
+    "SplashtopRemoteDesktopClass",
+})
+
+_REMOTE_DESKTOP_PROCESS_NAMES = frozenset({
+    "teamviewer.exe",
+    "tv_w32.exe",
+    "tv_x64.exe",
+    "mstsc.exe",
+    "msrdc.exe",
+    "anydesk.exe",
+    "vncviewer.exe",
+    "tvnviewer.exe",
+    "uvnc.exe",
+    "winvnc.exe",
+    "rustdesk.exe",
+    "splashtop.exe",
+    "stp.exe",
+    "logmein.exe",
+    "parsecd.exe",
+    "moonlight.exe",
+})
+
+
+def _is_remote_desktop_window(hwnd: int) -> bool:
+    """Whether ``hwnd`` belongs to a remote-desktop client/viewer window.
+
+    Returns False on non-Windows or when detection fails.  Conservative:
+    a False return is safe (compat mode just stays off), so any error
+    in the platform calls bails silently rather than throwing.
+
+    Detection is two-pass:
+    1. Window class name (``GetClassNameW``) against
+       ``_REMOTE_DESKTOP_WINDOW_CLASSES``.
+    2. On miss, the owning process's exe basename
+       (``QueryFullProcessImageNameW``) against
+       ``_REMOTE_DESKTOP_PROCESS_NAMES``.
+    Both checks are exact-match against curated whitelists so unrelated
+    apps cannot spuriously trigger compat mode.
+    """
+    import sys
+    if sys.platform != "win32" or not hwnd:
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32          # type: ignore[attr-defined]
+        kernel32 = ctypes.windll.kernel32      # type: ignore[attr-defined]
+        cls_buf = ctypes.create_unicode_buffer(256)
+        if user32.GetClassNameW(hwnd, cls_buf, 256) > 0:
+            if cls_buf.value in _REMOTE_DESKTOP_WINDOW_CLASSES:
+                return True
+        # Process-exe fallback.
+        pid = wintypes.DWORD(0)
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if not pid.value:
+            return False
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value,
+        )
+        if not handle:
+            return False
+        try:
+            exe_buf = ctypes.create_unicode_buffer(512)
+            size = wintypes.DWORD(512)
+            if kernel32.QueryFullProcessImageNameW(
+                handle, 0, exe_buf, ctypes.byref(size),
+            ):
+                exe_name = Path(exe_buf.value).name.lower()
+                if exe_name in _REMOTE_DESKTOP_PROCESS_NAMES:
+                    return True
+        finally:
+            kernel32.CloseHandle(handle)
+    except (OSError, AttributeError):
+        # ctypes/Win32 errors: fail-safe.
+        pass
+    return False
+
+
 _logger = logging.getLogger("KeyboardBridge")
 
 
@@ -191,19 +302,30 @@ class KeyboardBridge(QObject):
         self._autocorrect_enabled = True
 
         # Remote desktop mode — when typing into a TeamViewer / RDP /
-        # VNC client window, the local OSK's suffix-only prediction
-        # insertion (and Shift+Left-based autocorrect replace) races
-        # with the remote-forwarding pipeline: keystrokes get dropped,
-        # duplicated, or reordered before the remote app sees them, so
-        # the typed prefix the OSK *thinks* is on screen doesn't match
-        # what's *actually* on screen.  Compat mode rewires both paths
-        # into a sequence of independent, single-event keystrokes —
-        # BackSpace × len(typed) + type the full word — which is
-        # robust to per-event drops/duplicates (the worst case is a
-        # one-char gap, not a scrambled word).  Off by default; the
-        # user enables it from Settings → Input when they know they're
-        # on a remote session.
-        self._remote_compat_mode = False
+        # VNC / AnyDesk client window, the local OSK's suffix-only
+        # prediction insertion (and Shift+Left-based autocorrect
+        # replace) races with the remote-forwarding pipeline: keystrokes
+        # get dropped, duplicated, or reordered before the remote app
+        # sees them, so the typed prefix the OSK *thinks* is on screen
+        # doesn't match what's *actually* on screen.  Compat mode
+        # rewires both paths into a sequence of independent,
+        # single-event keystrokes — BackSpace × len(typed) + type the
+        # full word — which is robust to per-event drops/duplicates
+        # (the worst case is a one-char gap, not a scrambled word).
+        #
+        # Three flags compose into the effective state:
+        # - ``_remote_compat_manual`` — user's explicit Settings toggle
+        #   ("Remote Desktop Mode").  Force-on, never auto-cleared.
+        # - ``_remote_compat_auto_enabled`` — whether to auto-detect
+        #   based on the foreground window class / process exe.
+        # - ``_remote_compat_auto_active`` — whether the current
+        #   foreground window is a known remote-desktop client.
+        #   Updated by ``_check_foreground_window`` on every poll.
+        # Effective: ``_in_remote_compat_mode()`` returns
+        # ``manual or (auto_enabled and auto_active)``.
+        self._remote_compat_manual = False
+        self._remote_compat_auto_enabled = True
+        self._remote_compat_auto_active = False
 
         # Swipe / glide typing — off by default, toggled in settings.
         # The recognizer needs the keyboard layout (key centres) before it
@@ -553,7 +675,7 @@ class KeyboardBridge(QObject):
             )
             if correction and correction.lower() != self._current_word.lower():
                 cased = self._match_case(self._current_word, correction)
-                if self._remote_compat_mode:
+                if self._in_remote_compat_mode():
                     # Remote desktop: Shift+Left selection races with
                     # the forwarding pipeline.  Use BackSpace × N + type
                     # instead — same end result, robust to remote glitches.
@@ -777,7 +899,7 @@ class KeyboardBridge(QObject):
         # everything to BackSpace × N + type the full word, a sequence
         # of independent single-event keystrokes that is robust to
         # per-event remote glitches.
-        if self._remote_compat_mode and self._current_word:
+        if self._in_remote_compat_mode() and self._current_word:
             for _ in range(len(self._current_word)):
                 self._synth.send_key("BackSpace")
             self._send_text(word + " ")
@@ -1178,16 +1300,75 @@ class KeyboardBridge(QObject):
 
     @Slot(bool)
     def setRemoteCompatMode(self, enabled: bool) -> None:
-        """Toggle remote-desktop compatibility mode.
+        """Toggle the *manual* remote-desktop compatibility flag.
 
         When enabled, prediction-click insertion and autocorrect-on-
         space stop using suffix-only / Shift+Left-replace tricks and
         instead emit BackSpace × N + the full word.  Robust to the
         keystroke drops/duplications/reordering that happen in
         TeamViewer / RDP / VNC remote sessions.
+
+        Combined with the auto-detect flag (see ``setRemoteCompatAuto``)
+        — the effective state is ``manual OR (auto_enabled AND
+        auto_active)``.
         """
-        self._remote_compat_mode = enabled
-        _logger.info("Remote compat mode: %s", enabled)
+        self._remote_compat_manual = enabled
+        _logger.info("Remote compat (manual): %s", enabled)
+
+    @Slot(bool)
+    def setRemoteCompatAuto(self, enabled: bool) -> None:
+        """Toggle auto-detection of remote-desktop client windows.
+
+        When enabled, ``_check_foreground_window`` inspects each new
+        foreground window and flips ``_remote_compat_auto_active`` if
+        the window's class or owning process matches a known remote-
+        desktop client (TeamViewer, RDP / mstsc, AnyDesk, VNC, etc.).
+        Compat mode then activates automatically without requiring the
+        user to flip the manual toggle each time.
+
+        On disable, ``_remote_compat_auto_active`` is cleared so a
+        previously-detected session does not leave compat mode stuck on.
+        """
+        self._remote_compat_auto_enabled = enabled
+        if not enabled:
+            self._remote_compat_auto_active = False
+        else:
+            # Re-check immediately so a remote window currently focused
+            # gets compat mode on the next keystroke instead of waiting
+            # for the next 250 ms timer tick.
+            self._update_remote_compat_auto(self._last_foreground_hwnd)
+        _logger.info(
+            "Remote compat (auto-detect): %s (currently active=%s)",
+            enabled, self._remote_compat_auto_active,
+        )
+
+    def _in_remote_compat_mode(self) -> bool:
+        """Return whether compat mode should currently apply.
+
+        Effective state: ``manual OR (auto_enabled AND auto_active)``.
+        """
+        return self._remote_compat_manual or (
+            self._remote_compat_auto_enabled and self._remote_compat_auto_active
+        )
+
+    def _update_remote_compat_auto(self, hwnd: int) -> None:
+        """Inspect ``hwnd`` and update ``_remote_compat_auto_active``.
+
+        No-op if auto-detect is disabled or the platform's detector is
+        unavailable.  Called from ``_check_foreground_window`` on every
+        foreground change and from ``setRemoteCompatAuto`` on enable.
+        """
+        if not self._remote_compat_auto_enabled or not hwnd:
+            return
+        try:
+            new_active = _is_remote_desktop_window(hwnd)
+        except Exception:
+            new_active = False
+        if new_active != self._remote_compat_auto_active:
+            self._remote_compat_auto_active = new_active
+            _logger.debug(
+                "Remote compat auto-active: %s (hwnd=%s)", new_active, hwnd,
+            )
 
     @property
     def autoSaveOnExit(self) -> bool:
@@ -1216,6 +1397,11 @@ class KeyboardBridge(QObject):
             self._context_buffer = ""
             self.predictionsChanged.emit([])
             _logger.debug("Foreground window changed — predictions cleared")
+        # Update auto-detect for compat mode on every poll (cheap on
+        # Windows — class lookup is a syscall, process check only fires
+        # on class miss).  Auto-active toggling is debounced internally
+        # so this isn't noisy.
+        self._update_remote_compat_auto(hwnd)
         self._last_foreground_hwnd = hwnd
 
     def _get_foreground_window_id(self) -> int:

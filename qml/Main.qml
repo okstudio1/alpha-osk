@@ -44,9 +44,11 @@ Window {
         // Remote desktop compatibility — switches prediction-click
         // insertion and autocorrect from suffix-only / Shift+Left-replace
         // (which race over TeamViewer / RDP / VNC) to BackSpace × N +
-        // type-full-word.  Off by default; user enables when on a
-        // remote session.
+        // type-full-word.  Off by default for the manual override; the
+        // auto-detect flag (default ON) enables it dynamically when the
+        // foreground window is a known remote-desktop client.
         property bool savedRemoteCompatMode: false
+        property bool savedRemoteCompatAuto: true
         // Window WIDTH — restored on launch, saved (debounced) on resize.
         // 0 means "no saved value yet, use the binding-driven default"
         // — that path runs on a fresh install.
@@ -143,6 +145,7 @@ Window {
             keyboard.setAutoSaveOnExit(appSettings.savedAutoSaveOnExit)
             keyboard.setSwipeEnabled(appSettings.savedSwipeEnabled)
             keyboard.setRemoteCompatMode(appSettings.savedRemoteCompatMode)
+            keyboard.setRemoteCompatAuto(appSettings.savedRemoteCompatAuto)
         }
 
         // Auto-update setting — kicks off the background check after a
@@ -229,6 +232,7 @@ Window {
     // Remote-desktop compatibility — see savedRemoteCompatMode comment
     // and KeyboardBridge.setRemoteCompatMode for the full rationale.
     property bool remoteCompatMode: appSettings.savedRemoteCompatMode
+    property bool remoteCompatAuto: appSettings.savedRemoteCompatAuto
 
     // Swipe / glide typing — when on, dragging across keys decodes a word.
     property bool swipeEnabled: appSettings.savedSwipeEnabled
@@ -1740,6 +1744,7 @@ Window {
             repeatDelay: root.repeatDelay
             repeatInterval: root.repeatInterval
             remoteCompatMode: root.remoteCompatMode
+            remoteCompatAuto: root.remoteCompatAuto
             debugMode: root.showDebugPanel
             autoCheckUpdates: root.autoCheckUpdates
             updateStatus: root.updateInstalling
@@ -1802,6 +1807,10 @@ Window {
                     root.remoteCompatMode = value
                     appSettings.savedRemoteCompatMode = value
                     if (keyboard) keyboard.setRemoteCompatMode(value)
+                } else if (setting === "remoteCompatAuto") {
+                    root.remoteCompatAuto = value
+                    appSettings.savedRemoteCompatAuto = value
+                    if (keyboard) keyboard.setRemoteCompatAuto(value)
                 } else if (setting === "debugMode") {
                     root.showDebugPanel = value
                     if (keyboard) keyboard.setDebugMode(value)

@@ -34,6 +34,7 @@ Item {
     property int repeatInterval: 120
     // Remote desktop compatibility mode — see KeyboardBridge.setRemoteCompatMode.
     property bool remoteCompatMode: false
+    property bool remoteCompatAuto: true
 
     // Debug
     property bool debugMode: false
@@ -343,12 +344,25 @@ Item {
                                 onToggled: function(c) { unifiedSettings.settingChanged("rightClickShift", c) }
                             }
 
-                            // Switches prediction insertion to backspace+
-                            // retype — robust to TeamViewer/RDP/VNC drops
-                            // and reorders.  See bridge for full rationale.
+                            // Auto-detect TeamViewer/RDP/VNC/AnyDesk and
+                            // switch prediction insertion to backspace+
+                            // retype automatically.  Default ON — covers
+                            // the common case without the user having to
+                            // remember to flip the manual toggle.
                             SettingsToggle {
                                 Layout.fillWidth: true
-                                text: "Remote Desktop Mode (TeamViewer/RDP)"
+                                text: "Auto-Detect Remote Desktop Sessions"
+                                checked: unifiedSettings.remoteCompatAuto
+                                onToggled: function(c) { unifiedSettings.settingChanged("remoteCompatAuto", c) }
+                            }
+
+                            // Manual force-on for cases auto-detect misses
+                            // (rare remote tools, local apps that proxy to
+                            // remote sessions, etc.).  Effective compat
+                            // mode = manual OR auto.
+                            SettingsToggle {
+                                Layout.fillWidth: true
+                                text: "Remote Desktop Mode (always on)"
                                 checked: unifiedSettings.remoteCompatMode
                                 onToggled: function(c) { unifiedSettings.settingChanged("remoteCompatMode", c) }
                             }
