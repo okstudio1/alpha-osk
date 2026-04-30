@@ -32,6 +32,8 @@ Item {
     // Hold-to-repeat timing (ms).  Defaults must match KeyButton.qml.
     property int repeatDelay: 500
     property int repeatInterval: 120
+    // Remote desktop compatibility mode — see KeyboardBridge.setRemoteCompatMode.
+    property bool remoteCompatMode: false
 
     // Debug
     property bool debugMode: false
@@ -339,6 +341,16 @@ Item {
                                 text: "Right-Click for Shifted Character"
                                 checked: unifiedSettings.rightClickShift
                                 onToggled: function(c) { unifiedSettings.settingChanged("rightClickShift", c) }
+                            }
+
+                            // Switches prediction insertion to backspace+
+                            // retype — robust to TeamViewer/RDP/VNC drops
+                            // and reorders.  See bridge for full rationale.
+                            SettingsToggle {
+                                Layout.fillWidth: true
+                                text: "Remote Desktop Mode (TeamViewer/RDP)"
+                                checked: unifiedSettings.remoteCompatMode
+                                onToggled: function(c) { unifiedSettings.settingChanged("remoteCompatMode", c) }
                             }
 
                             // Hold-to-repeat delay — the threshold below

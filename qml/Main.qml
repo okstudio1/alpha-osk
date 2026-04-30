@@ -41,6 +41,12 @@ Window {
         // produced "double" Backspace keystrokes).
         property int savedRepeatDelay: 500
         property int savedRepeatInterval: 120
+        // Remote desktop compatibility — switches prediction-click
+        // insertion and autocorrect from suffix-only / Shift+Left-replace
+        // (which race over TeamViewer / RDP / VNC) to BackSpace × N +
+        // type-full-word.  Off by default; user enables when on a
+        // remote session.
+        property bool savedRemoteCompatMode: false
         // Window WIDTH — restored on launch, saved (debounced) on resize.
         // 0 means "no saved value yet, use the binding-driven default"
         // — that path runs on a fresh install.
@@ -136,6 +142,7 @@ Window {
             keyboard.setAutoCapitalizeAfterPunctuation(appSettings.savedAutoCapitalizeAfterPunctuation)
             keyboard.setAutoSaveOnExit(appSettings.savedAutoSaveOnExit)
             keyboard.setSwipeEnabled(appSettings.savedSwipeEnabled)
+            keyboard.setRemoteCompatMode(appSettings.savedRemoteCompatMode)
         }
 
         // Auto-update setting — kicks off the background check after a
@@ -218,6 +225,10 @@ Window {
     // is firing.  Exposed in Settings → Input.
     property int repeatDelay: appSettings.savedRepeatDelay
     property int repeatInterval: appSettings.savedRepeatInterval
+
+    // Remote-desktop compatibility — see savedRemoteCompatMode comment
+    // and KeyboardBridge.setRemoteCompatMode for the full rationale.
+    property bool remoteCompatMode: appSettings.savedRemoteCompatMode
 
     // Swipe / glide typing — when on, dragging across keys decodes a word.
     property bool swipeEnabled: appSettings.savedSwipeEnabled
@@ -1728,6 +1739,7 @@ Window {
             rightClickShift: root.rightClickShift
             repeatDelay: root.repeatDelay
             repeatInterval: root.repeatInterval
+            remoteCompatMode: root.remoteCompatMode
             debugMode: root.showDebugPanel
             autoCheckUpdates: root.autoCheckUpdates
             updateStatus: root.updateInstalling
@@ -1786,6 +1798,10 @@ Window {
                 } else if (setting === "repeatInterval") {
                     root.repeatInterval = value
                     appSettings.savedRepeatInterval = value
+                } else if (setting === "remoteCompatMode") {
+                    root.remoteCompatMode = value
+                    appSettings.savedRemoteCompatMode = value
+                    if (keyboard) keyboard.setRemoteCompatMode(value)
                 } else if (setting === "debugMode") {
                     root.showDebugPanel = value
                     if (keyboard) keyboard.setDebugMode(value)

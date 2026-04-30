@@ -190,6 +190,21 @@ class KeyboardBridge(QObject):
         # correction is available.  See HybridPredictor.check_autocorrect.
         self._autocorrect_enabled = True
 
+        # Remote desktop mode — when typing into a TeamViewer / RDP /
+        # VNC client window, the local OSK's suffix-only prediction
+        # insertion (and Shift+Left-based autocorrect replace) races
+        # with the remote-forwarding pipeline: keystrokes get dropped,
+        # duplicated, or reordered before the remote app sees them, so
+        # the typed prefix the OSK *thinks* is on screen doesn't match
+        # what's *actually* on screen.  Compat mode rewires both paths
+        # into a sequence of independent, single-event keystrokes —
+        # BackSpace × len(typed) + type the full word — which is
+        # robust to per-event drops/duplicates (the worst case is a
+        # one-char gap, not a scrambled word).  Off by default; the
+        # user enables it from Settings → Input when they know they're
+        # on a remote session.
+        self._remote_compat_mode = False
+
         # Swipe / glide typing — off by default, toggled in settings.
         # The recognizer needs the keyboard layout (key centres) before it
         # can decode anything; QML pushes that via setSwipeLayout().
@@ -538,9 +553,17 @@ class KeyboardBridge(QObject):
             )
             if correction and correction.lower() != self._current_word.lower():
                 cased = self._match_case(self._current_word, correction)
-                self._synth.replace_text(
-                    len(self._current_word), cased + " ",
-                )
+                if self._remote_compat_mode:
+                    # Remote desktop: Shift+Left selection races with
+                    # the forwarding pipeline.  Use BackSpace × N + type
+                    # instead — same end result, robust to remote glitches.
+                    for _ in range(len(self._current_word)):
+                        self._synth.send_key("BackSpace")
+                    self._send_text(cased + " ")
+                else:
+                    self._synth.replace_text(
+                        len(self._current_word), cased + " ",
+                    )
                 self._add_debug_log(
                     f"Autocorrected: {self._current_word!r} → {cased!r}"
                 )
@@ -744,7 +767,21 @@ class KeyboardBridge(QObject):
         # prefix matches what was typed CASE-SENSITIVELY.  Otherwise the typed
         # lowercase letters survive (e.g. "iph"+"iPhone" → "iphone"), so we
         # fall back to select-and-replace to honour the prediction's casing.
-        if word.startswith(self._current_word) and self._current_word:
+        #
+        # Remote-desktop compat mode (TeamViewer, RDP, VNC) bypasses both
+        # the suffix-only and Shift+Left-replace paths.  Suffix-only
+        # depends on the OSK's _current_word matching what's actually
+        # rendered on the remote — and remote forwarding can drop,
+        # duplicate, or reorder events, so that assumption breaks.
+        # Shift+Left has the same race shape.  Compat mode rewires
+        # everything to BackSpace × N + type the full word, a sequence
+        # of independent single-event keystrokes that is robust to
+        # per-event remote glitches.
+        if self._remote_compat_mode and self._current_word:
+            for _ in range(len(self._current_word)):
+                self._synth.send_key("BackSpace")
+            self._send_text(word + " ")
+        elif word.startswith(self._current_word) and self._current_word:
             # Prediction extends what was typed (same case) — type the rest
             suffix = word[len(self._current_word):] + " "
             self._send_text(suffix)
@@ -1138,6 +1175,19 @@ class KeyboardBridge(QObject):
         """Toggle space-time autocorrect (misspellings + fuzzy)."""
         self._autocorrect_enabled = enabled
         _logger.info("Autocorrect: %s", enabled)
+
+    @Slot(bool)
+    def setRemoteCompatMode(self, enabled: bool) -> None:
+        """Toggle remote-desktop compatibility mode.
+
+        When enabled, prediction-click insertion and autocorrect-on-
+        space stop using suffix-only / Shift+Left-replace tricks and
+        instead emit BackSpace × N + the full word.  Robust to the
+        keystroke drops/duplications/reordering that happen in
+        TeamViewer / RDP / VNC remote sessions.
+        """
+        self._remote_compat_mode = enabled
+        _logger.info("Remote compat mode: %s", enabled)
 
     @property
     def autoSaveOnExit(self) -> bool:

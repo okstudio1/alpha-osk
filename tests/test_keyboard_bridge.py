@@ -362,6 +362,62 @@ class TestContextTracking:
         assert bridge._current_word == "hi"
 
 
+class TestRemoteCompatMode:
+    """Remote-desktop compatibility — TeamViewer / RDP / VNC race fix.
+
+    When enabled, prediction-click insertion and autocorrect-on-space
+    must use BackSpace × N + type-full-word instead of suffix-only or
+    Shift+Left selection.  Independent single-event keystrokes survive
+    the keystroke drops/duplications that remote-forwarding pipelines
+    introduce.
+    """
+
+    def test_default_disabled(self, bridge: KeyboardBridge):
+        assert bridge._remote_compat_mode is False
+
+    def test_set_remote_compat_mode(self, bridge: KeyboardBridge):
+        bridge.setRemoteCompatMode(True)
+        assert bridge._remote_compat_mode is True
+        bridge.setRemoteCompatMode(False)
+        assert bridge._remote_compat_mode is False
+
+    def test_press_prediction_uses_backspace_plus_word_in_compat_mode(
+        self, bridge: KeyboardBridge,
+    ):
+        bridge.setRemoteCompatMode(True)
+        for c in "hel":
+            bridge.pressKey(c)
+        bridge._synth.reset_mock()
+        bridge.pressPrediction("hello")
+        # Compat-mode contract: 3 BackSpaces (one per char of typed
+        # prefix), then send_text("hello ").  No replace_text, no
+        # suffix-only send_text.
+        backspace_calls = [
+            c for c in bridge._synth.send_key.call_args_list
+            if c.args and c.args[0] == "BackSpace"
+        ]
+        assert len(backspace_calls) == 3
+        bridge._synth.send_text.assert_any_call("hello ")
+        bridge._synth.replace_text.assert_not_called()
+
+    def test_press_prediction_keeps_suffix_only_when_compat_mode_off(
+        self, bridge: KeyboardBridge,
+    ):
+        # Default (compat mode off) — must keep the existing suffix-only
+        # path so chat composers (Slack/Teams/Discord) keep working.
+        for c in "hel":
+            bridge.pressKey(c)
+        bridge._synth.reset_mock()
+        bridge.pressPrediction("hello")
+        # No BackSpaces should have been sent — only the suffix.
+        backspace_calls = [
+            c for c in bridge._synth.send_key.call_args_list
+            if c.args and c.args[0] == "BackSpace"
+        ]
+        assert backspace_calls == []
+        bridge._synth.send_text.assert_any_call("lo ")
+
+
 class TestPredictionWiring:
     """Prediction integration."""
 
