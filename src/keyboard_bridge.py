@@ -922,6 +922,18 @@ class KeyboardBridge(QObject):
         # fragment (_current_word) which is being *replaced* by the prediction.
         self._predictor.learn_from_selection(self._context_buffer, word)
 
+        # Capture casing intent.  If the user typed a capital first letter
+        # (right-click → shifted variant, or manual shift) before clicking
+        # a prediction, that's a deliberate signal "this word is
+        # capitalized."  learn_from_selection only updates frequency /
+        # bigrams, so without this call the casing was being thrown away
+        # — the user would have to re-right-click / re-shift every time
+        # they typed the same word.  learn_capitalization has its own
+        # guards (rejects all-uppercase and single-char inputs), so it's
+        # safe to call unconditionally on the typed-uppercase path.
+        if self._current_word and self._current_word[0].isupper():
+            self._predictor.learn_capitalization(word)
+
         # Update context - add the completed word
         self._context_buffer += word + " "
         if len(self._context_buffer) > 100:

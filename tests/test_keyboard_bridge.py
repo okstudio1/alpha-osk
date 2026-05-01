@@ -483,6 +483,47 @@ class TestPredictionWiring:
         assert bridge._prediction_count == 1
 
 
+class TestPredictionCapitalizationLearning:
+    """Selecting a prediction after typing a capital should teach
+    the system that this word is canonically capitalized.  Without
+    this, a right-click → uppercase or shift → uppercase choice is
+    forgotten the moment the user accepts a prediction, and they
+    have to redo it every time."""
+
+    def test_capital_prefix_then_pill_click_teaches_casing(
+        self, bridge: KeyboardBridge,
+    ):
+        # Right-click flow: pressKeyLiteral types the capital verbatim
+        # (no shift state involved) — same _current_word state as a
+        # manual shift would produce.
+        bridge._predictor.learn_capitalization = MagicMock(return_value=True)
+        bridge.pressKeyLiteral("O")
+        bridge.pressKey("w")
+        bridge.pressKey("e")
+        bridge.pressPrediction("Owen")
+        bridge._predictor.learn_capitalization.assert_called_with("Owen")
+
+    def test_lowercase_prefix_then_pill_click_does_not_teach_casing(
+        self, bridge: KeyboardBridge,
+    ):
+        # Lowercase prefix → user did not signal capitalization intent.
+        # The capital that may appear on the pill came from sentence-
+        # start auto-cap or proper-noun lookup, not from the user.
+        bridge._predictor.learn_capitalization = MagicMock(return_value=True)
+        for c in "ow":
+            bridge.pressKey(c)
+        bridge.pressPrediction("owen")
+        bridge._predictor.learn_capitalization.assert_not_called()
+
+    def test_pill_click_with_no_typed_prefix_does_not_teach_casing(
+        self, bridge: KeyboardBridge,
+    ):
+        # Next-word prediction (nothing typed) — no signal of intent.
+        bridge._predictor.learn_capitalization = MagicMock(return_value=True)
+        bridge.pressPrediction("Hello")
+        bridge._predictor.learn_capitalization.assert_not_called()
+
+
 class TestPredictionCapsDisplay:
     """Caps Lock mirrors into the prediction pill display case."""
 
