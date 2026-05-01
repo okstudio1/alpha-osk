@@ -163,12 +163,23 @@ keystroke.
 
 ## Role in the Hybrid Engine
 
-`HybridPredictor._merge_predictions` weights PPM suggestions **lower**
+`HybridPredictor._source_weights` weights PPM suggestions **lower**
 than n-gram for next-word prediction (0.3 vs 3.0) and **near equal**
-for mid-word completion (0.8 vs 1.0).  The rationale: n-gram *is* the
-word-level authority; PPM shines when the word is partial or absent
-from the dictionary.  See `docs/HYBRID_MERGING.md` for the full
-scoring rules.
+for mid-word completion (0.8 vs 1.0).  These weights are shared
+across every merge strategy (Default / Consensus boost /
+Confidence-weighted / Multiplicative) — the formula varies by
+strategy, the relative trust between predictors does not.  The
+rationale: n-gram *is* the word-level authority; PPM shines when the
+word is partial or absent from the dictionary.  See
+`docs/HYBRID_MERGING.md` for the full scoring rules and strategy
+trade-offs.
+
+PPM emits scores via `predict_with_scores()` — raw chained-character
+probabilities for dictionary completions, beam-search probabilities
+for novel completions.  These live on different scales and are
+normalised per source by the linear / log-linear strategies before
+combining; the rank and RRF strategies ignore the scores and use
+positional rank only.
 
 ## Known Limits / Future Work
 

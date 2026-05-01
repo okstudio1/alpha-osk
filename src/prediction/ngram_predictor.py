@@ -12,7 +12,7 @@ import logging
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 _logger = logging.getLogger("NgramPredictor")
 
@@ -317,6 +317,25 @@ class NgramPredictor:
         """
         Predict next words based on context.
 
+        Thin wrapper around :meth:`predict_with_scores` that strips the
+        scores.  Kept for callers (and external integrations) that only
+        need the ranked word list.
+
+        Args:
+            context: The text typed so far (full or partial word at end)
+            n: Number of predictions to return
+
+        Returns:
+            List of predicted words, most likely first
+        """
+        return [word for word, _ in self.predict_with_scores(context, n)]
+
+    def predict_with_scores(
+        self, context: str, n: int = 5
+    ) -> List[Tuple[str, float]]:
+        """
+        Predict next words with their interpolated probability scores.
+
         Scoring is a linear interpolation of conditional probabilities:
 
             score(w) = λ₃·P(w | w₋₂, w₋₁) + λ₂·P(w | w₋₁) + λ₁·P_uni(w)
@@ -327,12 +346,18 @@ class NgramPredictor:
         formula collapses to P_uni so the long-tail unigram ranking
         isn't artificially depressed.
 
+        Returned scores are unnormalised — they're the raw interpolated
+        values used internally for ranking.  Callers that need
+        comparable probabilities across predictors (e.g. the merge
+        strategies in :class:`HybridPredictor`) must normalise per
+        source before combining.
+
         Args:
             context: The text typed so far (full or partial word at end)
             n: Number of predictions to return
 
         Returns:
-            List of predicted words, most likely first
+            List of ``(word, score)`` tuples, most likely first
         """
         # IMPORTANT: Check for trailing space BEFORE stripping
         # Trailing space = user finished word, predict NEXT word
@@ -341,7 +366,7 @@ class NgramPredictor:
 
         context_clean = context.lower().strip()
         if not context_clean:
-            return self._top_unigrams(n)
+            return self._top_unigrams_with_scores(n)
 
         words = self._tokenize(context_clean)
 
@@ -420,7 +445,7 @@ class NgramPredictor:
                 candidates[word] = score
 
         sorted_candidates = sorted(candidates.items(), key=lambda x: -x[1])
-        return [word for word, _ in sorted_candidates[:n]]
+        return sorted_candidates[:n]
 
     def _matches_partial(self, word: str, partial: str) -> bool:
         """Check if word matches partial input."""
@@ -430,8 +455,20 @@ class NgramPredictor:
 
     def _top_unigrams(self, n: int) -> List[str]:
         """Get top n words by frequency."""
-        sorted_words = sorted(self.unigrams.items(), key=lambda x: -x[1])
-        return [word for word, _ in sorted_words[:n]]
+        return [word for word, _ in self._top_unigrams_with_scores(n)]
+
+    def _top_unigrams_with_scores(self, n: int) -> List[Tuple[str, float]]:
+        """Top n words by frequency, with the raw frequency as score.
+
+        Used by :meth:`predict_with_scores` when there is no context to
+        condition on.  The raw integer frequency stands in for the
+        unigram probability (callers normalise per source before
+        combining).
+        """
+        sorted_words = sorted(
+            self.unigrams.items(), key=lambda x: -x[1]
+        )
+        return [(word, float(freq)) for word, freq in sorted_words[:n]]
 
     def _tokenize(self, text: str) -> List[str]:
         """Split text into words."""

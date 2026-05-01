@@ -1310,6 +1310,19 @@ class KeyboardBridge(QObject):
         self._autocorrect_enabled = enabled
         _logger.info("Autocorrect: %s", enabled)
 
+    @Slot(str)
+    def setMergeStrategy(self, strategy: str) -> None:
+        """Pick the prediction merge strategy.
+
+        One of ``"rank"`` (default), ``"rrf"``, ``"linear"``,
+        ``"loglinear"``.  Unknown values are ignored — see
+        :meth:`HybridPredictor.set_merge_strategy`.  The setting is
+        persisted in QML ``Settings`` as ``savedMergeStrategy`` and
+        reapplied on every launch via the QML
+        ``Component.onCompleted`` block.
+        """
+        self._predictor.set_merge_strategy(strategy)
+
     @Slot(bool)
     def setRemoteCompatMode(self, enabled: bool) -> None:
         """Toggle the *manual* remote-desktop compatibility flag.

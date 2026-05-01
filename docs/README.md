@@ -56,6 +56,18 @@ Technical approaches from **Gboard** and **SwiftKey** including fuzzy/spatial re
 
 Analysis of different prediction strategies and the rationale for Alpha-OSK's hybrid approach.
 
+**[`HYBRID_MERGING.md`](HYBRID_MERGING.md)** - How the four predictors combine
+
+Scoring rules in `HybridPredictor._merge_predictions`, the four user-selectable merge strategies (Default / Consensus boost / Confidence-weighted / Multiplicative), industry research informing the design (Goodman 2002, Klakow 1998, Gboard EMNLP 2024, Presage's `MeritocracyCombiner`), and the LLM rerank refinement layer.
+
+**[`FUZZY_RECOGNITION.md`](FUZZY_RECOGNITION.md)** - Spatial error correction
+
+The `FuzzyRecognizer`'s spatial Gaussian model, SymSpell-backed edit-distance lookup, and the autocorrect two-tier threshold.  Explains how the Gboard-leaning constants are tuned and how fuzzy candidates plug into the merge.
+
+**[`PPM.md`](PPM.md)** - Character-level PPM (Dasher algorithm)
+
+Variable-order character model with PPMD escape, role in the hybrid engine, and known limits.
+
 ---
 
 ### Security

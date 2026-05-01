@@ -16,7 +16,7 @@ import logging
 import math
 import threading
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from PySide6.QtCore import QObject, Signal
 
@@ -131,6 +131,12 @@ class HybridPredictor(QObject):
         self._current_context = ""
         self._pending_refinement = False
 
+        # Active merge strategy.  Default "rank" preserves byte-identical
+        # behaviour with prior versions; "rrf", "linear", "loglinear" are
+        # opt-in alternatives surfaced via Settings → Suggestion Engine.
+        # See ``docs/HYBRID_MERGING.md`` for the trade-offs.
+        self._merge_strategy: str = "rank"
+
     def _load_llm_async(self) -> None:
         """Load the LLM in a background thread."""
         def loader():
@@ -167,24 +173,30 @@ class HybridPredictor(QObject):
         self._current_context = context
         is_next_word = context.endswith(" ")
 
-        # Get predictions from multiple sources
-        ngram_preds = self._ngram.predict(context, n * 2)  # Get more for filtering
-        _logger.debug("N-GRAM preds (next=%s): %s", is_next_word, ngram_preds[:5])
+        # Get predictions from multiple sources, with their per-source
+        # raw scores.  Each source's scores live in a different scale
+        # (n-gram = interpolated probability, PPM = chained char prob,
+        # fuzzy = log-spatial); the merge strategies normalise per
+        # source before combining, so we propagate raw scores here.
+        ngram_preds = self._ngram.predict_with_scores(context, n * 2)
+        _logger.debug(
+            "N-GRAM preds (next=%s): %s",
+            is_next_word,
+            [w for w, _ in ngram_preds[:5]],
+        )
 
         # Add PPM predictions if enabled
-        ppm_preds = []
+        ppm_preds: List[Tuple[str, float]] = []
         if self._enable_ppm:
-            ppm_preds = self._ppm_word.predict(context, n * 2)
-            _logger.debug("PPM preds: %s", ppm_preds[:5])
+            ppm_preds = self._ppm_word.predict_with_scores(context, n * 2)
+            _logger.debug("PPM preds: %s", [w for w, _ in ppm_preds[:5]])
 
         # Add fuzzy candidates for current word
-        fuzzy_preds = []
-        fuzzy_candidates = self._fuzzy.get_fuzzy_predictions(context, n)
-        fuzzy_preds = [word for word, _ in fuzzy_candidates]
+        fuzzy_preds = self._fuzzy.get_fuzzy_predictions(context, n)
         if fuzzy_preds:
-            _logger.debug("FUZZY preds: %s", fuzzy_preds[:5])
+            _logger.debug("FUZZY preds: %s", [w for w, _ in fuzzy_preds[:5]])
 
-        # Merge predictions with weighted scoring
+        # Merge predictions with the active strategy
         predictions = self._merge_predictions(
             ngram_preds, ppm_preds, fuzzy_preds, n
         )
@@ -220,108 +232,381 @@ class HybridPredictor(QObject):
 
     def _merge_predictions(
         self,
-        ngram: List[str],
-        ppm: List[str],
-        fuzzy: List[str],
+        ngram: List[Tuple[str, float]],
+        ppm: List[Tuple[str, float]],
+        fuzzy: List[Tuple[str, float]],
         n: int
     ) -> List[str]:
-        """
-        Merge predictions from multiple sources with weighted scoring.
+        """Merge candidate lists from each predictor into a final ranking.
 
-        For next-word prediction (context ends with space), heavily favor
-        n-gram word predictions over PPM character fragments.
-        Only include words that exist in our vocabulary.
+        Dispatches to the active strategy (``_merge_strategy``) — see
+        ``docs/HYBRID_MERGING.md`` for the menu.  Each strategy returns
+        a ``Dict[str, float]`` of combined scores (and populates
+        ``sources`` for debug logging); the shared ``_finalize_scores``
+        applies dispreference penalty, short-word filter, sentence-start
+        capitalisation, and caps to ``n`` results.
+
+        For next-word prediction (context ends with space), every
+        strategy weights n-gram heavily over PPM/fuzzy — that ratio is
+        the dominant behaviour and shouldn't depend on the merge
+        formula.
+        """
+        is_next_word = self._current_context.endswith(" ")
+        sources: Dict[str, List[str]] = {}
+
+        strategy = self._merge_strategy
+        if strategy == "rrf":
+            scores = self._score_rrf(ngram, ppm, fuzzy, is_next_word, sources)
+        elif strategy == "linear":
+            scores = self._score_linear(ngram, ppm, fuzzy, is_next_word, sources)
+        elif strategy == "loglinear":
+            scores = self._score_loglinear(
+                ngram, ppm, fuzzy, is_next_word, sources
+            )
+        else:  # "rank" — default, byte-identical to pre-strategy behaviour
+            scores = self._score_rank(ngram, ppm, fuzzy, is_next_word, sources)
+
+        return self._finalize_scores(scores, sources, n, is_next_word)
+
+    # --- Per-strategy scorers --------------------------------------------
+
+    def _score_rank(
+        self,
+        ngram: List[Tuple[str, float]],
+        ppm: List[Tuple[str, float]],
+        fuzzy: List[Tuple[str, float]],
+        is_next_word: bool,
+        sources: Dict[str, List[str]],
+    ) -> Dict[str, float]:
+        """Original rank-based fusion: ``score = weight / (rank + 1)``.
+
+        Default strategy.  Discards each predictor's confidence and
+        ranks purely by positional contribution, weighted per source.
         """
         scores: Dict[str, float] = {}
-        sources: Dict[str, List[str]] = {}  # Track where each word came from
+        ngram_weight, ppm_weight, fuzzy_weight = self._source_weights(
+            is_next_word
+        )
 
-        # Check if we're predicting next word (context ends with space)
-        is_next_word = self._current_context.endswith(" ")
-
-        # N-gram predictions (weight: 3.0 for next-word, 1.0 for completion)
-        ngram_weight = 3.0 if is_next_word else 1.0
-        for i, word in enumerate(ngram):
-            if is_next_word and len(word) <= 2 and word != "i":
+        for i, (word, _) in enumerate(ngram):
+            if not self._candidate_passes(word, is_next_word):
                 continue
-            # Validate word exists in vocabulary
-            if not self._is_valid_word(word):
-                continue
-            score = ngram_weight / (i + 1)
-            scores[word] = scores.get(word, 0) + score
+            scores[word] = scores.get(word, 0.0) + ngram_weight / (i + 1)
             sources.setdefault(word, []).append("ng")
 
-        # PPM predictions (weight: 0.3 for next-word, 0.8 for completion)
-        ppm_weight = 0.3 if is_next_word else 0.8
-        for i, word in enumerate(ppm):
-            if is_next_word and len(word) <= 2 and word != "i":
+        for i, (word, _) in enumerate(ppm):
+            if not self._candidate_passes(word, is_next_word):
                 continue
-            # Validate word exists in vocabulary
-            if not self._is_valid_word(word):
-                continue
-            score = ppm_weight / (i + 1)
-            scores[word] = scores.get(word, 0) + score
+            scores[word] = scores.get(word, 0.0) + ppm_weight / (i + 1)
             sources.setdefault(word, []).append("ppm")
 
-        # Fuzzy predictions weight (from FuzzyRecognizer constants).
-        # Re-rank with a bigram bonus from the n-gram model — fuzzy
-        # candidates are otherwise context-blind, so "the" after "of "
-        # would tie with "thy" and "tha" purely on spatial scores.  The
-        # bonus is capped (log1p(count)/5) so it nudges ranking without
-        # letting a single noisy bigram dominate.
-        fuzzy_weight = self._fuzzy.prediction_weight
-        prev_word = self._last_context_word()
-        bigram_table = self._ngram.bigrams.get(prev_word, {}) if prev_word else {}
-        for i, word in enumerate(fuzzy):
+        bigram_table = self._fuzzy_bigram_table()
+        for i, (word, _) in enumerate(fuzzy):
             if not self._is_valid_word(word):
                 continue
-            bigram_bonus = 1.0
-            if bigram_table:
-                bg_count = bigram_table.get(word, 0)
-                if bg_count > 0:
-                    # /2 (not /5) so a confident bigram can override
-                    # positional ranking — fuzzy candidates are
-                    # context-blind by default, the bigram is the
-                    # primary context signal we have for them.
-                    bigram_bonus = 1.0 + math.log1p(bg_count) / 2.0
-            score = (fuzzy_weight / (i + 1)) * bigram_bonus
-            scores[word] = scores.get(word, 0) + score
+            bonus = self._bigram_bonus(word, bigram_table)
+            scores[word] = (
+                scores.get(word, 0.0) + (fuzzy_weight / (i + 1)) * bonus
+            )
             sources.setdefault(word, []).append("fz")
 
-        # Apply dispreference penalties before sorting
+        return scores
+
+    def _score_rrf(
+        self,
+        ngram: List[Tuple[str, float]],
+        ppm: List[Tuple[str, float]],
+        fuzzy: List[Tuple[str, float]],
+        is_next_word: bool,
+        sources: Dict[str, List[str]],
+        *,
+        k: int = 60,
+    ) -> Dict[str, float]:
+        """Reciprocal Rank Fusion (Cormack et al. 2009).
+
+        ``score = weight / (k + rank + 1)`` with ``k = 60`` — the
+        IR-standard smoothing constant that ships in elasticsearch,
+        Vespa, and Azure AI Search.  Same shape as the rank strategy
+        but the rank-1 vs rank-2 ratio is ~1.02 instead of 2× — so
+        consensus across sources matters far more than positional
+        dominance within any one source.
+        """
+        scores: Dict[str, float] = {}
+        ngram_weight, ppm_weight, fuzzy_weight = self._source_weights(
+            is_next_word
+        )
+
+        for i, (word, _) in enumerate(ngram):
+            if not self._candidate_passes(word, is_next_word):
+                continue
+            scores[word] = (
+                scores.get(word, 0.0) + ngram_weight / (k + i + 1)
+            )
+            sources.setdefault(word, []).append("ng")
+
+        for i, (word, _) in enumerate(ppm):
+            if not self._candidate_passes(word, is_next_word):
+                continue
+            scores[word] = (
+                scores.get(word, 0.0) + ppm_weight / (k + i + 1)
+            )
+            sources.setdefault(word, []).append("ppm")
+
+        bigram_table = self._fuzzy_bigram_table()
+        for i, (word, _) in enumerate(fuzzy):
+            if not self._is_valid_word(word):
+                continue
+            bonus = self._bigram_bonus(word, bigram_table)
+            scores[word] = (
+                scores.get(word, 0.0)
+                + (fuzzy_weight / (k + i + 1)) * bonus
+            )
+            sources.setdefault(word, []).append("fz")
+
+        return scores
+
+    def _score_linear(
+        self,
+        ngram: List[Tuple[str, float]],
+        ppm: List[Tuple[str, float]],
+        fuzzy: List[Tuple[str, float]],
+        is_next_word: bool,
+        sources: Dict[str, List[str]],
+    ) -> Dict[str, float]:
+        """Probability-space linear interpolation (Presage-style).
+
+        Each source's raw scores are normalised into a per-source
+        sum-to-1 distribution; the merged score is
+        ``Σ w_i · P_i(w)``.  Words missing from a source contribute
+        zero from that source (additive, not multiplicative).  This
+        is what Presage's ``MeritocracyCombiner`` ships, with full
+        awareness of the calibration risk between predictors that
+        produce probabilities at different scales.
+        """
+        ngram_weight, ppm_weight, fuzzy_weight = self._source_weights(
+            is_next_word
+        )
+        bigram_table = self._fuzzy_bigram_table()
+
+        p_ngram = self._normalise_source(ngram, is_next_word)
+        p_ppm = self._normalise_source(ppm, is_next_word)
+        p_fuzzy = self._normalise_source(
+            fuzzy, is_next_word, fuzzy_bigram_table=bigram_table
+        )
+
+        scores: Dict[str, float] = {}
+        for word, p in p_ngram.items():
+            scores[word] = scores.get(word, 0.0) + ngram_weight * p
+            sources.setdefault(word, []).append("ng")
+        for word, p in p_ppm.items():
+            scores[word] = scores.get(word, 0.0) + ppm_weight * p
+            sources.setdefault(word, []).append("ppm")
+        for word, p in p_fuzzy.items():
+            scores[word] = scores.get(word, 0.0) + fuzzy_weight * p
+            sources.setdefault(word, []).append("fz")
+
+        return scores
+
+    def _score_loglinear(
+        self,
+        ngram: List[Tuple[str, float]],
+        ppm: List[Tuple[str, float]],
+        fuzzy: List[Tuple[str, float]],
+        is_next_word: bool,
+        sources: Dict[str, List[str]],
+        *,
+        floor: float = 1e-6,
+    ) -> Dict[str, float]:
+        """Log-linear / multiplicative mixture (Google patent style).
+
+        Equivalent to ``Π P_i(w)^w_i`` — the per-source weights become
+        exponents on the probabilities.  Klakow (1998) showed log-linear
+        outperforms linear interpolation by ~20% relative perplexity on
+        n-gram smoothing; the failure mode is "single zero kills the
+        candidate," mitigated here by floor-smoothing missing words at
+        ``1e-6`` (every shipping log-linear system has the same fix).
+
+        Output is converted back to linear space (with a max-shift to
+        avoid underflow) so dispreference and sort behave identically
+        to the other strategies.
+        """
+        ngram_weight, ppm_weight, fuzzy_weight = self._source_weights(
+            is_next_word
+        )
+        bigram_table = self._fuzzy_bigram_table()
+
+        p_ngram = self._normalise_source(ngram, is_next_word)
+        p_ppm = self._normalise_source(ppm, is_next_word)
+        p_fuzzy = self._normalise_source(
+            fuzzy, is_next_word, fuzzy_bigram_table=bigram_table
+        )
+
+        candidates = set(p_ngram) | set(p_ppm) | set(p_fuzzy)
+        if not candidates:
+            return {}
+
+        log_floor = math.log(floor)
+        log_scores: Dict[str, float] = {}
+        for word in candidates:
+            log_score = 0.0
+            if word in p_ngram:
+                log_score += ngram_weight * math.log(p_ngram[word])
+                sources.setdefault(word, []).append("ng")
+            else:
+                log_score += ngram_weight * log_floor
+            if word in p_ppm:
+                log_score += ppm_weight * math.log(p_ppm[word])
+                sources.setdefault(word, []).append("ppm")
+            else:
+                log_score += ppm_weight * log_floor
+            if word in p_fuzzy:
+                log_score += fuzzy_weight * math.log(p_fuzzy[word])
+                sources.setdefault(word, []).append("fz")
+            else:
+                log_score += fuzzy_weight * log_floor
+            log_scores[word] = log_score
+
+        # Convert log → linear space so dispreference (multiplicative)
+        # and sort behave the same as other strategies.  Subtract max
+        # before exp to keep the largest score at 1.0 and avoid
+        # underflowing very-negative scores to 0 unnecessarily.
+        max_log = max(log_scores.values())
+        return {w: math.exp(s - max_log) for w, s in log_scores.items()}
+
+    # --- Shared helpers --------------------------------------------------
+
+    def _normalise_source(
+        self,
+        items: List[Tuple[str, float]],
+        is_next_word: bool,
+        *,
+        fuzzy_bigram_table: Optional[Dict[str, int]] = None,
+    ) -> Dict[str, float]:
+        """Per-source filter + sum-to-1 normalisation.
+
+        Used by the linear and log-linear strategies to bring each
+        predictor's raw scores onto a comparable probability scale.
+        Filters words first (short-word + vocabulary gates for
+        ngram/ppm; vocabulary-only for fuzzy), then divides by the
+        sum so the result is a probability distribution over the
+        surviving candidates.
+
+        For fuzzy specifically, applies the bigram bonus *before*
+        normalisation so the context signal flows through the
+        resulting distribution rather than being applied
+        post-mixture.  Pass ``fuzzy_bigram_table`` to opt into this
+        path; ``None`` means "this is ngram or ppm — short-word
+        filter, no bigram bonus."
+
+        Returns an empty dict when no candidates survive or all
+        scores are zero.
+        """
+        is_fuzzy = fuzzy_bigram_table is not None
+        filtered: List[Tuple[str, float]] = []
+        for word, raw_score in items:
+            if is_fuzzy:
+                if not self._is_valid_word(word):
+                    continue
+                bonus = self._bigram_bonus(word, fuzzy_bigram_table)
+                filtered.append((word, raw_score * bonus))
+            else:
+                if not self._candidate_passes(word, is_next_word):
+                    continue
+                filtered.append((word, raw_score))
+
+        total = sum(score for _, score in filtered)
+        if total <= 0:
+            return {}
+        return {word: score / total for word, score in filtered}
+
+    def _source_weights(self, is_next_word: bool) -> Tuple[float, float, float]:
+        """Per-source merge weights, dependent on next-word vs completion.
+
+        These weights are shared across every strategy — the formula
+        differs, but the relative trust between predictors does not.
+        """
+        ngram_weight = 3.0 if is_next_word else 1.0
+        ppm_weight = 0.3 if is_next_word else 0.8
+        fuzzy_weight = self._fuzzy.prediction_weight
+        return ngram_weight, ppm_weight, fuzzy_weight
+
+    def _candidate_passes(self, word: str, is_next_word: bool) -> bool:
+        """Combined short-word filter + vocabulary validation gate.
+
+        Mirrors the inline checks the rank strategy applied before
+        adding a word to ``scores``.  Used by every strategy that
+        iterates per-source predictions before merging.
+        """
+        if is_next_word and len(word) <= 2 and word != "i":
+            return False
+        return self._is_valid_word(word)
+
+    def _fuzzy_bigram_table(self) -> Dict[str, int]:
+        """Bigram-count table for the previous context word.
+
+        Returned dict is empty when there's no preceding word.  Strategy
+        scorers consult it to compute the fuzzy bigram bonus that lets
+        confident context override positional ranking — fuzzy candidates
+        are otherwise context-blind.
+        """
+        prev_word = self._last_context_word()
+        if not prev_word:
+            return {}
+        return self._ngram.bigrams.get(prev_word, {})
+
+    @staticmethod
+    def _bigram_bonus(
+        word: str, bigram_table: Optional[Dict[str, int]]
+    ) -> float:
+        """Multiplicative bonus for fuzzy candidates with bigram support.
+
+        ``1 + log1p(count) / 2`` when the previous word frequently
+        precedes ``word``; ``1.0`` (no bonus) otherwise.  The /2 slope
+        is generous on purpose — fuzzy has no other context signal, so
+        a confident bigram should be able to outrank a positional
+        leader.  Accepts ``None`` so the caller can pass through the
+        optional bigram-table parameter without a wrapping guard.
+        """
+        if not bigram_table:
+            return 1.0
+        count = bigram_table.get(word, 0)
+        if count <= 0:
+            return 1.0
+        return 1.0 + math.log1p(count) / 2.0
+
+    def _finalize_scores(
+        self,
+        scores: Dict[str, float],
+        sources: Dict[str, List[str]],
+        n: int,
+        is_next_word: bool,
+    ) -> List[str]:
+        """Apply dispreference penalty, sort, capitalise, return top n.
+
+        Shared post-processing for every strategy.  Sentence-start
+        detection only fires on actual punctuation (`.!?`); empty
+        context is **not** a sentence start — see the n-gram path's
+        comment for why (terminal/REPL backspace, app switch).
+        """
         for word in list(scores):
             dp = self._ngram.get_dispreference(word)
             if dp > 0:
-                scores[word] /= (1 + dp * 0.5)
+                scores[word] /= 1 + dp * 0.5
 
-        # Sort by combined score
         sorted_words = sorted(scores.items(), key=lambda x: -x[1])
 
-        # Determine if we're at sentence start (for capitalization).
-        # Sentence start is only true when there's an actual sentence-
-        # ending punctuation in context — empty context does NOT
-        # qualify. Treating empty as sentence-start used to fire
-        # capitalisation in two cases the user doesn't expect: (1) in
-        # a terminal/REPL after backspacing every typed char (the
-        # context buffer is empty but the user isn't starting a
-        # sentence — they're cleaning up), and (2) on app switch,
-        # which clears context. The fresh-document case (open Notepad,
-        # type the first letter) is handled downstream by
-        # `_display_cased` mirroring the typed prefix's casing — if
-        # the user shift-typed "T", "the" → "The" anyway.
         ctx = self._current_context.rstrip()
         sentence_start = bool(ctx) and ctx[-1] in ".!?"
 
-        # Return top n valid words, applying context-aware capitalization
-        results = []
+        results: List[str] = []
         for word, score in sorted_words:
-            # Allow "i" through (always-capitalize handles it), but skip
-            # other short words for next-word predictions
+            # Final short-word guard — catches any short word that
+            # slipped past the per-source filter (e.g. fuzzy, which
+            # the rank strategy historically didn't filter).
             if is_next_word and len(word) <= 2 and word != "i":
                 continue
-            # Apply context-aware capitalization
             capped = self._ngram.get_capitalized(word, sentence_start)
             results.append(capped)
-            # Log source for debugging
             src = "+".join(sources.get(word, ["?"]))
             _logger.debug("  %s (%.2f) [%s]", capped, score, src)
             if len(results) >= n:
@@ -492,9 +777,42 @@ class HybridPredictor(QObject):
         stats["llm_enabled"] = self._enable_llm
         stats["llm_available"] = self._llm_available
         stats["ppm_enabled"] = self._enable_ppm
+        stats["merge_strategy"] = self._merge_strategy
         stats["ppm"] = self._ppm.get_stats()
         stats["fuzzy"] = self._fuzzy.get_stats()
         return stats
+
+    # --- Merge strategy selection ---
+
+    _VALID_MERGE_STRATEGIES = ("rank", "rrf", "linear", "loglinear")
+
+    @property
+    def merge_strategy(self) -> str:
+        """The active merge strategy name.
+
+        One of ``"rank"`` (default), ``"rrf"``, ``"linear"``,
+        ``"loglinear"``.  See ``docs/HYBRID_MERGING.md`` for the
+        trade-offs between them.
+        """
+        return self._merge_strategy
+
+    def set_merge_strategy(self, strategy: str) -> bool:
+        """Switch the active merge strategy.
+
+        Returns True if the strategy was recognised and applied,
+        False otherwise (the previous strategy is preserved).  Unknown
+        strategies are logged but never raise — keeps the QML/bridge
+        slot defensive against typos.
+        """
+        if strategy not in self._VALID_MERGE_STRATEGIES:
+            _logger.warning(
+                "Unknown merge strategy %r; keeping %r",
+                strategy, self._merge_strategy,
+            )
+            return False
+        self._merge_strategy = strategy
+        _logger.info("Merge strategy set to %r", strategy)
+        return True
 
     # --- Public API for callers that previously reached through to _ngram ---
 

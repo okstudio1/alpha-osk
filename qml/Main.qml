@@ -41,6 +41,13 @@ Window {
         // produced "double" Backspace keystrokes).
         property int savedRepeatDelay: 500
         property int savedRepeatInterval: 120
+        // Prediction merge strategy.  "rank" (default) is the
+        // historical rank-based fusion; "rrf" / "linear" / "loglinear"
+        // are alternatives surfaced via Settings → Suggestion Engine.
+        // See docs/HYBRID_MERGING.md for the trade-offs.  Default
+        // MUST stay "rank" — every existing user's pill ranking
+        // depends on it.
+        property string savedMergeStrategy: "rank"
         // Remote desktop compatibility — switches prediction-click
         // insertion and autocorrect from suffix-only / Shift+Left-replace
         // (which race over TeamViewer / RDP / VNC) to BackSpace × N +
@@ -146,6 +153,7 @@ Window {
             keyboard.setSwipeEnabled(appSettings.savedSwipeEnabled)
             keyboard.setRemoteCompatMode(appSettings.savedRemoteCompatMode)
             keyboard.setRemoteCompatAuto(appSettings.savedRemoteCompatAuto)
+            keyboard.setMergeStrategy(appSettings.savedMergeStrategy)
         }
 
         // Auto-update setting — kicks off the background check after a
@@ -233,6 +241,9 @@ Window {
     // and KeyboardBridge.setRemoteCompatMode for the full rationale.
     property bool remoteCompatMode: appSettings.savedRemoteCompatMode
     property bool remoteCompatAuto: appSettings.savedRemoteCompatAuto
+
+    // Prediction merge strategy — see savedMergeStrategy.
+    property string mergeStrategy: appSettings.savedMergeStrategy
 
     // Swipe / glide typing — when on, dragging across keys decodes a word.
     property bool swipeEnabled: appSettings.savedSwipeEnabled
@@ -1745,6 +1756,7 @@ Window {
             repeatInterval: root.repeatInterval
             remoteCompatMode: root.remoteCompatMode
             remoteCompatAuto: root.remoteCompatAuto
+            mergeStrategy: root.mergeStrategy
             debugMode: root.showDebugPanel
             autoCheckUpdates: root.autoCheckUpdates
             updateStatus: root.updateInstalling
@@ -1811,6 +1823,10 @@ Window {
                     root.remoteCompatAuto = value
                     appSettings.savedRemoteCompatAuto = value
                     if (keyboard) keyboard.setRemoteCompatAuto(value)
+                } else if (setting === "mergeStrategy") {
+                    root.mergeStrategy = value
+                    appSettings.savedMergeStrategy = value
+                    if (keyboard) keyboard.setMergeStrategy(value)
                 } else if (setting === "debugMode") {
                     root.showDebugPanel = value
                     if (keyboard) keyboard.setDebugMode(value)

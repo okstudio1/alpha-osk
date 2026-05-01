@@ -104,7 +104,7 @@ recognizer uses one set of generous, Gboard-leaning constants:
 |----------|-------|------------------|
 | `DEFAULT_SPATIAL_UNCERTAINTY` | 1.4 | Radius (in key-widths) the Gaussian covers.  Larger than the old "Normal" 1.0 — picks up diagonal neighbours so a near-miss still surfaces the right word. |
 | `DEFAULT_CONFIDENCE_THRESHOLD` | 0.65 | Auto-correct only if the top candidate's probability clears this.  Lower than the old "Normal" 0.8 — more willing to fix obvious typos. |
-| `DEFAULT_PREDICTION_WEIGHT` | 0.6 | How heavily `HybridPredictor._merge_predictions` trusts fuzzy candidates vs. n-gram. |
+| `DEFAULT_PREDICTION_WEIGHT` | 0.6 | How heavily `HybridPredictor._source_weights` trusts fuzzy candidates vs. n-gram.  Shared across every merge strategy (rank / RRF / linear / log-linear). |
 | `DEFAULT_MIN_PROB` | 0.001 | Beam-search pruning threshold inside `_generate_fuzzy_sequences`.  Lower than the old 0.01 so a single-substitution path can survive across a 5+ character word. |
 | `_TRANSPOSITION_PROB` | 0.30 | Per-edit probability for `_edit_distance_candidates` when the typed string can be turned into a dictionary word by swapping two adjacent characters ("teh" → "the"). |
 | `_DELETION_PROB` | 0.20 | Same, for the "typed has an extra letter" path — drop each char and look up. |
@@ -119,9 +119,21 @@ is gone.
 ## How it Plugs into the Hybrid Engine
 
 `HybridPredictor.predict` pulls fuzzy predictions for the current
-partial word via `get_fuzzy_predictions`.  Those candidates are merged
-with n-gram and PPM suggestions using `FuzzyRecognizer.prediction_weight`
-as the fuzzy score multiplier — see `docs/HYBRID_MERGING.md`.
+partial word via `get_fuzzy_predictions`, which returns
+`List[Tuple[str, float]]` with raw spatial scores.  Those candidates
+are merged with n-gram and PPM suggestions using
+`FuzzyRecognizer.prediction_weight` as the per-source weight; the
+formula that combines them depends on the active merge strategy
+(Default / Consensus boost / Confidence-weighted / Multiplicative).
+See `docs/HYBRID_MERGING.md`.
+
+The bigram bonus on fuzzy candidates (`_bigram_bonus`,
+`1 + log1p(count) / 2`) applies in every strategy — fuzzy is the only
+predictor that's context-blind by default, so we add the previous
+word's bigram support as the primary context signal.  In rank/RRF
+the bonus multiplies the positional score; in linear/log-linear it
+multiplies the score *before* per-source normalisation, so the
+context signal flows through the resulting probability distribution.
 
 `HybridPredictor.check_autocorrect` calls `should_autocorrect`, which
 returns a corrected word only if the top candidate's probability ≥

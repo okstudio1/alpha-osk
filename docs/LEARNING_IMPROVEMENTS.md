@@ -52,14 +52,22 @@ making the engine we already have less brittle.
 
 ### Hybrid merge weights
 
-`src/prediction/hybrid_predictor.py::_merge_predictions`
+`src/prediction/hybrid_predictor.py::_source_weights` (shared) and
+the per-strategy scorers (`_score_rank` / `_score_rrf` /
+`_score_linear` / `_score_loglinear`).
 
 - N-gram weight: `3.0` for next-word, `1.0` for completion.
 - PPM weight: `0.3` for next-word, `0.8` for completion.
 - Fuzzy weight: `0.6` (from `DEFAULT_PREDICTION_WEIGHT`).
 - Bigram bonus on fuzzy candidates: `1 + log1p(count)/2`.
 - Personal-vs-base mix in unigrams: `personal_weight = 0.5`.
-- All hand-tuned.
+- RRF smoothing constant: `k = 60` (IR-standard, only used by the
+  Consensus boost strategy).
+- Log-linear floor: `1e-6` (only used by the Multiplicative strategy
+  to prevent `log(0)` when a word is missing from a source).
+- All hand-tuned.  The weights are shared across every merge
+  strategy; the formula varies, the relative trust between predictors
+  does not.  See `docs/HYBRID_MERGING.md` for strategy trade-offs.
 
 ### Autocorrect thresholds
 

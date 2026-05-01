@@ -22,6 +22,9 @@ Item {
     property int predictionCount: 8
     property bool autoSpaceAfterPunctuation: true
     property bool autoCapitalizeAfterPunctuation: false
+    // Merge strategy — see docs/HYBRID_MERGING.md.  "rank" is the
+    // default and historical behaviour; the others are alternatives.
+    property string mergeStrategy: "rank"
 
     // Data
     property bool autoSaveOnExit: true
@@ -323,6 +326,102 @@ Item {
                                             }
                                         }
                                     }
+                                }
+                            }
+                        }
+                    }
+
+                    // -- SUGGESTION ENGINE --
+                    // Picks the formula used to merge candidate words from
+                    // the n-gram, PPM, and fuzzy predictors.  Default is
+                    // "rank" — the historical rank-based fusion every
+                    // existing user has been on.  See docs/HYBRID_MERGING.md
+                    // for the trade-offs.
+                    SettingsSection {
+                        title: "Suggestion Engine"
+                        Layout.fillWidth: true
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 4
+
+                            Repeater {
+                                model: [
+                                    {
+                                        id: "rank",
+                                        name: "Default",
+                                        desc: "Original behaviour — ranks by source position.",
+                                        tooltip: "Sums weight / (rank + 1) from each source.\nIgnores how confident each predictor is — only positional rank matters.\nA 99%-confident #1 contributes the same as a 51%-confident #1.\nCheap, predictable, and what every existing user has been on."
+                                    },
+                                    {
+                                        id: "rrf",
+                                        name: "Consensus boost",
+                                        desc: "Words multiple sources agree on rank higher.",
+                                        tooltip: "Reciprocal Rank Fusion: weight / (60 + rank + 1).\nThe k=60 constant shrinks the #1 vs #2 gap from 2× to ~1.02×,\nso words that show up in multiple sources at modest rank can\nbeat words that lead in only one source. Try this if predictions\nfeel like they're shouting one source's pick over the others."
+                                    },
+                                    {
+                                        id: "linear",
+                                        name: "Confidence-weighted",
+                                        desc: "Use each source's actual confidence, not just its rank.",
+                                        tooltip: "Probability-space linear interpolation: Σ wᵢ · Pᵢ(w).\nEach source's raw scores are normalised to a sum-to-1\ndistribution before combining, so a very confident pick\ncontributes more than a barely-above-#2 pick. Defers to\nwhichever source is most sure on a given word.\nWhat Presage's MeritocracyCombiner ships."
+                                    },
+                                    {
+                                        id: "loglinear",
+                                        name: "Multiplicative",
+                                        desc: "Strict — favours words that score well in every source.",
+                                        tooltip: "Log-linear: Π Pᵢ(w)^wᵢ.\nThe per-source weights become exponents — a word that scores\nwell in every source wins, a word missing from one takes a heavy\n(but bounded) penalty. Fewer, surer suggestions; lower recall.\nKlakow (1998) showed log-linear beats linear interpolation by\n~20% relative perplexity on n-gram smoothing."
+                                    }
+                                ]
+
+                                Rectangle {
+                                    id: engineCard
+                                    Layout.fillWidth: true
+                                    height: 44
+                                    radius: 5
+                                    property bool isCurrent: unifiedSettings.mergeStrategy === modelData.id
+                                    color: isCurrent
+                                           ? "#2d4a7a"
+                                           : (engineBtnArea.containsMouse ? "#3a3a3a" : "#2a2a2a")
+                                    border.color: isCurrent ? "#6ab4ff" : "#444"
+                                    border.width: isCurrent ? 2 : 1
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+                                        spacing: 1
+
+                                        Text {
+                                            text: modelData.name
+                                            color: engineCard.isCurrent ? "#fff" : "#ddd"
+                                            font.pixelSize: 12
+                                            font.weight: Font.DemiBold
+                                        }
+                                        Text {
+                                            text: modelData.desc
+                                            color: engineCard.isCurrent ? "#cfe0ff" : "#888"
+                                            font.pixelSize: 10
+                                            wrapMode: Text.WordWrap
+                                            Layout.fillWidth: true
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: engineBtnArea
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: unifiedSettings.settingChanged("mergeStrategy", modelData.id)
+                                    }
+
+                                    // Hover tooltip — reveals the full explanation
+                                    // (formula + when to use it) without crowding
+                                    // the always-visible card.  Same delay as the
+                                    // truncated-pill tooltip in Main.qml so OSK
+                                    // hover behaviour stays consistent.
+                                    ToolTip.visible: engineBtnArea.containsMouse
+                                    ToolTip.text: modelData.tooltip
+                                    ToolTip.delay: 400
                                 }
                             }
                         }

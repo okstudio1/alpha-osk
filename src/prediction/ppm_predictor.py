@@ -489,7 +489,7 @@ class PPMWordPredictor:
         self.dictionary = dictionary or set()
 
         # Cache for word completions
-        self._completion_cache: Dict[str, List[str]] = {}
+        self._completion_cache: Dict[str, List[Tuple[str, float]]] = {}
         self._cache_max_size = 1000
 
     def load_dictionary(self, path: Path) -> bool:
@@ -515,12 +515,23 @@ class PPMWordPredictor:
         """
         Predict words given context.
 
-        Args:
-            context: Text typed so far
-            n: Number of predictions
+        Thin wrapper around :meth:`predict_with_scores` that strips the
+        scores.  Kept for callers that only need the ranked word list.
+        """
+        return [word for word, _ in self.predict_with_scores(context, n)]
 
-        Returns:
-            List of predicted words
+    def predict_with_scores(
+        self, context: str, n: int = 5
+    ) -> List[Tuple[str, float]]:
+        """Predict words with their PPM probability scores.
+
+        Scores are the raw PPM character-product probabilities for
+        dictionary completions, or the beam-search probabilities for
+        novel completions.  They live in different scales depending on
+        the path that produced them — callers that need calibrated
+        probabilities (e.g. the merge strategies in
+        :class:`HybridPredictor`) must normalise per source before
+        combining.
         """
         # IMPORTANT: Check for trailing space BEFORE stripping
         # Trailing space = predict NEXT word, not complete current
@@ -560,9 +571,12 @@ class PPMWordPredictor:
 
         return predictions[:n]
 
-    def _get_predictions(self, context: str, partial: str, n: int) -> List[str]:
-        """Get word predictions using PPM + dictionary."""
-        predictions = []
+    def _get_predictions(
+        self, context: str, partial: str, n: int
+    ) -> List[Tuple[str, float]]:
+        """Get word predictions with PPM scores using PPM + dictionary."""
+        predictions: List[Tuple[str, float]] = []
+        seen: set[str] = set()
 
         # 1. Dictionary words matching partial
         if partial:
@@ -572,7 +586,7 @@ class PPMWordPredictor:
             ]
 
             # Score by PPM probability
-            scored = []
+            scored: List[Tuple[str, float]] = []
             for word in matches[:50]:  # Limit for speed
                 # Get PPM probability for this completion
                 completion = word[len(partial):]
@@ -588,14 +602,20 @@ class PPMWordPredictor:
 
             # Sort by probability
             scored.sort(key=lambda x: -x[1])
-            predictions = [w for w, _ in scored]
+            for word, prob in scored:
+                if word not in seen:
+                    seen.add(word)
+                    predictions.append((word, prob))
 
         # 2. PPM beam search for novel completions
         if len(predictions) < n:
-            ppm_preds = self.ppm.predict_word(context, partial, n - len(predictions))
-            for word, _ in ppm_preds:
-                if word not in predictions:
-                    predictions.append(word)
+            ppm_preds = self.ppm.predict_word(
+                context, partial, n - len(predictions)
+            )
+            for word, prob in ppm_preds:
+                if word not in seen:
+                    seen.add(word)
+                    predictions.append((word, prob))
 
         return predictions
 

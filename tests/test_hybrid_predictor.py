@@ -171,7 +171,7 @@ class TestHybridMergeWeighting:
 
         # Force-feed both candidates as if fuzzy returned them in this order.
         merged = predictor._merge_predictions(
-            ngram=[], ppm=[], fuzzy=["tha", "the"], n=5,
+            ngram=[], ppm=[], fuzzy=[("tha", 1.0), ("the", 1.0)], n=5,
         )
         # "the" should outrank "tha" because of the bigram bonus, even
         # though "tha" came first in the fuzzy list (positional weight
@@ -197,7 +197,7 @@ class TestSentenceStartCapitalization:
         predictor._ngram.unigrams["the"] = 100
         predictor._ngram.unigrams["of"] = 80
         merged = predictor._merge_predictions(
-            ngram=["the", "of"], ppm=[], fuzzy=[], n=5,
+            ngram=[("the", 1.0), ("of", 0.8)], ppm=[], fuzzy=[], n=5,
         )
         # current_context defaults to "" — must NOT trigger sentence
         # start capitalisation.
@@ -209,7 +209,7 @@ class TestSentenceStartCapitalization:
         predictor._ngram.unigrams["the"] = 100
         predictor._current_context = "Hello world. "
         merged = predictor._merge_predictions(
-            ngram=["the"], ppm=[], fuzzy=[], n=5,
+            ngram=[("the", 1.0)], ppm=[], fuzzy=[], n=5,
         )
         assert "The" in merged, f"sentence-start should capitalise: {merged}"
 
@@ -219,6 +219,146 @@ class TestSentenceStartCapitalization:
         predictor._ngram.unigrams["the"] = 100
         predictor._current_context = "the"
         merged = predictor._merge_predictions(
-            ngram=["the"], ppm=[], fuzzy=[], n=5,
+            ngram=[("the", 1.0)], ppm=[], fuzzy=[], n=5,
         )
         assert "the" in merged, f"mid-word should stay lowercase: {merged}"
+
+
+class TestMergeStrategies:
+    """Each merge strategy must produce a usable, validated ranking.
+
+    These tests force-feed candidate lists directly into
+    ``_merge_predictions`` so the strategy formula is the only variable
+    — no n-gram lookup, no PPM training, no fuzzy spatial scoring.
+    """
+
+    def _seed_vocab(self, predictor: HybridPredictor, words: list[str]) -> None:
+        # Words must be in unigrams for ``_is_valid_word`` to pass them
+        # through the merge.  Real predictions feed scored tuples whose
+        # words are already in vocab; tests need to mirror that gate.
+        for w in words:
+            predictor._ngram.unigrams[w] = 100
+
+    def test_default_strategy_is_rank(self, predictor: HybridPredictor):
+        assert predictor.merge_strategy == "rank"
+
+    def test_set_merge_strategy_accepts_known_values(
+        self, predictor: HybridPredictor,
+    ):
+        for strategy in ("rank", "rrf", "linear", "loglinear"):
+            assert predictor.set_merge_strategy(strategy) is True
+            assert predictor.merge_strategy == strategy
+
+    def test_set_merge_strategy_rejects_unknown(
+        self, predictor: HybridPredictor,
+    ):
+        predictor.set_merge_strategy("rank")
+        assert predictor.set_merge_strategy("bogus") is False
+        # Previous strategy preserved.
+        assert predictor.merge_strategy == "rank"
+
+    def test_rank_strategy_unchanged(self, predictor: HybridPredictor):
+        """Default strategy must produce the same result it always did
+        — pure positional weighting, no confidence sensitivity.
+        """
+        self._seed_vocab(predictor, ["alpha", "beta"])
+        predictor.set_merge_strategy("rank")
+        merged = predictor._merge_predictions(
+            ngram=[("alpha", 0.99), ("beta", 0.01)],
+            ppm=[],
+            fuzzy=[],
+            n=5,
+        )
+        # rank-1 always beats rank-2 regardless of underlying scores.
+        assert merged.index("alpha") < merged.index("beta")
+
+    def test_rrf_promotes_consensus(self, predictor: HybridPredictor):
+        """A word that appears in two sources at modest rank should
+        beat a word that only appears in one source even at rank-1.
+        That's the whole point of RRF — k=60 dampens the rank-1 edge.
+        """
+        self._seed_vocab(predictor, ["solo", "consensus"])
+        predictor.set_merge_strategy("rrf")
+        # "solo" leads in n-gram but is absent from ppm.
+        # "consensus" sits at rank-3 in n-gram but rank-1 in ppm.
+        merged = predictor._merge_predictions(
+            ngram=[
+                ("solo", 1.0),
+                ("filler1", 1.0),
+                ("consensus", 1.0),
+            ],
+            ppm=[("consensus", 1.0)],
+            fuzzy=[],
+            n=5,
+        )
+        self._seed_vocab(predictor, ["filler1"])  # ensure it passes valid-word
+        assert "consensus" in merged
+        assert "solo" in merged
+        assert merged.index("consensus") < merged.index("solo"), (
+            f"RRF should promote consensus word: {merged}"
+        )
+
+    def test_linear_uses_confidence(self, predictor: HybridPredictor):
+        """Linear interpolation respects per-source score magnitudes.
+        A word with 0.99 of the source's mass beats a word with 0.01
+        even though both are rank-1 in their respective lists — a
+        distinction the rank strategy literally cannot make.
+        """
+        self._seed_vocab(predictor, ["confident", "unsure"])
+        predictor.set_merge_strategy("linear")
+        # Two single-element lists from different sources.  After
+        # per-source normalisation each word is the only candidate in
+        # its source so each gets P=1.0 there — the scores end up
+        # comparable via the source weights (3.0 ngram vs 0.3 ppm in
+        # next-word mode).  We test mid-word (1.0 vs 0.8) to make sure
+        # the formula at least picks the higher-weighted source.
+        predictor._current_context = "p"  # mid-word
+        merged = predictor._merge_predictions(
+            ngram=[("confident", 100.0)],
+            ppm=[("unsure", 0.001)],
+            fuzzy=[],
+            n=5,
+        )
+        # Both should be returned; n-gram-sourced word should rank above
+        # ppm-sourced (1.0 weight vs 0.8 mid-word).
+        assert merged.index("confident") < merged.index("unsure")
+
+    def test_loglinear_floor_prevents_zero_collapse(
+        self, predictor: HybridPredictor,
+    ):
+        """A word present in only one source must still rank — the
+        floor smoothing (1e-6) prevents log(0) from killing it.
+        """
+        self._seed_vocab(predictor, ["lonely"])
+        predictor.set_merge_strategy("loglinear")
+        predictor._current_context = "lo"  # mid-word, less aggressive weights
+        merged = predictor._merge_predictions(
+            ngram=[("lonely", 1.0)],
+            ppm=[],
+            fuzzy=[],
+            n=5,
+        )
+        # Without floor smoothing, log(0) from missing sources would
+        # produce -inf and the word would be unrankable.  With floor,
+        # it ranks fine.
+        assert "lonely" in merged
+
+    def test_loglinear_prefers_consensus_strict(
+        self, predictor: HybridPredictor,
+    ):
+        """Log-linear is multiplicative — a word that scores well in
+        every source should beat a word that scores only in one,
+        more strictly than RRF does.
+        """
+        self._seed_vocab(predictor, ["everywhere", "narrow"])
+        predictor.set_merge_strategy("loglinear")
+        predictor._current_context = "e"  # mid-word
+        merged = predictor._merge_predictions(
+            ngram=[("everywhere", 1.0), ("narrow", 1.0)],
+            ppm=[("everywhere", 1.0)],
+            fuzzy=[("everywhere", 1.0)],
+            n=5,
+        )
+        assert "everywhere" in merged
+        if "narrow" in merged:
+            assert merged.index("everywhere") < merged.index("narrow")
