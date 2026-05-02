@@ -79,6 +79,9 @@ KEYEVENTF_KEYUP = 0x0002
 KEYEVENTF_UNICODE = 0x0004
 KEYEVENTF_SCANCODE = 0x0008
 
+# MapVirtualKey translation modes (winuser.h)
+MAPVK_VK_TO_VSC = 0  # VK → scancode using the active layout
+
 # Virtual-Key Codes (subset used by Alpha-OSK)
 # https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
 VK_BACK = 0x08
@@ -311,6 +314,19 @@ class WindowsKeySynthesizer(KeySynthesizerBase):
         # injection — apps' shortcut handlers listen for the former.
         self._user32.VkKeyScanW.argtypes = [wintypes.WCHAR]
         self._user32.VkKeyScanW.restype = wintypes.SHORT
+
+        # MapVirtualKeyW translates a virtual-key code to its hardware
+        # scancode under the current keyboard layout.  We populate
+        # KEYBDINPUT.wScan with this so synthesised events look like
+        # physical keystrokes — necessary for remote-desktop tools
+        # (TeamViewer, RDP, VNC, AnyDesk) that forward keystrokes
+        # *by scancode* over the wire.  With wScan=0, those tools
+        # either drop the event or forward it with broken modifier
+        # state, so Ctrl+V / Ctrl+C / Ctrl+click silently no-op on the
+        # remote machine.  Local Windows apps key off VK and ignore
+        # wScan, so this is backwards-compatible.
+        self._user32.MapVirtualKeyW.argtypes = [wintypes.UINT, wintypes.UINT]
+        self._user32.MapVirtualKeyW.restype = wintypes.UINT
 
         # Check UIAccess status
         self._has_ui_access = self._check_ui_access()
@@ -612,7 +628,18 @@ class WindowsKeySynthesizer(KeySynthesizerBase):
         Build an INPUT structure for a virtual-key press or release.
 
         Automatically sets ``KEYEVENTF_EXTENDEDKEY`` for navigation and
-        edit keys that require it.
+        edit keys that require it, and populates ``wScan`` with the
+        scancode looked up via ``MapVirtualKeyW`` under the current
+        keyboard layout.
+
+        Populating the scancode is required for remote-desktop tools
+        (TeamViewer / RDP / VNC / AnyDesk) — they forward keystrokes
+        by *scancode* over the wire.  With ``wScan=0`` the remote side
+        either drops the event or forwards it with broken modifier
+        state, which manifests as Ctrl+V (and friends) silently failing
+        when the foreground app is a remote-desktop client.  Local
+        Windows apps key off ``wVk`` and ignore ``wScan``, so this is
+        backwards-compatible.
 
         Args:
             vk: Virtual-key code.
@@ -627,10 +654,15 @@ class WindowsKeySynthesizer(KeySynthesizerBase):
         if vk in _EXTENDED_KEYS:
             flags |= KEYEVENTF_EXTENDEDKEY
 
+        # MapVirtualKeyW returns 0 on failure (no scancode for this VK
+        # under the active layout); leave wScan=0 in that case rather
+        # than reject the event — local dispatch via wVk still works.
+        scancode = self._user32.MapVirtualKeyW(vk, MAPVK_VK_TO_VSC)
+
         inp = INPUT()
         inp.type = INPUT_KEYBOARD
         inp._input.ki.wVk = vk
-        inp._input.ki.wScan = 0
+        inp._input.ki.wScan = scancode
         inp._input.ki.dwFlags = flags
         inp._input.ki.time = 0
         inp._input.ki.dwExtraInfo = 0
