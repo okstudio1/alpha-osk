@@ -48,14 +48,19 @@ Window {
         // MUST stay "rank" — every existing user's pill ranking
         // depends on it.
         property string savedMergeStrategy: "rank"
-        // Remote desktop compatibility — switches prediction-click
-        // insertion and autocorrect from suffix-only / Shift+Left-replace
-        // (which race over TeamViewer / RDP / VNC) to BackSpace × N +
-        // type-full-word.  Off by default for the manual override; the
-        // auto-detect flag (default ON) enables it dynamically when the
-        // foreground window is a known remote-desktop client.
-        property bool savedRemoteCompatMode: false
-        property bool savedRemoteCompatAuto: true
+        // Compatibility mode — switches prediction-click insertion
+        // and autocorrect from suffix-only / Shift+Left-replace (which
+        // race over remote-desktop pipelines and inside IDE editors
+        // that intercept keystrokes — VS Code + Monaco forks,
+        // JetBrains family) to BackSpace × N + type-full-word.  Off
+        // by default for the manual override; the auto-detect flag
+        // (default ON) enables it dynamically when the foreground
+        // window matches a known remote-desktop client or IDE.
+        // (Legacy keys `savedRemoteCompatMode` / `savedRemoteCompatAuto`
+        // from earlier releases are migrated to these on first launch
+        // — see `_migrate_legacy_compat_settings` in keyboard_app.py.)
+        property bool savedCompatMode: false
+        property bool savedCompatAutoDetect: true
         // Window WIDTH — restored on launch, saved (debounced) on resize.
         // 0 means "no saved value yet, use the binding-driven default"
         // — that path runs on a fresh install.
@@ -151,8 +156,8 @@ Window {
             keyboard.setAutoCapitalizeAfterPunctuation(appSettings.savedAutoCapitalizeAfterPunctuation)
             keyboard.setAutoSaveOnExit(appSettings.savedAutoSaveOnExit)
             keyboard.setSwipeEnabled(appSettings.savedSwipeEnabled)
-            keyboard.setRemoteCompatMode(appSettings.savedRemoteCompatMode)
-            keyboard.setRemoteCompatAuto(appSettings.savedRemoteCompatAuto)
+            keyboard.setCompatMode(appSettings.savedCompatMode)
+            keyboard.setCompatAutoDetect(appSettings.savedCompatAutoDetect)
             keyboard.setMergeStrategy(appSettings.savedMergeStrategy)
         }
 
@@ -237,10 +242,10 @@ Window {
     property int repeatDelay: appSettings.savedRepeatDelay
     property int repeatInterval: appSettings.savedRepeatInterval
 
-    // Remote-desktop compatibility — see savedRemoteCompatMode comment
-    // and KeyboardBridge.setRemoteCompatMode for the full rationale.
-    property bool remoteCompatMode: appSettings.savedRemoteCompatMode
-    property bool remoteCompatAuto: appSettings.savedRemoteCompatAuto
+    // Compatibility mode — see savedCompatMode comment and
+    // KeyboardBridge.setCompatMode for the full rationale.
+    property bool compatMode: appSettings.savedCompatMode
+    property bool compatAutoDetect: appSettings.savedCompatAutoDetect
 
     // Prediction merge strategy — see savedMergeStrategy.
     property string mergeStrategy: appSettings.savedMergeStrategy
@@ -1754,8 +1759,8 @@ Window {
             rightClickShift: root.rightClickShift
             repeatDelay: root.repeatDelay
             repeatInterval: root.repeatInterval
-            remoteCompatMode: root.remoteCompatMode
-            remoteCompatAuto: root.remoteCompatAuto
+            compatMode: root.compatMode
+            compatAutoDetect: root.compatAutoDetect
             mergeStrategy: root.mergeStrategy
             debugMode: root.showDebugPanel
             autoCheckUpdates: root.autoCheckUpdates
@@ -1815,14 +1820,14 @@ Window {
                 } else if (setting === "repeatInterval") {
                     root.repeatInterval = value
                     appSettings.savedRepeatInterval = value
-                } else if (setting === "remoteCompatMode") {
-                    root.remoteCompatMode = value
-                    appSettings.savedRemoteCompatMode = value
-                    if (keyboard) keyboard.setRemoteCompatMode(value)
-                } else if (setting === "remoteCompatAuto") {
-                    root.remoteCompatAuto = value
-                    appSettings.savedRemoteCompatAuto = value
-                    if (keyboard) keyboard.setRemoteCompatAuto(value)
+                } else if (setting === "compatMode") {
+                    root.compatMode = value
+                    appSettings.savedCompatMode = value
+                    if (keyboard) keyboard.setCompatMode(value)
+                } else if (setting === "compatAutoDetect") {
+                    root.compatAutoDetect = value
+                    appSettings.savedCompatAutoDetect = value
+                    if (keyboard) keyboard.setCompatAutoDetect(value)
                 } else if (setting === "mergeStrategy") {
                     root.mergeStrategy = value
                     appSettings.savedMergeStrategy = value

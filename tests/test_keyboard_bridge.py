@@ -362,70 +362,74 @@ class TestContextTracking:
         assert bridge._current_word == "hi"
 
 
-class TestRemoteCompatMode:
-    """Remote-desktop compatibility — TeamViewer / RDP / VNC race fix.
+class TestCompatMode:
+    """Compatibility mode — race fix for remote-desktop sessions and
+    IDEs with always-on keystroke interception (VS Code + Monaco
+    forks, JetBrains family).
 
     When enabled, prediction-click insertion and autocorrect-on-space
     must use BackSpace × N + type-full-word instead of suffix-only or
     Shift+Left selection.  Independent single-event keystrokes survive
     the keystroke drops/duplications that remote-forwarding pipelines
-    introduce.
+    introduce, and the keystroke reordering inside intercepting
+    editors.
     """
 
     def test_default_state(self, bridge: KeyboardBridge):
-        # Manual off, auto on (covers TeamViewer/RDP without user toggle),
-        # not currently active because no remote window detected.
-        assert bridge._remote_compat_manual is False
-        assert bridge._remote_compat_auto_enabled is True
-        assert bridge._remote_compat_auto_active is False
-        assert bridge._in_remote_compat_mode() is False
+        # Manual off, auto on (covers TeamViewer/RDP/VS Code without
+        # user toggle), not currently active because no relevant
+        # window detected.
+        assert bridge._compat_manual is False
+        assert bridge._compat_auto_enabled is True
+        assert bridge._compat_auto_active is False
+        assert bridge._in_compat_mode() is False
 
-    def test_set_remote_compat_mode(self, bridge: KeyboardBridge):
-        bridge.setRemoteCompatMode(True)
-        assert bridge._remote_compat_manual is True
-        assert bridge._in_remote_compat_mode() is True
-        bridge.setRemoteCompatMode(False)
-        assert bridge._remote_compat_manual is False
+    def test_set_compat_mode(self, bridge: KeyboardBridge):
+        bridge.setCompatMode(True)
+        assert bridge._compat_manual is True
+        assert bridge._in_compat_mode() is True
+        bridge.setCompatMode(False)
+        assert bridge._compat_manual is False
 
-    def test_set_remote_compat_auto(self, bridge: KeyboardBridge):
-        bridge.setRemoteCompatAuto(False)
-        assert bridge._remote_compat_auto_enabled is False
-        assert bridge._remote_compat_auto_active is False
-        bridge.setRemoteCompatAuto(True)
-        assert bridge._remote_compat_auto_enabled is True
+    def test_set_compat_auto_detect(self, bridge: KeyboardBridge):
+        bridge.setCompatAutoDetect(False)
+        assert bridge._compat_auto_enabled is False
+        assert bridge._compat_auto_active is False
+        bridge.setCompatAutoDetect(True)
+        assert bridge._compat_auto_enabled is True
 
     def test_in_compat_mode_or_semantics(self, bridge: KeyboardBridge):
         # manual OR (auto_enabled AND auto_active)
-        bridge._remote_compat_manual = False
-        bridge._remote_compat_auto_enabled = False
-        bridge._remote_compat_auto_active = False
-        assert bridge._in_remote_compat_mode() is False
+        bridge._compat_manual = False
+        bridge._compat_auto_enabled = False
+        bridge._compat_auto_active = False
+        assert bridge._in_compat_mode() is False
         # Manual on alone wins.
-        bridge._remote_compat_manual = True
-        assert bridge._in_remote_compat_mode() is True
-        bridge._remote_compat_manual = False
+        bridge._compat_manual = True
+        assert bridge._in_compat_mode() is True
+        bridge._compat_manual = False
         # Auto enabled + active wins.
-        bridge._remote_compat_auto_enabled = True
-        bridge._remote_compat_auto_active = True
-        assert bridge._in_remote_compat_mode() is True
+        bridge._compat_auto_enabled = True
+        bridge._compat_auto_active = True
+        assert bridge._in_compat_mode() is True
         # Auto enabled but not active — off.
-        bridge._remote_compat_auto_active = False
-        assert bridge._in_remote_compat_mode() is False
+        bridge._compat_auto_active = False
+        assert bridge._in_compat_mode() is False
         # Active but auto disabled — off (auto must be enabled).
-        bridge._remote_compat_auto_enabled = False
-        bridge._remote_compat_auto_active = True
-        assert bridge._in_remote_compat_mode() is False
+        bridge._compat_auto_enabled = False
+        bridge._compat_auto_active = True
+        assert bridge._in_compat_mode() is False
 
     def test_disabling_auto_clears_active(self, bridge: KeyboardBridge):
-        bridge._remote_compat_auto_enabled = True
-        bridge._remote_compat_auto_active = True
-        bridge.setRemoteCompatAuto(False)
-        assert bridge._remote_compat_auto_active is False
+        bridge._compat_auto_enabled = True
+        bridge._compat_auto_active = True
+        bridge.setCompatAutoDetect(False)
+        assert bridge._compat_auto_active is False
 
     def test_press_prediction_uses_backspace_plus_word_in_compat_mode(
         self, bridge: KeyboardBridge,
     ):
-        bridge.setRemoteCompatMode(True)
+        bridge.setCompatMode(True)
         for c in "hel":
             bridge.pressKey(c)
         bridge._synth.reset_mock()

@@ -34,7 +34,7 @@ import os
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QSharedMemory, Qt, QTimer, QUrl
+from PySide6.QtCore import QSettings, QSharedMemory, Qt, QTimer, QUrl
 from PySide6.QtGui import QIcon
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
@@ -316,6 +316,58 @@ def _apply_windows_extended_styles(root) -> None:
         _logger.warning("Failed to apply Windows extended styles: %s", e)
 
 
+def _migrate_legacy_compat_settings() -> None:
+    """Rename legacy compat-mode setting keys to the current names.
+
+    Pre-rename keys: ``savedRemoteCompatMode``, ``savedRemoteCompatAuto``.
+    Current keys:    ``savedCompatMode``,       ``savedCompatAutoDetect``.
+
+    The rename happened when compat mode grew from "remote desktop only"
+    to "remote desktop + IDEs that intercept keystrokes" — see CHANGELOG.
+    Without migration, every existing user who had explicitly toggled
+    either flag would silently revert to the new defaults.
+
+    Idempotent: a ``compatSettingsMigrated`` flag prevents re-running.
+    The legacy keys are removed once their values have been copied so
+    they don't sit around polluting the registry indefinitely.
+
+    Reads the QML ``Settings``-managed registry section directly via
+    ``QSettings`` (with the same org/app names QML uses), so it must
+    run after ``setOrganizationName`` / ``setApplicationName`` and
+    before the QML engine instantiates its ``Settings`` element.
+    """
+    # QML's Settings element in Main.qml uses `category: "ui"`, which
+    # scopes every key under a "ui" group in QSettings.  Match that
+    # scope here so the keys we read/write line up.
+    settings = QSettings()
+    settings.beginGroup("ui")
+    try:
+        if settings.value("compatSettingsMigrated", False, type=bool):
+            return
+        legacy_manual_key = "savedRemoteCompatMode"
+        legacy_auto_key = "savedRemoteCompatAuto"
+        if settings.contains(legacy_manual_key):
+            legacy_manual = settings.value(legacy_manual_key, False, type=bool)
+            settings.setValue("savedCompatMode", legacy_manual)
+            settings.remove(legacy_manual_key)
+            _logger.info(
+                "Migrated %s=%s → savedCompatMode",
+                legacy_manual_key, legacy_manual,
+            )
+        if settings.contains(legacy_auto_key):
+            legacy_auto = settings.value(legacy_auto_key, True, type=bool)
+            settings.setValue("savedCompatAutoDetect", legacy_auto)
+            settings.remove(legacy_auto_key)
+            _logger.info(
+                "Migrated %s=%s → savedCompatAutoDetect",
+                legacy_auto_key, legacy_auto,
+            )
+        settings.setValue("compatSettingsMigrated", True)
+    finally:
+        settings.endGroup()
+    settings.sync()
+
+
 def _configure_logging() -> Path | None:
     """Wire up stderr + rotating file logging.
 
@@ -379,6 +431,12 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("Alpha-OSK")
     app.setOrganizationName("alpha-osk")
+
+    # Migrate any legacy "Remote Desktop Mode" setting keys to the new
+    # "Compatibility Mode" names before QML's Settings element binds.
+    # Idempotent — guarded by a flag, so it costs nothing after the
+    # first run.
+    _migrate_legacy_compat_settings()
 
     # Single-instance check.  Run before any expensive setup (QML
     # engine, prediction model load) so a duplicate launch returns

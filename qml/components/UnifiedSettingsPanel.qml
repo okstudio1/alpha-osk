@@ -35,9 +35,11 @@ Item {
     // Hold-to-repeat timing (ms).  Defaults must match KeyButton.qml.
     property int repeatDelay: 500
     property int repeatInterval: 120
-    // Remote desktop compatibility mode — see KeyboardBridge.setRemoteCompatMode.
-    property bool remoteCompatMode: false
-    property bool remoteCompatAuto: true
+    // Compatibility mode — see KeyboardBridge.setCompatMode.  Covers
+    // remote-desktop sessions and IDEs with always-on keystroke
+    // interception (VS Code + forks, JetBrains family).
+    property bool compatMode: false
+    property bool compatAutoDetect: true
 
     // Debug
     property bool debugMode: false
@@ -443,27 +445,34 @@ Item {
                                 onToggled: function(c) { unifiedSettings.settingChanged("rightClickShift", c) }
                             }
 
-                            // Auto-detect TeamViewer/RDP/VNC/AnyDesk and
-                            // switch prediction insertion to backspace+
-                            // retype automatically.  Default ON — covers
-                            // the common case without the user having to
-                            // remember to flip the manual toggle.
+                            // Auto-detect remote-desktop clients
+                            // (TeamViewer/RDP/VNC/AnyDesk/...) and IDEs
+                            // with always-on keystroke interception
+                            // (VS Code + Monaco forks, JetBrains family)
+                            // and switch prediction insertion to
+                            // backspace+retype automatically.  Default
+                            // ON — covers the common case without the
+                            // user having to remember to flip the
+                            // manual toggle.  See
+                            // `_COMPAT_PROCESS_NAMES` in
+                            // `keyboard_bridge.py` for the full list.
                             SettingsToggle {
                                 Layout.fillWidth: true
-                                text: "Auto-Detect Remote Desktop Sessions"
-                                checked: unifiedSettings.remoteCompatAuto
-                                onToggled: function(c) { unifiedSettings.settingChanged("remoteCompatAuto", c) }
+                                text: "Auto-Enable Compatibility Mode"
+                                checked: unifiedSettings.compatAutoDetect
+                                onToggled: function(c) { unifiedSettings.settingChanged("compatAutoDetect", c) }
                             }
 
                             // Manual force-on for cases auto-detect misses
-                            // (rare remote tools, local apps that proxy to
-                            // remote sessions, etc.).  Effective compat
-                            // mode = manual OR auto.
+                            // (rare remote tools, IDEs not in the curated
+                            // list, local apps that proxy to remote
+                            // sessions, etc.).  Effective compat mode =
+                            // manual OR auto.
                             SettingsToggle {
                                 Layout.fillWidth: true
-                                text: "Remote Desktop Mode (always on)"
-                                checked: unifiedSettings.remoteCompatMode
-                                onToggled: function(c) { unifiedSettings.settingChanged("remoteCompatMode", c) }
+                                text: "Compatibility Mode (always on)"
+                                checked: unifiedSettings.compatMode
+                                onToggled: function(c) { unifiedSettings.settingChanged("compatMode", c) }
                             }
 
                             // Hold-to-repeat delay — the threshold below
