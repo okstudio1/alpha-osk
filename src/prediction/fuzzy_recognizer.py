@@ -107,12 +107,18 @@ class SpatialKeyModel:
         return probabilities
 
     def get_nearby_keys(self, key: str) -> List[str]:
+        """Keys within ``uncertainty_radius`` of ``key`` (inclusive of itself).
+
+        Returns ``[key]`` for unmapped inputs (digits, punctuation, etc.)
+        so callers don't need a separate "is this a letter" guard.
+        """
         key = key.lower()
         if key not in self._neighbors:
             return [key]
         return [k for k, d in self._neighbors[key] if d <= self.uncertainty_radius]
 
     def set_uncertainty_radius(self, radius: float) -> None:
+        """Update the spatial radius and rebuild the neighbour cache."""
         self.uncertainty_radius = radius
         self._build_neighbor_cache()
 
@@ -147,6 +153,16 @@ class FuzzyWordGenerator:
         typed_sequence: str,
         min_prob: float = DEFAULT_MIN_PROB,
     ) -> List[Tuple[str, float]]:
+        """Return ``(word, score)`` pairs ranked by combined fit.
+
+        Score = spatial probability × ``log1p(frequency)``, so a common
+        word with a slightly worse spatial match still beats a rare word
+        with a perfect spatial match.  Two complementary candidate
+        sources are merged: a Gaussian beam search over key neighbours
+        (catches near-key mistypes) and a SymSpell-backed edit-distance
+        lookup (catches transpositions, deletions, and insertions the
+        spatial path can't express).  Capped at ``max_candidates``.
+        """
         typed_sequence = typed_sequence.lower()
         if not typed_sequence:
             return []
@@ -303,6 +319,13 @@ class FuzzyWordGenerator:
         typed_word: str,
         context: str = "",
     ) -> Optional[Tuple[str, float]]:
+        """Best-scoring correction for ``typed_word``, or ``None``.
+
+        Returns ``None`` if the word is already in the dictionary (no
+        correction needed) or no candidates clear the search.  ``context``
+        is accepted for symmetry with the predictor protocol but is
+        currently unused — ranking is purely spatial + frequency.
+        """
         if typed_word.lower() in self.dictionary:
             return None
         candidates = self.generate_candidates(typed_word)
@@ -384,6 +407,14 @@ class FuzzyRecognizer:
         typed_text: str,
         n: int = 5,
     ) -> List[Tuple[str, float]]:
+        """Top-``n`` fuzzy candidates for the current word in ``typed_text``.
+
+        Splits on whitespace and runs candidate generation against the
+        trailing partial word.  Returns an empty list when the user is
+        between words (last char is whitespace) or has typed nothing —
+        the merge layer treats fuzzy as a "complete what you're typing"
+        source, not a next-word predictor.
+        """
         words = typed_text.split()
         current_word = words[-1] if words and not typed_text.endswith(" ") else ""
         if not current_word:
@@ -395,6 +426,21 @@ class FuzzyRecognizer:
         typed_word: str,
         context: str = "",
     ) -> Optional[str]:
+        """Return the correction iff it clears both confidence gates.
+
+        Two gates compose:
+
+        1. **Absolute** — score must exceed ``confidence_threshold``.
+        2. **Relative** — score must exceed
+           ``_typed_baseline(typed_word) * autocorrect_margin``, so a
+           plausibly-shaped deliberate typing ("thru", "lol") competes
+           with the correction instead of being silently overwritten.
+
+        Inputs shorter than 3 chars short-circuit to ``None`` regardless;
+        2-char fragments carry too little signal to autocorrect safely.
+        Genuine 2-char misspellings ("im" → "I'm") are handled upstream
+        by the misspellings fast-path and are unaffected by this guard.
+        """
         # Skip very short typings.  Single chars and 2-char fragments
         # carry too little signal — "v" → "is", "vs" → "is", "th" →
         # "to" are all corrections the user did not ask for.  Common
@@ -453,9 +499,16 @@ class FuzzyRecognizer:
         return math.log1p(1)
 
     def get_key_alternatives(self, key: str) -> Dict[str, float]:
+        """Probability distribution over keys the user might have meant.
+
+        Pass-through to the underlying :class:`SpatialKeyModel`; exposed
+        on the recognizer so callers don't need to reach into the inner
+        model directly.
+        """
         return self.spatial_model.get_key_probabilities(key)
 
     def load_dictionary(self, path) -> bool:
+        """Load a flat word-list dictionary; pass-through to the generator."""
         return self.word_generator.load_dictionary(path)
 
     def set_frequencies(self, freqs: Mapping[str, float]) -> None:
@@ -463,6 +516,7 @@ class FuzzyRecognizer:
         self.word_generator.set_frequencies(freqs)
 
     def get_stats(self) -> dict:
+        """Diagnostic snapshot of the recognizer's tuning + dictionary size."""
         return {
             "spatial_uncertainty": self.spatial_uncertainty,
             "confidence_threshold": self.confidence_threshold,

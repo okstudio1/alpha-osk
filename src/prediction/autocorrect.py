@@ -27,6 +27,14 @@ class CommonMisspellings:
         self._table: Dict[str, str] = {}
 
     def load(self, path: Path) -> bool:
+        """Populate the table from a flat ``wrong right`` text file.
+
+        Lines are split on the first whitespace run; ``#`` starts a
+        comment.  Both sides are lowercased; identical pairs and
+        malformed lines are skipped.  Returns ``True`` on a successful
+        read (even if zero entries survived) and ``False`` if the file
+        is missing or unreadable.
+        """
         if not path.exists():
             _logger.warning("Common misspellings file missing: %s", path)
             return False

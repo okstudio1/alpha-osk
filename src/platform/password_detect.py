@@ -43,7 +43,19 @@ _logger = logging.getLogger("PasswordDetect")
 
 
 class _Detector(Protocol):
-    def check(self) -> bool: ...
+    """Platform-specific detector contract.
+
+    A single method ``check()`` returns ``True`` iff the currently
+    focused UI element is a password field.  Implementations are
+    expected to be cheap (called from the keystroke hot path), to
+    return ``False`` on any internal failure rather than raise, and
+    to optionally expose a ``close()`` for resource cleanup at
+    shutdown.
+    """
+
+    def check(self) -> bool:
+        """Return ``True`` iff focus is currently on a password field."""
+        ...
 
 
 # ====================================================================== #
