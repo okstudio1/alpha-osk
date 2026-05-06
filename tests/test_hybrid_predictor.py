@@ -182,38 +182,34 @@ class TestHybridMergeWeighting:
             assert as_lower.index("the") < as_lower.index("tha")
 
 
-class TestSentenceStartCapitalization:
-    """`_merge_predictions` only treats genuinely-after-punctuation
-    contexts as sentence starts. Empty context (fresh launch, post-
-    backspace, post-app-switch) does NOT capitalize predictions.
+class TestPillCapitalization:
+    """``_merge_predictions`` no longer auto-capitalises pills based on
+    context. Sentence-start auto-cap and proper-noun lookup were
+    removed because they fired on common English words ("hope",
+    "rose", "may", "mark", "monday") and on the post-period word in
+    every sentence — the user's stance is "only capitalize when shift
+    or caps lock is engaged." Pills now mirror the typed prefix's
+    casing only (handled by ``KeyboardBridge._display_cased``); the
+    only Tier-1 exception is the "I" family."""
 
-    Reproduces the user-reported terminal bug: in Windows Terminal,
-    typing "lsa" then backspacing 3 times left the prediction pills
-    showing "The", "I", "How", etc. — the empty context was being
-    treated as a sentence start.
-    """
-
-    def test_empty_context_does_not_capitalize(self, predictor: HybridPredictor):
+    def test_empty_context_stays_lowercase(self, predictor: HybridPredictor):
         predictor._ngram.unigrams["the"] = 100
         predictor._ngram.unigrams["of"] = 80
         merged = predictor._merge_predictions(
             ngram=[("the", 1.0), ("of", 0.8)], ppm=[], fuzzy=[], n=5,
         )
-        # current_context defaults to "" — must NOT trigger sentence
-        # start capitalisation.
-        assert "the" in merged or "The" not in merged, (
-            f"empty context capitalised predictions: {merged}"
-        )
+        assert "The" not in merged, f"empty context should stay lowercase: {merged}"
 
-    def test_post_period_context_does_capitalize(self, predictor: HybridPredictor):
+    def test_post_period_context_stays_lowercase(self, predictor: HybridPredictor):
         predictor._ngram.unigrams["the"] = 100
         predictor._current_context = "Hello world. "
         merged = predictor._merge_predictions(
             ngram=[("the", 1.0)], ppm=[], fuzzy=[], n=5,
         )
-        assert "The" in merged, f"sentence-start should capitalise: {merged}"
+        assert "the" in merged, f"post-period should stay lowercase: {merged}"
+        assert "The" not in merged
 
-    def test_mid_word_completion_does_not_capitalize(
+    def test_mid_word_completion_stays_lowercase(
         self, predictor: HybridPredictor,
     ):
         predictor._ngram.unigrams["the"] = 100
@@ -222,6 +218,14 @@ class TestSentenceStartCapitalization:
             ngram=[("the", 1.0)], ppm=[], fuzzy=[], n=5,
         )
         assert "the" in merged, f"mid-word should stay lowercase: {merged}"
+
+    def test_i_family_still_auto_capitalized(self, predictor: HybridPredictor):
+        """Tier 1 — the ``I`` family is the one exception kept."""
+        predictor._ngram.unigrams["i"] = 100
+        merged = predictor._merge_predictions(
+            ngram=[("i", 1.0)], ppm=[], fuzzy=[], n=5,
+        )
+        assert "I" in merged, f"'i' should still surface as 'I': {merged}"
 
 
 class TestMergeStrategies:

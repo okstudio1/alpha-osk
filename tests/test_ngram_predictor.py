@@ -262,37 +262,34 @@ class TestCapitalization:
         assert predictor.get_capitalized("i'd", sentence_start=False) == "I'd"
         assert predictor.get_capitalized("i've", sentence_start=False) == "I've"
 
-    def test_ambiguous_name_mid_sentence(self):
-        """'will', 'jack', etc. should NOT capitalize mid-sentence."""
+    def test_proper_nouns_not_auto_capitalized(self):
+        """Proper-noun and sentence-start auto-cap were removed because
+        the proper-noun list ("hope", "may", "rose", "mark", "monday",
+        "paris", "iphone", "nasa", ...) fired on common English words
+        and pills came back capitalised when the user had typed
+        lowercase. Pills now mirror the typed prefix's casing only;
+        the only exception is the ``I`` family (Tier 1)."""
         predictor = NgramPredictor()
-        assert predictor.get_capitalized("will", sentence_start=False) == "will"
-        assert predictor.get_capitalized("jack", sentence_start=False) == "jack"
-        assert predictor.get_capitalized("may", sentence_start=False) == "may"
-        assert predictor.get_capitalized("mark", sentence_start=False) == "mark"
+        for word in ("monday", "paris", "iphone", "nasa", "ibm",
+                     "will", "jack", "may", "hello"):
+            assert predictor.get_capitalized(word, sentence_start=False) == word
+            assert predictor.get_capitalized(word, sentence_start=True) == word
 
-    def test_ambiguous_name_sentence_start(self):
-        """'will', 'jack', etc. SHOULD capitalize at sentence start."""
+    def test_learn_capitalization_still_records_form(self):
+        """``learn_capitalization`` still records preferred forms in
+        ``self.capitalization`` (so the data isn't lost), even though
+        ``get_capitalized`` no longer consults that dict. Lets a
+        future opt-in switch re-enable proper-noun cap without
+        re-teaching."""
         predictor = NgramPredictor()
-        assert predictor.get_capitalized("will", sentence_start=True) == "Will"
-        assert predictor.get_capitalized("jack", sentence_start=True) == "Jack"
-
-    def test_unambiguous_proper_noun_always(self):
-        """'Monday', 'Paris' should always capitalize."""
-        predictor = NgramPredictor()
-        assert predictor.get_capitalized("monday", sentence_start=False) == "Monday"
-        assert predictor.get_capitalized("monday", sentence_start=True) == "Monday"
-
-    def test_unknown_word_sentence_start(self):
-        """Unknown words capitalize at sentence start only."""
-        predictor = NgramPredictor()
-        assert predictor.get_capitalized("hello", sentence_start=False) == "hello"
-        assert predictor.get_capitalized("hello", sentence_start=True) == "Hello"
-
-    def test_learned_capitalization(self):
-        """User-taught capitalization persists."""
-        predictor = NgramPredictor()
-        predictor.learn_capitalization("iPhone")
-        assert predictor.get_capitalized("iphone", sentence_start=False) == "iPhone"
+        # Use a made-up brand that isn't in data/proper_nouns.txt so
+        # the assertion exercises learn_capitalization rather than the
+        # preload path.
+        assert "zigzaqcorp" not in predictor.capitalization
+        assert predictor.learn_capitalization("ZigZaqCorp") is True
+        assert predictor.capitalization.get("zigzaqcorp") == "ZigZaqCorp"
+        # But the pill-facing path leaves it lowercase.
+        assert predictor.get_capitalized("zigzaqcorp") == "zigzaqcorp"
 
     def test_all_uppercase_typing_not_learned(self):
         """All-caps typing is almost always Caps Lock being on, not a
@@ -301,12 +298,9 @@ class TestCapitalization:
         the user types under caps lock.
         """
         predictor = NgramPredictor()
-        # The user typed "HELLO" with Caps Lock on.
         result = predictor.learn_capitalization("HELLO")
         assert result is False, "all-caps typing should not be learned"
-        # And the prediction comes back lowercase (or sentence-start
-        # cap), not "HELLO".
-        assert predictor.get_capitalized("hello", sentence_start=False) == "hello"
+        assert "hello" not in predictor.capitalization
 
     def test_all_uppercase_typing_learned_when_explicitly_allowed(self):
         """The bridge passes ``allow_uppercase=True`` when it has
@@ -314,21 +308,12 @@ class TestCapitalization:
         right-clicked / shifted each letter individually. That's a
         deliberate signal that the word is canonically all-caps
         ("HVAC", "ROFL", a domain acronym), and the table should
-        learn it."""
+        learn it. ``get_capitalized`` does not surface the form in
+        pills under the current Tier-1-only policy."""
         predictor = NgramPredictor()
         result = predictor.learn_capitalization("HVAC", allow_uppercase=True)
         assert result is True, "deliberate all-caps typing should be learned"
-        assert predictor.get_capitalized("hvac", sentence_start=False) == "HVAC"
-
-    def test_legitimate_acronym_via_proper_nouns_still_works(self):
-        """Built-in acronyms like NASA, IBM, HBO are loaded directly
-        into self.capitalization via _load_proper_nouns — they don't
-        go through learn_capitalization, so the all-caps guard above
-        doesn't break them."""
-        predictor = NgramPredictor()
-        # _load_proper_nouns ran during __init__ and populated these.
-        assert predictor.get_capitalized("nasa", sentence_start=False) == "NASA"
-        assert predictor.get_capitalized("ibm", sentence_start=False) == "IBM"
+        assert predictor.capitalization.get("hvac") == "HVAC"
 
 
 class TestPersonalVocabRanking:

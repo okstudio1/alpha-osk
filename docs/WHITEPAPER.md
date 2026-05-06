@@ -182,17 +182,13 @@ The filter rules: words of length ≤ 2 must be on a short whitelist (legitimate
 
 Surviving unknown words from `learn` go through a repetition gate: counted in `_candidate_counts` until 3 sightings, then promoted into `user_vocab`. Known base-dictionary words and explicit `learn_word()` calls bypass the gate. Candidate counts decay alongside user vocab and persist across save/load.
 
-### 3.5 Three-tier capitalisation model
+### 3.5 Capitalisation model
 
-Capitalisation is handled identically to mainstream mobile keyboards (Gboard, iOS) but explicitly, with three tiers:
+Pills only auto-capitalise the **`I` family** (`I`, `I'm`, `I'll`, `I'd`, `I've`). Every other word surfaces in the casing the user typed: type `monday` and the pill is `monday`; type `Monday` (one-shot shift) and the pill is `Monday`; type `MON` (right-click each letter) and the pill is `MONday`. `KeyboardBridge._display_cased` mirrors every uppercase position from the typed prefix onto the pill, and that's the only path that produces capitals in pills.
 
-- **Tier 1 — Always capitalise:** A small hardcoded set (`I`, `I'm`, `I'll`, `I'd`, `I've`).
-- **Tier 2 — Sentence-start only:** Ambiguous names that are also common English words (`will`, `jack`, `may`, `mark`). These are *only* capitalised after sentence-ending punctuation. "the jack was loose" stays lowercase; "Jack went home." capitalises.
-- **Tier 3 — Always (proper nouns):** Everything in `data/proper_nouns.txt` (~8,000 entries) plus user-taught capitalisations.
+Earlier builds shipped a three-tier Gboard-style system (Tier 1 = `I` family; Tier 2 = sentence-start auto-cap for ~130 ambiguous names like `will`, `jack`, `may`, `mark`; Tier 3 = ~8 000 unambiguous proper nouns from `data/proper_nouns.txt` plus user-taught forms). Tiers 2 and 3 were dropped because they fired on common English words ("the hope is", "a rose by", "may I", and the post-period word in every sentence) and pills came back capitalised when the user had typed lowercase. The user-facing rule is now "shift / caps lock is the cap signal", with the `I` family kept as the one mid-sentence exception.
 
-Sentence-start detection is `bool(ctx) and ctx[-1] in ".!?"` after rstrip. Empty context is *not* treated as sentence-start; that produced annoying behaviour in REPLs and terminals where the user backspaces every typed character, leaving an empty context that is not actually a fresh sentence. The fresh-document case (open Notepad, type the first letter) is handled separately by `_display_cased` mirroring the typed prefix's casing back into the displayed prediction.
-
-User capitalisations are learned automatically when a non-trivially-cased word is typed and completed with space (e.g. "iPhone", "Owen"). All-uppercase typings are *not* learned, because the dominant cause of all-uppercase input is that Caps Lock is on — learning every word the user typed under caps lock would poison the table with shouty forms of every common word.
+`NgramPredictor.capitalization` is still populated — `_load_proper_nouns` reads `data/proper_nouns.txt` at startup, and `learn_capitalization` records user-taught forms (right-click → Edit, prediction-click after typing a capital, word completion with non-trivial casing). All-uppercase typings are still rejected by default because the dominant cause of all-uppercase input is Caps Lock being on; deliberate all-caps (right-clicking each letter, Caps Lock off the whole word — the bridge tracks this with a `_word_typed_under_caps_lock` flag and passes `allow_uppercase = not _flag`) is allowed through. The accumulated dict is persisted to `ngram_model.json`. `get_capitalized` does not consult it today, but keeping the data lets a future opt-in toggle revive proper-noun cap without re-teaching from scratch.
 
 ### 3.6 Spatial fuzzy recognition
 

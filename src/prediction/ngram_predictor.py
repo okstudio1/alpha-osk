@@ -276,39 +276,31 @@ class NgramPredictor:
         return self.capitalization.get(lower) != existing
 
     def get_capitalized(self, word: str, sentence_start: bool = False) -> str:
-        """Return context-aware capitalization for a word.
+        """Return capitalization for a word.
 
-        Three tiers (same model as Android/Gboard):
-        1. Always capitalize: "I", "I'm", "I'll", "I'd", "I've"
-        2. Sentence-start only: proper nouns that are also common words
-           (e.g. "jack", "may", "will") — only capitalized after .!? or
-           at the start of input.
-        3. Always capitalize: unambiguous proper nouns ("Monday", "Paris",
-           "iPhone") and user-taught capitalizations.
+        Only the "I" family ("I", "I'm", "I'll", "I'd", "I've") is
+        auto-capitalized. Sentence-start auto-cap and the proper-noun /
+        learned-capitalization tiers were removed because they fired on
+        too many common English words ("hope", "rose", "may", "mark",
+        and the post-period word in any sentence). The user's intent —
+        capitalize when shift / caps lock is engaged — is captured
+        downstream by the typed-prefix mirror in
+        ``KeyboardBridge._display_cased``.
+
+        ``self.capitalization`` is still populated by ``_load_proper_nouns``
+        and ``learn_capitalization`` and persisted with the model, but
+        is intentionally not consulted here. Keeping it lets a future
+        opt-in switch re-enable proper-noun cap without losing the
+        accumulated user preferences.
 
         Args:
             word: The word to capitalize (usually lowercase).
-            sentence_start: True if this word follows .!? or is the first
-                word in the input.
+            sentence_start: Kept for API compatibility; ignored.
         """
         lower = word.lower()
-
-        # Tier 1: always capitalize
         if lower in self._always_capitalize:
             return self._always_capitalize[lower]
-
-        preferred = self.capitalization.get(lower)
-        if preferred is None:
-            # No capitalization rule — return as-is, or capitalize at
-            # sentence start (like Android does for all words)
-            return word.capitalize() if sentence_start else word
-
-        # Tier 2: ambiguous name/word — only capitalize at sentence start
-        if lower in self._ambiguous_names and not sentence_start:
-            return word
-
-        # Tier 3: unambiguous proper noun or user-taught — always capitalize
-        return preferred
+        return word
 
     # Linear-interpolation weights for next-word scoring.  Mirrors the
     # classic Presage / LatinIME recipe: trigram evidence dominates,

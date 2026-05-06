@@ -93,10 +93,15 @@ count.
 ## Capitalization
 
 The recogniser returns lowercase candidates (since the dictionary is
-keyed on lowercase forms).  The bridge runs each through
-`NgramPredictor.get_capitalized` — same path predictions use — so
-"iPhone", "I", "Owen", proper nouns from `data/proper_nouns.txt`, and
-sentence-start positions all get the right casing automatically.
+keyed on lowercase forms). The bridge runs each through
+`NgramPredictor.get_capitalized` — same path predictions use — but
+the current rule only auto-capitalises the `I` family (`I`, `I'm`,
+`I'll`, `I'd`, `I've`). Everything else stays lowercase from the
+recogniser. This matches the typed-prefix casing model used for
+ordinary predictions: capitals come from the user pressing shift /
+caps lock, not from a hidden proper-noun list. See `CLAUDE.md` →
+"Auto-Capitalization & Proper Nouns" for the rationale and what
+to do if you want to revive sentence-start or proper-noun cap.
 
 ## Known Limits / Future Work
 

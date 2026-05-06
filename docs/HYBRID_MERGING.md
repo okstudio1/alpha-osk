@@ -102,18 +102,27 @@ below).
 ## Capitalisation at Output
 
 Right before returning, each winning word goes through
-`ngram.get_capitalized(word, sentence_start)` — the three-tier model
-described in `CLAUDE.md`:
+`ngram.get_capitalized(word, sentence_start)`. The current rule is
+deliberately minimal: only the **`I` family** (`I`, `I'm`, `I'll`,
+`I'd`, `I've`) is auto-capitalised. Anything else is returned in the
+casing it had on disk (lowercase for almost every dictionary entry).
 
-1. **Always capitalise**: `I`, `I'm`, `I'll`, `I've`, `I'd`.
-2. **Sentence-start only**: ambiguous proper nouns that are also
-   common English words (`will`, `jack`, `may`, `mark`) — capitalised
-   only after `.!?` or at input start.
-3. **Unambiguous proper nouns**: `Monday`, `Paris`, `iPhone`, `Owen`,
-   plus user-taught casings.
+The previous three-tier model (Tier 2 sentence-start for ambiguous
+names like `will` / `jack` / `may` / `mark`, Tier 3 ~8 000 proper
+nouns plus user-taught casings) was removed because it fired on too
+many common English words ("the hope is", "a rose by", "may i", and
+the post-period word in any sentence) and pills came back capitalised
+when the user had typed lowercase. Pill-facing casing now comes
+exclusively from `KeyboardBridge._display_cased`, which mirrors every
+uppercase position from the typed prefix onto the pill — type
+`monday` → `monday`, type `Monday` → `Monday`, type `MON` → `MONday`.
 
-`sentence_start` is computed by checking whether the trimmed context
-ends with `.`, `!`, `?`, `\n`, or is empty.
+`sentence_start` is still computed (`bool(ctx) and ctx[-1] in ".!?"`)
+and passed through but is currently ignored by `get_capitalized`.
+`self.capitalization` is still populated by `_load_proper_nouns` and
+`learn_capitalization` and persisted with the model — the data is
+kept so a future opt-in toggle can revive proper-noun cap without
+re-teaching, but it's intentionally unused at output today.
 
 ## The LLM Refinement Layer
 

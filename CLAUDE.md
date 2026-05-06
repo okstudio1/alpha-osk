@@ -59,29 +59,24 @@ Deep-dive design docs for each algorithm: `docs/FUZZY_RECOGNITION.md` (spatial m
 
 ## Auto-Capitalization & Proper Nouns
 
-Capitalization uses a **three-tier context-aware system** (same model as Android/Gboard):
+The pill-facing capitalization rule is intentionally minimal: **only the "I" family auto-capitalizes** (`"I"`, `"I'm"`, `"I'll"`, `"I'd"`, `"I've"` — hardcoded in `ngram_predictor._always_capitalize`). Anything else stays in the casing the user typed. The mental model is "shift / caps lock is the cap signal, full stop" — pills do not second-guess intent.
 
-### Tier 1 — Always capitalize
-Words that are always capitalized regardless of position. Hardcoded in `ngram_predictor._always_capitalize`:
-- `"I"`, `"I'm"`, `"I'll"`, `"I'd"`, `"I've"`
+This used to be a three-tier Gboard-style system (Tier 1 "I" family, Tier 2 sentence-start for ambiguous names like `will` / `jack` / `may`, Tier 3 ~8 000 unambiguous proper nouns from `data/proper_nouns.txt` plus user-taught forms). Tiers 2 and 3 fired on too many common English words ("the hope is that", "a rose by", "will you", "may i", and the post-period word in any sentence), so pills came back capitalised when the user had typed lowercase. The user's stance is that those auto-caps were noise, not help.
 
-### Tier 2 — Sentence-start only (ambiguous names)
-Words that are both common English AND proper names (e.g., "will", "jack", "may", "mark"). Listed in `ngram_predictor._ambiguous_names`. These are **only capitalized** after sentence-ending punctuation (`.!?`) or at the start of input. Mid-sentence, they stay lowercase — "the jack was loose" stays lowercase, but "Jack went home." capitalizes.
+### How it works now
+- `NgramPredictor.get_capitalized(word, sentence_start)` returns the `_always_capitalize` form for the "I" family, otherwise returns `word` unchanged. The `sentence_start` argument is kept for API compatibility but ignored.
+- `HybridPredictor._merge_predictions()` still calls `get_capitalized` on each pill (so the "I" family flows through the engine like any other word), and still computes `sentence_start = bool(ctx) and ctx[-1] in ".!?"` — the value just doesn't affect the result.
+- **Pill-facing casing comes from `KeyboardBridge._display_cased`** — it mirrors *every* uppercase position from the typed prefix onto the pill. Type lowercase `monday` → pill shows `monday`. Type `Monday` (one-shot shift on the M) → pill shows `Monday`. Type `MON` (right-click each letter) → pill shows `MONday`. This is the only path that produces capitals in pills, and it's driven entirely by what the user typed.
 
-### Tier 3 — Unambiguous proper nouns
-Everything else in `data/proper_nouns.txt` (~8,000 entries) and user-taught capitalizations. These are always capitalized: "Monday", "Paris", "iPhone", "Owen".
+### Data still being collected (currently inert in pills)
+Two paths populate `NgramPredictor.capitalization` even though `get_capitalized` no longer reads from it:
+- `_load_proper_nouns()` reads `data/proper_nouns.txt` at startup.
+- `learn_capitalization(word, *, allow_uppercase=False)` is called from the bridge in three situations: (a) the user types a word with non-trivial casing and completes it with space; (b) the user has any uppercase letter in their typed prefix and accepts a pill (`pressPrediction` calls `learn_capitalization(word)` on the chosen pill); (c) the user right-click → Edits a prediction. The `allow_uppercase` guard is still meaningful: `_word_typed_under_caps_lock` flips to True whenever a char is appended while Caps Lock is on, and the bridge passes `allow_uppercase = not _word_typed_under_caps_lock` so all-caps under Caps Lock doesn't poison the table. Acronyms typed deliberately (right-clicking each letter, Caps Lock off) still land in the table.
 
-### How it works
-- **Built-in**: `data/proper_nouns.txt` loaded into `ngram_predictor.capitalization` on startup.
-- **Learned**: When a user types a word with non-trivial capitalization (e.g., "iPhone", "Owen") and completes it with space, the preferred form is saved via `learn_capitalization()`. **All-uppercase typings under Caps Lock are NOT learned** — those would poison the table with shouty forms of every word the user typed under caps lock. But all-caps typed *deliberately* (right-clicking each letter, or shifting each one — Caps Lock off the whole word) IS learned: the bridge tracks `_word_typed_under_caps_lock` for the duration of each word and passes `allow_uppercase=not _word_typed_under_caps_lock` into `learn_capitalization`. So typing "HVAC" via four right-clicks then space teaches the system, but typing "HELLO" with caps lock on does not. The flag is set whenever a char is appended to `_current_word` while `_caps_lock_active` is True, and reset at every word boundary (space, punctuation, return, backspace-to-empty, app switch, prediction click, edit, swipe, privacy mode, explicit context reset). Genuine acronyms (HBO, IBM, NASA) come from `data/proper_nouns.txt` via `_load_proper_nouns`, which writes directly into `self.capitalization` and bypasses this guard.
-- **Learned via prediction click**: If the user typed any uppercase letter in the prefix (right-click → shifted variant, or sticky shift) and then accepts a prediction pill, `pressPrediction` calls `learn_capitalization(word)` on the chosen pill. The gate is `_current_word != _current_word.lower()` — *any* casing in the prefix counts, not just the first letter — so first-letter caps ("Hello") and mid-word caps ("eBay", "macBook") both record. Without this, accepting a pill would throw away the casing intent and the user would have to re-right-click every time they typed the same word.
-- **User edits**: Right-click a prediction → Edit to correct capitalization. This calls `editPrediction()` which inserts the corrected word and saves the capitalization permanently.
-- **Applied at output**: `hybrid_predictor._merge_predictions()` calls `ngram.get_capitalized(word, sentence_start)` on each result before returning to QML. `sentence_start` is true **only** when the (rstripped) context ends with `.!?`. Empty context is *not* treated as a sentence start — that produced annoying behaviour in terminals/REPLs where the user backspaces every typed char, leaving an empty context that isn't actually a fresh sentence. The fresh-document case (open Notepad, type the first letter) is handled by `_display_cased` mirroring the typed prefix's casing instead, so shift-typed "T" still surfaces "The".
-- **Persisted**: The `capitalization` dict is saved in `ngram_model.json`. User overrides merge with built-in proper nouns on load (user wins).
+The accumulated dict is persisted in `ngram_model.json`. Keeping the data lets a future opt-in switch (e.g. a "capitalize proper nouns" toggle) re-enable Tier 3 without re-teaching from scratch. **If you re-enable any tier, do it by editing `get_capitalized` to consult `self.capitalization` again — don't reintroduce the old three-tier behaviour as the default.**
 
-### Adding to always-capitalize or ambiguous lists
-- Always-capitalize: edit `_always_capitalize` dict in `ngram_predictor.py`
-- Ambiguous names: edit `_ambiguous_names` set in `ngram_predictor.py`
+### Adding to always-capitalize
+Edit the `_always_capitalize` dict in `ngram_predictor.py`. Keep it tight — it's the one auto-cap that will fire mid-sentence regardless of what the user typed, so anything beyond the "I" family needs to be unambiguous in *every* mid-sentence context (which proper nouns aren't, which is why Tiers 2/3 are gone).
 
 ## Where User Data Lives
 

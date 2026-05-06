@@ -17,18 +17,28 @@ making the engine we already have less brittle.
 
 ## Inventory of the current rules
 
-### Capitalization (three tiers + a learned overlay)
+### Capitalization (`I` family only at output; collection paths still active)
 
 `src/prediction/ngram_predictor.py`
 
-- `_always_capitalize` (~5 entries: I, I'm, I'll, I'd, I've) — hardcoded dict.
-- `_ambiguous_names` (~50 entries: will, jack, may, mark, …) — hardcoded
-  set; capitalised only at sentence start.
-- `data/proper_nouns.txt` (~8 000 entries) — hardcoded file loaded at
-  startup.
-- `learn_capitalization` — runtime overlay that observes user typing.
-  Just gained a new guard: skip all-uppercase typings (Caps Lock
-  pollution). That's a fifth carve-out.
+- `_always_capitalize` (5 entries: I, I'm, I'll, I'd, I've) — the only
+  rule `get_capitalized` consults today.
+- `_ambiguous_names` (~130 entries: will, jack, may, mark, …) — kept in
+  the source but unused; previously gated Tier 2 sentence-start cap,
+  which has been removed.
+- `data/proper_nouns.txt` (~8 000 entries) — still loaded into
+  `self.capitalization` at startup, but `get_capitalized` no longer
+  reads from that dict, so the data is currently inert in pills.
+- `learn_capitalization` — still active. Records user-taught casings
+  (right-click → Edit, prediction-click after typing a capital, word
+  completion with non-trivial casing) into `self.capitalization`. The
+  Caps Lock guard (`allow_uppercase = not _word_typed_under_caps_lock`)
+  still applies. Persisted with the model.
+
+The collection paths are kept so a future opt-in toggle can revive
+proper-noun cap without re-teaching from scratch. Pills today get all
+their non-`I`-family casing from the typed-prefix mirror in
+`KeyboardBridge._display_cased`.
 
 ### Fragment / plausibility filter
 
@@ -152,63 +162,51 @@ ceiling.
 
 ---
 
-## Option B — Drop the capitalization tiers
+## Option B — Drop the capitalization tiers (SHIPPED, variant)
 
-### What it does
+A variant of this option shipped: `get_capitalized` was gutted to the
+`I`-family only (Tier 1). Tiers 2 and 3 — sentence-start auto-cap for
+`_ambiguous_names`, and the proper-noun / user-taught lookup — were
+removed from the output path. Pills now mirror the typed prefix's
+casing via `KeyboardBridge._display_cased`; "shift / caps lock is the
+cap signal" is the user-facing rule.
 
-Delete `_always_capitalize` and `_ambiguous_names` entirely. Stop
-loading `data/proper_nouns.txt`. Keep ONLY `learn_capitalization`'s
-runtime map. Every word's preferred casing comes from the user's
-observed typing, full stop.
+### Why this variant rather than the originally-described one
 
-### What changes
+The original sketch deleted `_ambiguous_names`, the
+`data/proper_nouns.txt` loader, and the persisted `capitalization`
+dict, leaving only the runtime `learn_capitalization` map. The
+shipped change is more conservative:
 
-- `~50` lines of `ngram_predictor.py` go away.
-- `data/proper_nouns.txt` (~8 000 entries) becomes unused; delete or
-  keep as a one-shot seed for first launch.
-- `get_capitalized` collapses to: look up in `self.capitalization`
-  (user-learned), else lowercase (or sentence-start title-case).
-- Tests around the three tiers go away.
+- `_load_proper_nouns` still runs at startup.
+- `learn_capitalization` still records user-taught forms (right-click
+  → Edit, prediction-click after typing a capital, word completion
+  with non-trivial casing). The Caps Lock guard still applies.
+- `self.capitalization` is still persisted in `ngram_model.json`.
+- `_ambiguous_names` is still in the source, just unreferenced.
 
-### What stays
+`get_capitalized` simply doesn't read any of it. Keeping the
+collection paths means a future opt-in toggle (e.g. *Settings →
+Suggestions → Capitalize proper nouns*) can flip the behaviour back
+without re-teaching from scratch and without a data-format migration.
 
-- The runtime `learn_capitalization` (with the all-caps guard from this
-  week).
-- Sentence-start title-casing (from context detection).
+### Cold-start regression — actual outcome
 
-### Risks
+The original "Risks" section flagged that a fresh user typing
+`monday` would see `monday` back (not `Monday`). That's exactly what
+happens now, and it's the *intended* behaviour: the user's stance
+is that auto-cap on common-name proper nouns ("hope", "rose", "may",
+"mark", "monday") was firing on too many ordinary English words and
+producing more wrong-case pills than it fixed. Pressing shift on the
+first letter remains the way to get a capital.
 
-- **Cold-start regression.** A fresh user types "monday" and gets
-  "monday" back, not "Monday". Same for "Paris", "September", "Owen",
-  every name. It takes hundreds of typed words for the runtime layer to
-  catch up to what `proper_nouns.txt` gave for free.
-- This is a real regression for someone who hasn't typed much yet. If
-  Alpha-OSK is the user's primary input, they hit this *every day* for
-  the first month.
+### What's left to consider
 
-### Mitigation
-
-Seed `learn_capitalization`'s map from `proper_nouns.txt` on first launch
-— treat the file as initial state instead of a runtime carve-out. Keeps
-the cold-start guidance, deletes the runtime tier-checking code path.
-Effectively a code-shrink without a quality regression.
-
-### Effort
-
-~1 day to do the careful version (seed-on-first-launch). Half a day to
-do the naive version (just delete the lists).
-
-### Why pick this
-
-Reduces the rules surface area. Easier to reason about capitalisation
-("we capitalise what we've seen capitalised") with one source of truth.
-
-### Why skip it
-
-The tiers aren't actually causing wrong predictions today (after this
-week's all-caps fix). The rules are unwieldy to *read*, but they're
-producing correct output. Code-shrink for its own sake is rarely worth
-the regression risk.
+- A future opt-in toggle that flips `get_capitalized` back to
+  Tier 1 + Tier 3 (skipping Tier 2, which had the worst false-positive
+  rate). Driven by `self.capitalization`, no data migration needed.
+- Removing `_ambiguous_names` and the unused inventory entries if a
+  follow-up code-shrink pass is wanted. Currently inert but harmless.
 
 ---
 
