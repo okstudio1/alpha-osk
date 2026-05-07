@@ -1,0 +1,17 @@
+{
+  "name": "alpha-osk-telemetry",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "deploy": "wrangler deploy",
+    "schema:local": "wrangler d1 execute alpha-osk-telemetry --local --file schema.sql",
+    "schema:remote": "wrangler d1 execute alpha-osk-telemetry --remote --file schema.sql"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250101.0",
+    "typescript": "^5.4.0",
+    "wrangler": "^3.80.0"
+  }
+}

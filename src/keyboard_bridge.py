@@ -31,10 +31,11 @@ except ImportError:
 
 from .__version__ import __version__ as APP_VERSION
 from .analytics import TypingAnalytics
-from .platform import create_key_synthesizer
+from .platform import CURRENT_PLATFORM, create_key_synthesizer
 from .platform.base import KeySynthesizerBase
 from .platform.password_detect import is_password_field
 from .prediction import HybridPredictor, SwipeRecognizer
+from .telemetry import TelemetryClient
 from .updater import UpdateInfo, check_for_update, download_and_install
 
 # Window classes / process exes used to auto-detect a foreground app
@@ -341,6 +342,24 @@ class KeyboardBridge(QObject):
 
         # Analytics
         self._analytics = TypingAnalytics(parent=self)
+
+        # Telemetry — opt-in, off by default.  Pulls lifetime counters
+        # from the analytics dashboard's getter so there is one source
+        # of truth.  Settings → Privacy controls it; the QTimer below
+        # checks once an hour whether the weekly window has elapsed.
+        # See docs/TELEMETRY.md (design) and docs/PRIVACY.md (user-facing).
+        self._telemetry = TelemetryClient(
+            analytics_provider=self._analytics.get_session_stats,
+            app_version=APP_VERSION,
+            os_name=CURRENT_PLATFORM,
+        )
+        self._telemetry_timer = QTimer(self)
+        # Hourly tick is plenty: maybe_submit() short-circuits unless
+        # the 7-day window has elapsed, and we want the timer to be
+        # cheap (a no-op call costs ~5 microseconds).
+        self._telemetry_timer.setInterval(60 * 60 * 1000)
+        self._telemetry_timer.timeout.connect(self._telemetry.maybe_submit)
+        self._telemetry_timer.start()
 
         # Context tracking for predictions
         self._context_buffer = ""
@@ -1432,12 +1451,21 @@ class KeyboardBridge(QObject):
         for timer in (
             getattr(self, "_password_timer", None),
             getattr(self, "_foreground_timer", None),
+            getattr(self, "_telemetry_timer", None),
         ):
             if timer is not None:
                 try:
                     timer.stop()
                 except RuntimeError:
                     pass  # already deleted by Qt; harmless
+
+        # Last-chance telemetry submit on the on-quit path.  Internally
+        # gated on consent + endpoint + anon_id + a 60 s anti-spam
+        # window, so calling it unconditionally here is safe.
+        try:
+            self._telemetry.submit_on_quit()
+        except Exception as e:
+            _logger.info("telemetry on-quit submit failed: %s", e)
 
         if self._shift_active:
             self._synth.release_modifier("shift")
@@ -1737,6 +1765,34 @@ class KeyboardBridge(QObject):
         """Enable/disable automatic password field detection."""
         self._password_detect_enabled = enabled
         _logger.info("Password field detection: %s", enabled)
+
+    # --- Telemetry (opt-in usage stats) ---
+
+    @Slot(result=bool)
+    def getTelemetryEnabled(self) -> bool:
+        """QML reads this on Settings panel mount to render the toggle."""
+        return self._telemetry.enabled
+
+    @Slot(bool)
+    def setTelemetryEnabled(self, enabled: bool) -> None:
+        """Toggle the opt-in telemetry pipeline.  Off → On generates a
+        new anon_id and starts the weekly clock; On → Off clears the
+        anon_id (so future opt-in cycles cannot be linked).  See
+        docs/PRIVACY.md.
+        """
+        if enabled:
+            self._telemetry.enable()
+        else:
+            self._telemetry.disable()
+        _logger.info("Telemetry consent: %s", enabled)
+
+    @Slot(result=bool)
+    def forgetTelemetryData(self) -> bool:
+        """Ask the server to delete this user's contributed row.
+        Triggered by the 'Delete my contributed data' button in
+        Settings → Privacy.  Returns True if the request was sent.
+        """
+        return self._telemetry.forget()
 
     def _get_privacy_mode(self) -> bool:
         return self._privacy_mode

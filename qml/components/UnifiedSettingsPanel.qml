@@ -1063,6 +1063,119 @@ Item {
                         }
                     }
 
+                    // -- PRIVACY --
+                    // Opt-in usage telemetry. OFF by default. The
+                    // toggle's persisted state lives in the
+                    // TelemetryClient's own JSON file (telemetry.json),
+                    // not in appSettings, because the bridge owns the
+                    // anon_id lifecycle and we want a single source of
+                    // truth. See docs/PRIVACY.md (user-facing) and
+                    // docs/TELEMETRY.md (design).
+                    SettingsSection {
+                        title: "Privacy"
+                        Layout.fillWidth: true
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+
+                            Text {
+                                text: "Alpha-OSK runs entirely on your computer. Nothing leaves your machine unless you opt in below."
+                                color: "#aaa"
+                                font.pixelSize: 10
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
+                            }
+
+                            SettingsToggle {
+                                id: telemetryToggle
+                                Layout.fillWidth: true
+                                text: "Share anonymous usage stats"
+                                // Initial state queried once on mount.
+                                // No appSettings binding -- the
+                                // TelemetryClient is authoritative.
+                                checked: false
+                                Component.onCompleted: {
+                                    if (keyboard) checked = keyboard.getTelemetryEnabled()
+                                }
+                                onToggled: function(c) {
+                                    if (keyboard) keyboard.setTelemetryEnabled(c)
+                                }
+                            }
+
+                            Text {
+                                text: "Sends a small weekly report (lifetime keystroke totals only) so we can track total community impact. No content, no words, no per-key data. Off by default. See docs/PRIVACY.md for the full list."
+                                color: "#888"
+                                font.pixelSize: 9
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
+                                visible: telemetryToggle.checked
+                            }
+
+                            // Right-to-be-forgotten button. Only shown
+                            // when the toggle is on, since there's no
+                            // contributed row to delete otherwise.
+                            // Two-step confirmation matches the
+                            // "Clear Learned Data" button's pattern.
+                            Rectangle {
+                                id: forgetBtn
+                                Layout.fillWidth: true
+                                implicitHeight: 30
+                                radius: 5
+                                visible: telemetryToggle.checked
+
+                                property int confirmStep: 0  // 0=idle, 1=first click, 2=confirmed
+
+                                color: {
+                                    if (confirmStep === 2) return "#2a3a2a"
+                                    if (confirmStep === 1) return forgetArea.containsMouse ? "#7a2a2a" : "#5a2a2a"
+                                    return forgetArea.containsMouse ? "#3a3a3a" : "#2a2a2a"
+                                }
+                                border.color: confirmStep === 1 ? "#ff4444" : "#4a4a4a"
+                                border.width: confirmStep === 1 ? 2 : 1
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: {
+                                        if (forgetBtn.confirmStep === 2) return "Deleted!"
+                                        if (forgetBtn.confirmStep === 1) return "Click again to confirm"
+                                        return "Delete my contributed data"
+                                    }
+                                    color: {
+                                        if (forgetBtn.confirmStep === 2) return "#aaffaa"
+                                        if (forgetBtn.confirmStep === 1) return "#ff6666"
+                                        return "#ccc"
+                                    }
+                                    font.pixelSize: 11
+                                    font.bold: forgetBtn.confirmStep === 1
+                                }
+
+                                Timer {
+                                    id: forgetResetTimer
+                                    interval: 3000
+                                    onTriggered: forgetBtn.confirmStep = 0
+                                }
+
+                                MouseArea {
+                                    id: forgetArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (forgetBtn.confirmStep === 0) {
+                                            forgetBtn.confirmStep = 1
+                                            forgetResetTimer.restart()
+                                        } else if (forgetBtn.confirmStep === 1) {
+                                            if (keyboard) keyboard.forgetTelemetryData()
+                                            forgetBtn.confirmStep = 2
+                                            forgetResetTimer.restart()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // -- TOOLS --
                     SettingsSection {
                         title: "Tools"

@@ -1,0 +1,18 @@
+# Copy to wrangler.toml and fill in the database_id from
+# `wrangler d1 create alpha-osk-telemetry`.
+#
+# Do NOT commit wrangler.toml -- it pins to a real D1 instance.
+# Only the .example template is checked in.
+
+name = "alpha-osk-telemetry"
+main = "src/worker.ts"
+compatibility_date = "2025-05-01"
+
+[[d1_databases]]
+binding       = "DB"
+database_name = "alpha-osk-telemetry"
+database_id   = "PASTE-FROM-WRANGLER-D1-CREATE"
+
+# Daily GC at 04:00 UTC. Prunes users with last_seen older than 365 days.
+[triggers]
+crons = ["0 4 * * *"]

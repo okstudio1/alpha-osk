@@ -357,6 +357,37 @@ See also: `docs/MACROVOX_INTEGRATION.md` (voice dictation), `docs/MODULAR_LAYOUT
 
 Design doc at `docs/FEDERATED_LEARNING.md`. Not yet implemented — Phase 1 (local delta computation) is the next step.
 
+## Opt-in Telemetry
+
+Design: `docs/TELEMETRY.md`. User-facing privacy: `docs/PRIVACY.md`. Backend: `backend/cf-worker/` (Cloudflare Worker + D1).
+
+**Off by default.** When enabled (Settings → Privacy → "Share anonymous usage stats"), the client sends a weekly POST containing nine integers: `anon_id`, `app_version`, `os`, `keystrokes`, `words`, `predictions`, `keystrokes_saved`, `minutes`, `sessions`, `prediction_offers`. These are exactly the lifetime counters already shown on the Analytics dashboard. **Never sent**: content, word frequencies, key frequencies, IP, hostname, or any per-session breakdown.
+
+### Files
+- `src/telemetry.py` — `TelemetryClient`. Owns the consent flag, the UUID4 `anon_id`, and the weekly cadence. Persists to `<config_dir>/telemetry.json` (separate from `analytics.json` to avoid two-writer contention; `TypingAnalytics` owns analytics.json on the on-quit path).
+- `src/keyboard_bridge.py` — instantiates the client in `__init__`, wires an hourly `QTimer` to `maybe_submit()` (which short-circuits unless the 7-day window has elapsed), and calls `submit_on_quit()` from `shutdown()`. Three new slots: `getTelemetryEnabled()`, `setTelemetryEnabled(bool)`, `forgetTelemetryData()`.
+- `qml/components/UnifiedSettingsPanel.qml` — Privacy section with the toggle and a two-step "Delete my contributed data" button. Toggle initial state is queried from the bridge on mount; **don't** mirror it into `appSettings`, the `TelemetryClient` is the source of truth.
+- `backend/cf-worker/` — Cloudflare Worker (TypeScript) exposing `POST /v1/submit`, `GET /v1/aggregate`, `POST /v1/forget`, plus a daily cron that prunes users with `last_seen` older than 365 days.
+
+### Endpoint configuration
+`DEFAULT_ENDPOINT` in `src/telemetry.py` is the empty string. While empty, the client treats the endpoint as "not configured" and silently no-ops every submit (consent toggle still works, just no data leaves the machine). Set this constant per-build before shipping a release that has telemetry enabled. Plan is to flip it on after the worker is deployed and the schema is verified against real submissions.
+
+### anon_id lifecycle
+UUID4 generated on first opt-in. **Cleared on opt-out**, so re-opt-in gets a new id and prior contributions cannot be linked. If the user wants their already-submitted row deleted, the "Delete my contributed data" button POSTs to `/v1/forget` (returns 204 regardless of whether the id existed). Reinstall or `~/.config/alpha-osk/` deletion also resets the id.
+
+### Submit cadence
+- **Weekly QTimer** in the bridge (1-hour tick, internal 7-day window check). First submit lands ~7 days after opt-in, not immediately on toggle.
+- **`submit_on_quit`** from `shutdown()`. Bypasses the weekly window (with a 60 s anti-spam guard) so a user who quits soon after a long session doesn't lose that delta.
+
+Both paths are gated on `enabled AND endpoint AND anon_id`. Failures are silent (3 retries with exponential backoff `[5s, 30s, 120s]`, then drop until next week — no user-visible error toasts).
+
+### Privacy mode interaction
+None needed. Privacy mode (password-field detection) suppresses `_current_word`, prediction tracking, and learning at the bridge level, so password-field activity never enters the analytics counters in the first place. Telemetry just forwards what the analytics dashboard would show.
+
+### What is NOT telemetry
+- Auto-update version checks: those are GitHub Releases requests, unrelated.
+- Federated learning: a separate (planned, unimplemented) feature with its own opt-in toggle and its own design (n-gram deltas + DP noise). Keep them conceptually separate even when explaining to users.
+
 ## Building & Signing a Release (Windows)
 
 Full step-by-step release checklist, signing details, troubleshooting table, and bundle-size notes are in `docs/WINDOWS.md` (sections "Building a Standalone Executable", "Code Signing", "Release Checklist"). Asset/icon regeneration in `docs/BRANDING.md`. Quick mental model:
