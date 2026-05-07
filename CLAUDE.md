@@ -370,7 +370,7 @@ Design: `docs/TELEMETRY.md`. User-facing privacy: `docs/PRIVACY.md`. Backend: `b
 - `backend/cf-worker/` — Cloudflare Worker (TypeScript) exposing `POST /v1/submit`, `GET /v1/aggregate`, `POST /v1/forget`, plus a daily cron that prunes users with `last_seen` older than 365 days.
 
 ### Endpoint configuration
-`DEFAULT_ENDPOINT` in `src/telemetry.py` is the empty string. While empty, the client treats the endpoint as "not configured" and silently no-ops every submit (consent toggle still works, just no data leaves the machine). Set this constant per-build before shipping a release that has telemetry enabled. Plan is to flip it on after the worker is deployed and the schema is verified against real submissions.
+`DEFAULT_ENDPOINT` in `src/telemetry.py` is the empty string. While empty, the client treats the endpoint as "not configured" and silently no-ops every submit (consent toggle still works, just no data leaves the machine). Set this constant per-build before shipping a release that has telemetry enabled. Plan is to flip it on after the worker is deployed and the schema is verified against real submissions. Full deployment + dev-validation workflow is in `docs/TELEMETRY.md` § "Deployment & release"; the Windows release checklist (`docs/WINDOWS.md` step 2a) gates on this.
 
 ### anon_id lifecycle
 UUID4 generated on first opt-in. **Cleared on opt-out**, so re-opt-in gets a new id and prior contributions cannot be linked. If the user wants their already-submitted row deleted, the "Delete my contributed data" button POSTs to `/v1/forget` (returns 204 regardless of whether the id existed). Reinstall or `~/.config/alpha-osk/` deletion also resets the id.

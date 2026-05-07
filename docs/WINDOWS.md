@@ -482,6 +482,14 @@ This flows into the installer filename (`Alpha-OSK-Setup-1.0.8.exe`), NSIS `APP_
 
 Add a new `## [x.y.z] — YYYY-MM-DD` section at the top under `[Unreleased]`. Categorize under `### Added` / `### Fixed` / `### Changed` / `### Chores`.
 
+### 2a. Verify telemetry endpoint (if telemetry is in scope for this release)
+
+Check `src/telemetry.py::DEFAULT_ENDPOINT`. It must be either:
+- the empty string (telemetry stays inert; safe for any release), **or**
+- the **production** Cloudflare Worker URL (not a staging URL, not localhost).
+
+Shipping a release with a staging URL would route real users' opt-in submissions to the wrong database. Shipping with localhost would silently fail every submit. Full deployment workflow is in `docs/TELEMETRY.md` § "Deployment & release".
+
 ### 3. Commit
 
 ```bash

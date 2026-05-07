@@ -110,3 +110,65 @@ A daily Cloudflare cron deletes `users` rows where `last_seen < now - 365 days`.
 ## Public counter (deferred)
 
 Eventually a static page at e.g. `alpha-osk.com/impact` reads `/v1/aggregate` and renders "X million keystrokes saved across Y users". Not in scope for v1. Build the pipeline first, prove the data is clean, then design the public surface.
+
+## Deployment & release
+
+The pipeline is **scaffolded but inert** until three things happen, in order:
+
+### 1. Deploy the Cloudflare Worker
+
+```bash
+cd backend/cf-worker
+npm install
+cp wrangler.toml.example wrangler.toml
+
+# Creates the D1 database; the command prints a database_id.
+# Paste it into wrangler.toml under d1_databases.database_id.
+npx wrangler d1 create alpha-osk-telemetry
+
+# Apply schema.sql to the remote DB.
+npm run schema:remote
+
+# Deploy the worker.  The final URL is printed at the end
+# (typically https://alpha-osk-telemetry.<your-cf-subdomain>.workers.dev).
+npm run deploy
+```
+
+Smoke-test the live worker with the curl examples in `backend/cf-worker/README.md`. Confirm `POST /v1/submit` returns 204 and `GET /v1/aggregate` returns the row you just inserted (after the 5 min cache window or with `Cache-Control: no-cache` on the curl).
+
+### 2. Set `DEFAULT_ENDPOINT` in the client
+
+Edit `src/telemetry.py`:
+
+```python
+DEFAULT_ENDPOINT = "https://alpha-osk-telemetry.<your-cf-subdomain>.workers.dev"
+```
+
+This is the kill switch. While it's the empty string, the client treats the endpoint as "not configured" and silently no-ops every submit (the consent toggle in Settings still works, just no data leaves the machine). Setting it activates the pipeline for any user who has the toggle on.
+
+Commit this change. Treat it like a configuration constant, not a secret — it's the public-facing endpoint and will be visible in any decompiled binary anyway.
+
+### 3. Test in dev, then ship a release
+
+In dev (`python run.py`):
+- Open Settings → Privacy. Toggle on.
+- Restart the keyboard. Toggle should remember its state (read from `<config_dir>/telemetry.json`).
+- Force a submit by editing the `last_submit_ts` field in `telemetry.json` to `0` (clears the weekly window), then triggering the hourly timer or quitting (`submit_on_quit` runs from `shutdown()`).
+- Check the D1 table for the row. Confirm the `anon_id` matches the one in `telemetry.json`.
+- Click "Delete my contributed data" (two-step). Confirm the D1 row disappears.
+- Toggle off. Confirm the `anon_id` in `telemetry.json` is cleared.
+- Toggle back on. Confirm a NEW `anon_id` is generated (this is the unlinkable-cycle guarantee — verify it actually works).
+
+After dev validation, follow the normal release checklist in `docs/WINDOWS.md`. The release-checklist line for telemetry is: "verify `DEFAULT_ENDPOINT` is set to the production worker URL, not empty / not a staging URL".
+
+### 4. (Later) The public stats page
+
+Once the aggregate has meaningful numbers (probably 4-8 weeks after the first release with a non-empty endpoint, depending on adoption), design the static page that reads `/v1/aggregate`. Out of scope for the initial rollout.
+
+## Operational concerns
+
+- **Worker logs**: `npx wrangler tail` streams live logs. Use this if a release lands and submissions look wrong.
+- **Cost ceiling**: Cloudflare Workers free tier is 100k requests / day. At one weekly submit per user, that supports ~700k MAU before the free tier runs out. If we hit the paid tier, $5/mo covers 10M requests / day (way past any plausible Alpha-OSK scale).
+- **D1 storage**: each row is ~100 bytes. 100k users = ~10 MB. Free tier limit is 5 GB. Effectively no ceiling for this app.
+- **Aggregate cache invalidation**: the 5-min `Cache-Control` on `/v1/aggregate` is fine for the public counter. If you need fresh numbers (e.g. debugging), curl with `Cache-Control: no-cache`.
+- **Right-to-be-forgotten audit**: spot-check that `POST /v1/forget` actually removes rows. CASCADE on `submissions_latest.anon_id` should handle the child row, but worth verifying after schema migrations.
