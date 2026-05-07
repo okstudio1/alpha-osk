@@ -404,6 +404,17 @@ def _configure_logging() -> Path | None:
 
 def main() -> int:
     """Launch the Alpha-OSK on-screen keyboard."""
+    # CLI dispatch — the post-update relauncher re-invokes this binary
+    # with ``--update-relauncher`` and runs in a detached process owned
+    # by the user session, so it can launch the freshly-installed OSK
+    # at user IL after the elevated installer has exited. Skipping the
+    # singleton lock and the QApplication setup here keeps the helper
+    # cheap and side-effect-free; see ``src/_update_relauncher.py``
+    # for the polling logic and rationale.
+    if "--update-relauncher" in sys.argv:
+        from src._update_relauncher import run_relauncher
+        return run_relauncher(sys.argv)
+
     log_path = _configure_logging()
     if log_path is not None:
         _logger.info("Log file: %s", log_path)

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -1352,6 +1353,61 @@ class KeyboardBridge(QObject):
         across restarts.
         """
         self._update_info = None
+
+    @Slot(result="QVariant")
+    def consumeUpdateHandoff(self) -> Dict[str, Any]:
+        """Return the post-update toast payload, if one is pending.
+
+        After the auto-update relauncher launches a freshly-installed
+        Alpha-OSK, it writes an ``update_handoff.json`` breadcrumb to
+        ``$APPDATA/alpha-osk/`` so this brand-new instance knows to
+        confirm the update visually. QML calls this slot in
+        ``Component.onCompleted`` and flashes a toast if the return
+        value is non-empty.
+
+        The file is deleted on read (single-use breadcrumb). Stale or
+        unreadable files are treated as no handoff. Anything older than
+        five minutes is also ignored — the user already either knows
+        the update happened (it ran moments ago) or has been using the
+        new build for a while and doesn't need the toast.
+
+        Returns ``{"version": str, "previousVersion": str}`` on a fresh
+        handoff, otherwise ``{}``.
+        """
+        try:
+            from src.platform import get_config_dir
+        except ImportError:
+            from .platform import get_config_dir  # type: ignore
+        path = get_config_dir() / "update_handoff.json"
+        if not path.is_file():
+            return {}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            self._safe_unlink(path)
+            return {}
+
+        completed_at = float(data.get("completed_at", 0) or 0)
+        # Five-minute freshness window. Anything older means the OSK
+        # has been launched at least once since the update — no need
+        # to surface the toast again.
+        if completed_at > 0 and (time.time() - completed_at) > 300:
+            self._safe_unlink(path)
+            return {}
+
+        self._safe_unlink(path)
+        return {
+            "version": str(data.get("version", "")),
+            "previousVersion": str(data.get("previous_version", "")),
+        }
+
+    @staticmethod
+    def _safe_unlink(path: "Path") -> None:
+        """Best-effort delete of the handoff breadcrumb."""
+        try:
+            path.unlink()
+        except OSError:
+            pass
 
     def shutdown(self) -> None:
         """Stop background timers cleanly before the app tears down.

@@ -188,6 +188,18 @@ Window {
         root.x = (Screen.width - root.width) / 2
         root.y = Screen.height - root.height - 40
         root._loaded = true
+
+        // Surface the post-update toast if the auto-update relauncher
+        // dropped a fresh handoff breadcrumb before we launched. The
+        // bridge consumes the file (single-use) and returns the
+        // version pair; an empty result means no pending update.
+        if (keyboard) {
+            var handoff = keyboard.consumeUpdateHandoff()
+            if (handoff && handoff.version) {
+                updateAppliedToast.flash(handoff.version,
+                                         handoff.previousVersion || "")
+            }
+        }
     }
 
     // When side panels toggle, grow/shrink from the right edge (left stays put).
@@ -1534,6 +1546,68 @@ Window {
                         onClicked: predEditPopup.close()
                     }
                 }
+            }
+        }
+
+        // Post-update toast — shown once on the first launch after the
+        // auto-updater applied a new version. Confirms to the user
+        // that the install completed (the previous flow gave no signal:
+        // OSK closed, OSK reopened, no way to tell if it was a successful
+        // update or a crash-and-restart). Payload comes from the
+        // relauncher's update_handoff.json breadcrumb via the bridge's
+        // consumeUpdateHandoff slot.
+        Popup {
+            id: updateAppliedToast
+            parent: Overlay.overlay
+            x: (root.width - width) / 2
+            y: 36
+            width: 220
+            height: 36
+            modal: false
+            dim: false
+            closePolicy: Popup.NoAutoClose
+
+            property string newVersion: ""
+            property string previousVersion: ""
+
+            background: Rectangle {
+                color: "#1e3354"
+                border.color: "#4a8eff"
+                border.width: 1
+                radius: 8
+            }
+
+            contentItem: Row {
+                spacing: 8
+                anchors.verticalCenter: parent.verticalCenter
+                Text {
+                    text: "✓"
+                    color: "#7ec8ff"
+                    font.pixelSize: 15
+                    font.weight: Font.Bold
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                Text {
+                    text: updateAppliedToast.previousVersion !== ""
+                          ? qsTr("Updated to v%1 from v%2").arg(updateAppliedToast.newVersion).arg(updateAppliedToast.previousVersion)
+                          : qsTr("Updated to v%1").arg(updateAppliedToast.newVersion)
+                    color: "#cfe0ff"
+                    font.pixelSize: 13
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+            }
+
+            Timer {
+                id: updateAppliedToastTimer
+                interval: 4000
+                onTriggered: updateAppliedToast.close()
+            }
+
+            function flash(version, prevVersion) {
+                updateAppliedToast.newVersion = version
+                updateAppliedToast.previousVersion = prevVersion
+                open()
+                updateAppliedToastTimer.restart()
             }
         }
 

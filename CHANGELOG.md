@@ -4,6 +4,16 @@ All notable changes to Alpha-OSK are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.16] — 2026-05-06
+
+Auto-update relauncher fix + post-update confirmation toast.
+
+### Fixed
+- **Auto-update left the user with no keyboard.** Reported as: "the new keyboard never opens" after a successful update. Root cause: the relaunch in `installer.nsh::customInstall` (`Exec '"$WINDIR\explorer.exe" "$INSTDIR\alpha-osk.exe"'`) is fire-and-forget across an integrity-level boundary — the elevated installer asks user-IL explorer.exe to spawn the new exe, and Windows can refuse that handoff silently on some configurations (anti-malware, Group Policy, AppLocker, or just the default IL rules around an elevated parent spawning user-mode children). With no error surface, the OSK simply never came back. New mechanism: a detached **user-IL relauncher process** spawned by the updater *before* the installer fires. Because the helper is launched while we're still running at user IL (before UAC elevation), it inherits a user-mode token and there is no IL handoff to fail. Flow: (1) `download_and_install` re-invokes ourselves with `--update-relauncher` + `DETACHED_PROCESS` flags, (2) the installer fires and taskkills the OSK, (3) the helper polls for our exit, waits for the installer's file copy, then launches the freshly-installed `alpha-osk.exe` directly via `subprocess.Popen` from the user session. The in-installer `Exec explorer.exe` trick stays as a fallback, but the helper is now the primary mechanism. New module: `src/_update_relauncher.py`. New CLI dispatch in `src/keyboard_app.py::main` for `--update-relauncher` (skips singleton lock + QApplication setup since the helper doesn't open a window). 14 unit tests in `tests/test_update_relauncher.py` covering process polling, mtime-newer-than-parent-death checks, launch failure handling, and the full happy-path flow.
+
+### Added
+- **Post-update confirmation toast — "✓ Updated to v1.0.16 from v1.0.15".** The relauncher writes `update_handoff.json` (version, previous_version, completed_at) to `$APPDATA/alpha-osk/` after launching the new OSK. On startup, `Main.qml::Component.onCompleted` calls `keyboard.consumeUpdateHandoff()` which reads + deletes the file (single-use breadcrumb) and returns the version pair. If non-empty, the new `updateAppliedToast` Popup flashes for 4 seconds at the top of the window. Five-minute freshness window — anything older is treated as no handoff, since the user has obviously been using the new build for a while. Privacy: the breadcrumb only contains version strings, no user data. 5 bridge tests in `tests/test_keyboard_bridge.py::TestUpdateHandoffConsumption`.
+
 ## [1.0.15] — 2026-05-06
 
 A big release. Smarter prediction learning (the model retracts typo sightings when you backspace, and prediction-clicks reinforce only the new edge), two language-model-visualization upgrades (click-to-drill-down on any word, plus a live gold pulse on the active edge as you type), the IDE-aware Compatibility Mode rename, the selectable prediction merge strategy, the SymSpell-backed fuzzy correction rewrite, configurable hold-to-repeat timing, the no-auto-cap-from-context fix for prediction pills, scancode-populated Ctrl+chord forwarding for TeamViewer / RDP, and a pile of UX polish around the auto-updater, modifier+punctuation chords, and Backspace behaviour.

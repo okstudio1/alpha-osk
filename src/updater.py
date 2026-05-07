@@ -481,6 +481,86 @@ def _launch_installer(dest: Path) -> Tuple[bool, str]:
     return True, ""
 
 
+def _spawn_relauncher(new_version: str) -> bool:
+    """Spawn the user-IL relauncher helper before kicking off the installer.
+
+    The installer's ``customInit`` will taskkill us, so anything that
+    needs to outlive the install must be detached *before* we hand off
+    to the elevated installer process. Spawning here — while the OSK
+    is still running at the user's medium IL — guarantees the helper
+    inherits a user-mode token. The helper polls for our exit, waits
+    for the install to finish, and launches the freshly-installed
+    ``alpha-osk.exe``. See ``src/_update_relauncher.py`` for the full
+    flow + rationale.
+
+    Returns True on successful spawn (not "relaunch succeeded" — we'll
+    be dead before we could observe that). False is logged but the
+    install proceeds anyway: the in-installer ``Exec explorer.exe``
+    fallback in ``installer.nsh::customInstall`` is still wired and
+    sometimes works, so we'd rather try-and-maybe-fail than abort the
+    update.
+    """
+    try:
+        # Lazy import — keeps the module load cost off normal startup.
+        try:
+            from src.platform import get_config_dir
+        except ImportError:
+            from .platform import get_config_dir  # type: ignore
+        try:
+            from src.__version__ import __version__ as current_version
+        except ImportError:
+            from .__version__ import __version__ as current_version  # type: ignore
+
+        # Resolve target install dir. In frozen mode ``sys.executable``
+        # IS the installed alpha-osk.exe; in dev we don't actually
+        # auto-update so this branch is academic, but we still write
+        # something deterministic so tests can drive the path.
+        if getattr(sys, "frozen", False):
+            target_exe = Path(sys.executable)
+            cmd = [
+                str(target_exe),
+                "--update-relauncher",
+                "--parent-pid", str(os.getpid()),
+                "--new-version", new_version,
+                "--previous-version", current_version,
+                "--target-exe", str(target_exe),
+                "--config-dir", str(get_config_dir()),
+            ]
+        else:
+            # Dev mode — use python -m for the relauncher, target exe
+            # is whatever sys.executable points at (no install dir to
+            # poll, so the wait loop will time out harmlessly).
+            target_exe = Path(sys.executable)
+            cmd = [
+                sys.executable, "-m", "src.keyboard_app",
+                "--update-relauncher",
+                "--parent-pid", str(os.getpid()),
+                "--new-version", new_version,
+                "--previous-version", current_version,
+                "--target-exe", str(target_exe),
+                "--config-dir", str(get_config_dir()),
+            ]
+
+        flags = 0
+        if sys.platform == "win32":
+            # Detach: the helper survives our taskkill. No new console.
+            flags = (
+                getattr(subprocess, "DETACHED_PROCESS", 0)
+                | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            )
+        subprocess.Popen(
+            cmd, creationflags=flags, close_fds=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        _logger.info("Spawned update relauncher (parent pid=%d)", os.getpid())
+        return True
+    except Exception as exc:                                  # noqa: BLE001
+        _logger.warning("Failed to spawn update relauncher: %s", exc)
+        return False
+
+
 def download_and_install(
     info: UpdateInfo,
     *,
@@ -514,11 +594,18 @@ def download_and_install(
             _logger.error("Aborting install — signature verification failed")
             return False, "Signature check failed (see log)"
 
+        # Spawn the detached user-IL relauncher BEFORE elevation. This
+        # is the primary mechanism for restarting the OSK after the
+        # install completes; the in-installer Exec explorer.exe trick
+        # is now a fallback (it silently fails on some Windows configs
+        # because of integrity-level rules around elevated parents
+        # spawning user-mode children). See _spawn_relauncher.
+        _spawn_relauncher(info.version)
+
         # /S = NSIS silent install; the installer kills the running
-        # alpha-osk.exe, runs the old uninstaller, installs the new
-        # build, and relaunches the freshly-installed app via the
-        # explorer.exe trick in installer.nsh's customInstall macro
-        # (drops the admin token so the OSK runs at the user's IL).
+        # alpha-osk.exe, runs the old uninstaller, and installs the
+        # new build. The relauncher we just spawned will pick up the
+        # new exe and launch it once the install completes.
         _logger.info("Launching signed installer: %s", dest)
         ok, err = _launch_installer(dest)
         if not ok:

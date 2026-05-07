@@ -7,6 +7,7 @@ don't want tests injecting real keystrokes.
 
 from __future__ import annotations
 
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -472,6 +473,67 @@ class TestWordContextDrillDown:
         # facing casing without worrying about the stored form.
         assert ctx["word"] == "claude"
         assert ctx["count"] == 5
+
+
+class TestUpdateHandoffConsumption:
+    """consumeUpdateHandoff drives the post-update toast on first launch."""
+
+    def test_returns_empty_when_no_handoff_file(
+        self, bridge: KeyboardBridge, tmp_path, monkeypatch,
+    ):
+        monkeypatch.setattr("src.platform.get_config_dir", lambda: tmp_path)
+        result = bridge.consumeUpdateHandoff()
+        assert result == {}
+
+    def test_reads_and_returns_payload(self, bridge: KeyboardBridge, tmp_path, monkeypatch):
+        import json as _json
+        import time as _time
+        monkeypatch.setattr("src.platform.get_config_dir", lambda: tmp_path)
+        (tmp_path / "update_handoff.json").write_text(_json.dumps({
+            "version": "1.0.16",
+            "previous_version": "1.0.15",
+            "completed_at": _time.time(),
+        }))
+        result = bridge.consumeUpdateHandoff()
+        assert result == {"version": "1.0.16", "previousVersion": "1.0.15"}
+
+    def test_deletes_file_after_read(self, bridge: KeyboardBridge, tmp_path, monkeypatch):
+        import json as _json
+        import time as _time
+        monkeypatch.setattr("src.platform.get_config_dir", lambda: tmp_path)
+        path = tmp_path / "update_handoff.json"
+        path.write_text(_json.dumps({
+            "version": "1.0.16",
+            "previous_version": "1.0.15",
+            "completed_at": _time.time(),
+        }))
+        bridge.consumeUpdateHandoff()
+        # Single-use breadcrumb — the next launch must not re-toast.
+        assert not path.exists()
+        # Subsequent calls return empty.
+        assert bridge.consumeUpdateHandoff() == {}
+
+    def test_stale_handoff_is_discarded(self, bridge: KeyboardBridge, tmp_path, monkeypatch):
+        import json as _json
+        monkeypatch.setattr("src.platform.get_config_dir", lambda: tmp_path)
+        # 10 minutes ago — older than the 5-min freshness window.
+        (tmp_path / "update_handoff.json").write_text(_json.dumps({
+            "version": "1.0.16",
+            "previous_version": "1.0.15",
+            "completed_at": time.time() - 600,
+        }))
+        result = bridge.consumeUpdateHandoff()
+        assert result == {}
+        # File is also deleted so it doesn't sit around forever.
+        assert not (tmp_path / "update_handoff.json").exists()
+
+    def test_malformed_json_is_handled(self, bridge: KeyboardBridge, tmp_path, monkeypatch):
+        monkeypatch.setattr("src.platform.get_config_dir", lambda: tmp_path)
+        (tmp_path / "update_handoff.json").write_text("{not json")
+        result = bridge.consumeUpdateHandoff()
+        assert result == {}
+        # Garbage file is purged — wouldn't want it to keep showing up.
+        assert not (tmp_path / "update_handoff.json").exists()
 
 
 class TestActiveContextSignal:
