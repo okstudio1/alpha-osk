@@ -299,12 +299,33 @@ Item {
                     Layout.fillWidth: true
                     spacing: 6
 
+                    // Bar scales relative to the top word's count so the
+                    // ranking actually reads as a ranking.  The earlier
+                    // formula (count * 3 capped at 60 px) saturated the
+                    // moment a word was used 20+ times, which for "and",
+                    // "the", "to" is immediately, so every bar drew the
+                    // same width.  Now the #1 word always fills the
+                    // 80 px allotment and the rest scale proportionally.
                     Rectangle {
-                        width: Math.max(4, Math.min(60, modelData.count * 3))
+                        Layout.preferredWidth: 80
                         height: 12
-                        radius: 2
-                        color: "#4a9eff"
-                        opacity: 1.0 - (index * 0.15)
+                        color: "transparent"
+
+                        Rectangle {
+                            height: parent.height
+                            width: {
+                                var top = topWordsCol.activeTopWords
+                                if (!top || top.length === 0) return 0
+                                var maxC = top[0].count
+                                if (maxC <= 0) return 4
+                                return Math.max(4, parent.width * modelData.count / maxC)
+                            }
+                            radius: 2
+                            color: "#4a9eff"
+                            opacity: 1.0 - (index * 0.15)
+
+                            Behavior on width { NumberAnimation { duration: 250 } }
+                        }
                     }
 
                     Text {
