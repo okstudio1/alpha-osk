@@ -681,22 +681,32 @@ class HybridPredictor(QObject):
         """Learn a single word (e.g., when user types it)."""
         self._ngram.learn_word(word)
 
+    def unlearn_word(self, word: str) -> bool:
+        """Reverse one sighting of a word — see ``NgramPredictor.unlearn_word``."""
+        return self._ngram.unlearn_word(word)
+
     def learn_from_selection(self, context: str, selected_word: str) -> None:
         """
         Learn when user selects a prediction.
 
-        This helps the model understand which predictions are useful.
+        Boosts the selected word's unigram via :meth:`learn_word` and
+        strengthens only the trailing (prev, selected) bigram and
+        (prev2, prev1, selected) trigram via
+        :meth:`NgramPredictor.reinforce_context`.
+
+        Earlier this passed the entire ``context + selected_word`` to
+        :meth:`NgramPredictor.learn`, which re-incremented every bigram
+        in the running context on each prediction click — inflating the
+        early-context edges in proportion to how many predictions the
+        user picked per sentence. Targeted reinforcement gives a clean
+        +1 to the edge that was actually validated by the click.
 
         Args:
             context: The context when prediction was made
             selected_word: The word the user selected
         """
-        # Boost the selected word
         self._ngram.learn_word(selected_word)
-
-        # Learn the context -> word association
-        full_text = f"{context} {selected_word}"
-        self._ngram.learn(full_text)
+        self._ngram.reinforce_context(context, selected_word)
 
     def save(self) -> None:
         """Save all models to disk."""

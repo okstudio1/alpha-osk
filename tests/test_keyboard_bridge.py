@@ -361,6 +361,153 @@ class TestContextTracking:
         bridge.pressSpecialKey("backspace")
         assert bridge._current_word == "hi"
 
+    def test_backspace_into_typo_retracts_candidate_count(
+        self, bridge: KeyboardBridge,
+    ):
+        """Backspace-as-negative-signal: when a word the user just
+        completed is rehydrated by backspacing past its trailing space,
+        the rehydrate hook retracts one sighting so a typo typed once
+        and immediately corrected can't accumulate toward the candidate
+        gate. We seed candidate_counts directly to keep the test
+        deterministic — the on-disk user model in ``get_model_dir()``
+        may already have arbitrary words promoted, which makes typing-
+        based seeding flaky.
+        """
+        ngram = bridge._predictor._ngram
+        # Seed: word is in candidate_counts and the bridge's context
+        # buffer reflects "we already typed it and pressed space".
+        ngram._candidate_counts["zephyrish"] = 1
+        bridge._context_buffer = "zephyrish "
+        # Backspace pops the trailing space → rehydrate fires.
+        bridge.pressSpecialKey("backspace")
+        assert bridge._current_word == "zephyrish"
+        # Sighting retracted by the unlearn call inside _rehydrate.
+        assert "zephyrish" not in ngram._candidate_counts
+
+    def test_backspace_into_word_skips_unlearn_in_privacy_mode(
+        self, bridge: KeyboardBridge,
+    ):
+        """Privacy mode suppresses learning AND unlearning. Symmetry
+        matters: the original space-press never reached learn() in
+        privacy mode, so retracting on backspace would push counts
+        negative for whatever was actually in the table from past
+        non-private typing.
+        """
+        ngram = bridge._predictor._ngram
+        ngram._candidate_counts["zephyrish"] = 1
+        bridge._context_buffer = "zephyrish "
+        # setPrivacyMode pins _privacy_mode_manual so the per-keystroke
+        # auto-detect doesn't reset the flag from system state during
+        # the test.
+        bridge.setPrivacyMode(True)
+        # _enter_privacy_mode() scrubs context_buffer — re-seed after.
+        bridge._context_buffer = "zephyrish "
+        bridge.pressSpecialKey("backspace")
+        # In privacy mode the backspace branch is bypassed entirely, so
+        # _current_word and _context_buffer are untouched. The point of
+        # the test is that whatever was in candidate_counts beforehand
+        # stays put.
+        assert ngram._candidate_counts.get("zephyrish", 0) == 1
+
+
+class TestWordContextDrillDown:
+    """getWordContext returns the structure the drill-down panel needs."""
+
+    def test_returns_word_count_and_lists(self, bridge: KeyboardBridge):
+        # Use synthetic tokens (zzq*) that won't collide with whatever
+        # the user's on-disk ngram_model.json already holds — the bridge
+        # fixture loads real user state on construction.
+        ngram = bridge._predictor._ngram
+        ngram.unigrams["zzqclaude"] = 12
+        ngram.user_vocab["zzqclaude"] = 7
+        ngram.bigrams["zzqasked"]["zzqclaude"] = 4
+        ngram.bigrams["zzqtold"]["zzqclaude"] = 2
+        ngram.bigrams["zzqclaude"]["zzqsaid"] = 5
+        ngram.bigrams["zzqclaude"]["zzqwrote"] = 1
+        ngram.trigrams["zzqi zzqasked"]["zzqclaude"] = 3
+        ngram.trigrams["zzqasked zzqclaude"]["zzqyesterday"] = 2
+
+        ctx = bridge.getWordContext("zzqclaude")
+
+        assert ctx["word"] == "zzqclaude"
+        assert ctx["count"] == 12
+        assert ctx["userCount"] == 7
+        # Successors sorted by count.
+        assert ctx["successors"] == [
+            {"word": "zzqsaid", "count": 5},
+            {"word": "zzqwrote", "count": 1},
+        ]
+        # Predecessors sorted by count.
+        assert ctx["predecessors"] == [
+            {"word": "zzqasked", "count": 4},
+            {"word": "zzqtold", "count": 2},
+        ]
+        # Trigrams: trailing window "i asked claude" and middle window
+        # "asked claude yesterday".
+        phrases = {(t["phrase"], t["position"], t["count"]) for t in ctx["trigrams"]}
+        assert ("zzqi zzqasked zzqclaude", "trailing", 3) in phrases
+        assert ("zzqasked zzqclaude zzqyesterday", "middle", 2) in phrases
+
+    def test_empty_word_returns_empty(self, bridge: KeyboardBridge):
+        ctx = bridge.getWordContext("")
+        assert ctx["word"] == ""
+        assert ctx["count"] == 0
+        assert ctx["successors"] == []
+        assert ctx["predecessors"] == []
+        assert ctx["trigrams"] == []
+
+    def test_unknown_word_returns_zeroed_lists(self, bridge: KeyboardBridge):
+        ctx = bridge.getWordContext("notarealwordzzz")
+        assert ctx["word"] == "notarealwordzzz"
+        assert ctx["count"] == 0
+        assert ctx["successors"] == []
+        assert ctx["predecessors"] == []
+        assert ctx["trigrams"] == []
+
+    def test_lowercases_input(self, bridge: KeyboardBridge):
+        ngram = bridge._predictor._ngram
+        ngram.unigrams["claude"] = 5
+        ctx = bridge.getWordContext("Claude")
+        # Input lowercased before lookup so QML callers can pass user-
+        # facing casing without worrying about the stored form.
+        assert ctx["word"] == "claude"
+        assert ctx["count"] == 5
+
+
+class TestActiveContextSignal:
+    """activeContextChanged drives the live pulse in the visualization."""
+
+    def test_emits_prev_and_current_on_typing(self, bridge: KeyboardBridge):
+        emitted: list[tuple[str, str]] = []
+        bridge.activeContextChanged.connect(
+            lambda prev, current: emitted.append((prev, current)),
+        )
+        bridge._context_buffer = "I have asked "
+        bridge._current_word = ""
+        bridge.pressKey("c")
+        # At least one emit with prev='asked', current='c'.
+        assert ("asked", "c") in emitted
+
+    def test_empty_prev_when_no_context(self, bridge: KeyboardBridge):
+        emitted: list[tuple[str, str]] = []
+        bridge.activeContextChanged.connect(
+            lambda prev, current: emitted.append((prev, current)),
+        )
+        bridge._context_buffer = ""
+        bridge._current_word = ""
+        bridge.pressKey("h")
+        assert ("", "h") in emitted
+
+    def test_suppressed_in_privacy_mode(self, bridge: KeyboardBridge):
+        emitted: list[tuple[str, str]] = []
+        bridge.activeContextChanged.connect(
+            lambda prev, current: emitted.append((prev, current)),
+        )
+        bridge.setPrivacyMode(True)
+        bridge.pressKey("h")
+        # Privacy mode must not leak the typed character into the viz.
+        assert emitted == []
+
 
 class TestCompatMode:
     """Compatibility mode — race fix for remote-desktop sessions and

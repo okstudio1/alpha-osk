@@ -11,12 +11,53 @@ Item {
     property var vizData: null
     property int currentTab: 0
 
+    // Drill-down state. selectedWord is non-empty while the right-side
+    // drill-down panel is open; wordContext holds the bridge response.
+    property string selectedWord: ""
+    property var wordContext: null
+
+    // Live-context highlighting from KeyboardBridge.activeContextChanged.
+    // Updated as the user types in the foreground app while the viz is
+    // open; consumers (cloud + flow canvases) repaint to pulse the
+    // matching node and edge.
+    property string activePrevWord: ""
+    property string activeCurrentWord: ""
+    // Bumped on every active-context tick so the canvases can drive a
+    // short pulse animation off a single rebinding (instead of needing
+    // a Timer per canvas).
+    property int activePulse: 0
+
     // Refresh data from bridge
     function refresh() {
         if (keyboard) vizData = keyboard.getVisualizationData()
     }
 
+    function openDrillDown(word) {
+        if (!keyboard || !word) return
+        selectedWord = word
+        wordContext = keyboard.getWordContext(word)
+    }
+
+    function closeDrillDown() {
+        selectedWord = ""
+        wordContext = null
+    }
+
     Component.onCompleted: refresh()
+
+    Connections {
+        target: keyboard
+        ignoreUnknownSignals: true
+        function onActiveContextChanged(prev, current) {
+            vizPanel.activePrevWord = prev
+            vizPanel.activeCurrentWord = current
+            vizPanel.activePulse = vizPanel.activePulse + 1
+            // Repaint just the active highlight layers; full canvases
+            // don't need to rebuild geometry.
+            cloudCanvas.requestPaint()
+            flowCanvas.requestPaint()
+        }
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -166,15 +207,35 @@ Item {
                         ctx.clearRect(0, 0, width, height)
                         for (var i = 0; i < circles.length; i++) {
                             var c = circles[i]
+                            var isActive = (c.word === vizPanel.activeCurrentWord)
+                                || (c.word === vizPanel.activePrevWord)
+                            var isSelected = (c.word === vizPanel.selectedWord)
+
+                            // Active-typing pulse — outer ring glow
+                            if (isActive) {
+                                ctx.beginPath()
+                                ctx.arc(c.x, c.y, c.r + 8, 0, Math.PI * 2)
+                                ctx.fillStyle = Qt.rgba(0.4, 0.8, 1.0, 0.25)
+                                ctx.fill()
+                            }
+
                             // Circle fill
                             ctx.beginPath()
                             ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2)
                             ctx.fillStyle = c.color
                             ctx.fill()
 
-                            // Subtle border
-                            ctx.strokeStyle = Qt.lighter(c.color, 1.3)
-                            ctx.lineWidth = 1
+                            // Border — selection > active > default.
+                            if (isSelected) {
+                                ctx.strokeStyle = "#ffffff"
+                                ctx.lineWidth = 2.5
+                            } else if (isActive) {
+                                ctx.strokeStyle = "#7ec8ff"
+                                ctx.lineWidth = 2
+                            } else {
+                                ctx.strokeStyle = Qt.lighter(c.color, 1.3)
+                                ctx.lineWidth = 1
+                            }
                             ctx.stroke()
 
                             // Word label
@@ -271,6 +332,33 @@ Item {
                     onWidthChanged: if (visible && vizData) buildCloud()
                     onHeightChanged: if (visible && vizData) buildCloud()
                     onVisibleChanged: if (visible && vizData) buildCloud()
+
+                    MouseArea {
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: cloudHoverWord !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        property string cloudHoverWord: ""
+
+                        function pickWord(mx, my) {
+                            var arr = cloudCanvas.circles
+                            for (var i = 0; i < arr.length; i++) {
+                                var c = arr[i]
+                                var dx = mx - c.x
+                                var dy = my - c.y
+                                if (dx * dx + dy * dy <= c.r * c.r) {
+                                    return c.word
+                                }
+                            }
+                            return ""
+                        }
+
+                        onPositionChanged: cloudHoverWord = pickWord(mouse.x, mouse.y)
+                        onExited: cloudHoverWord = ""
+                        onClicked: {
+                            var w = pickWord(mouse.x, mouse.y)
+                            if (w !== "") vizPanel.openDrillDown(w)
+                        }
+                    }
                 }
 
                 // ============ TAB 1: WORD FLOW ============
@@ -286,6 +374,10 @@ Item {
                         var ctx = getContext("2d")
                         ctx.clearRect(0, 0, width, height)
 
+                        var activePrev = vizPanel.activePrevWord
+                        var activeCur = vizPanel.activeCurrentWord
+                        var selWord = vizPanel.selectedWord
+
                         // Draw edges
                         for (var i = 0; i < flowEdges.length; i++) {
                             var e = flowEdges[i]
@@ -293,9 +385,16 @@ Item {
                             var to = e.toNode
                             if (!from || !to) continue
 
+                            var isActiveEdge = (activePrev !== "" && from.word === activePrev
+                                                && activeCur !== "" && to.word === activeCur)
                             var alpha = Math.min(0.7, 0.15 + e.weight * 0.5)
-                            ctx.strokeStyle = Qt.rgba(0.4, 0.7, 1.0, alpha)
-                            ctx.lineWidth = Math.max(0.5, e.weight * 3)
+                            if (isActiveEdge) {
+                                ctx.strokeStyle = Qt.rgba(1.0, 0.85, 0.3, 0.95)
+                                ctx.lineWidth = Math.max(2.5, e.weight * 4 + 1.5)
+                            } else {
+                                ctx.strokeStyle = Qt.rgba(0.4, 0.7, 1.0, alpha)
+                                ctx.lineWidth = Math.max(0.5, e.weight * 3)
+                            }
 
                             // Curved edge
                             var mx = (from.x + to.x) / 2
@@ -331,7 +430,9 @@ Item {
                                 ctx.lineTo(ax - ady * arrSize * 0.5, ay + adx * arrSize * 0.5)
                                 ctx.lineTo(ax + ady * arrSize * 0.5, ay - adx * arrSize * 0.5)
                                 ctx.closePath()
-                                ctx.fillStyle = Qt.rgba(0.4, 0.7, 1.0, alpha)
+                                ctx.fillStyle = isActiveEdge
+                                    ? Qt.rgba(1.0, 0.85, 0.3, 0.95)
+                                    : Qt.rgba(0.4, 0.7, 1.0, alpha)
                                 ctx.fill()
                             }
                         }
@@ -339,11 +440,17 @@ Item {
                         // Draw nodes
                         for (var j = 0; j < nodes.length; j++) {
                             var n = nodes[j]
+                            var isActiveNode = (n.word === activePrev) || (n.word === activeCur)
+                            var isSelectedNode = (n.word === selWord)
 
-                            // Glow
+                            // Glow — bigger + warmer for the active node.
+                            var glowR = isActiveNode ? n.r + 9 : n.r + 4
+                            var glowFill = isActiveNode
+                                ? Qt.rgba(1.0, 0.85, 0.3, 0.35)
+                                : Qt.rgba(0.3, 0.6, 1.0, 0.15)
                             ctx.beginPath()
-                            ctx.arc(n.x, n.y, n.r + 4, 0, Math.PI * 2)
-                            ctx.fillStyle = Qt.rgba(0.3, 0.6, 1.0, 0.15)
+                            ctx.arc(n.x, n.y, glowR, 0, Math.PI * 2)
+                            ctx.fillStyle = glowFill
                             ctx.fill()
 
                             // Node circle
@@ -351,8 +458,16 @@ Item {
                             ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2)
                             ctx.fillStyle = n.color
                             ctx.fill()
-                            ctx.strokeStyle = Qt.lighter(n.color, 1.4)
-                            ctx.lineWidth = 1.5
+                            if (isSelectedNode) {
+                                ctx.strokeStyle = "#ffffff"
+                                ctx.lineWidth = 2.5
+                            } else if (isActiveNode) {
+                                ctx.strokeStyle = "#ffd84d"
+                                ctx.lineWidth = 2
+                            } else {
+                                ctx.strokeStyle = Qt.lighter(n.color, 1.4)
+                                ctx.lineWidth = 1.5
+                            }
                             ctx.stroke()
 
                             // Label
@@ -477,6 +592,33 @@ Item {
                     onWidthChanged: if (visible && vizData) buildFlow()
                     onHeightChanged: if (visible && vizData) buildFlow()
                     onVisibleChanged: if (visible && vizData) buildFlow()
+
+                    MouseArea {
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: flowHoverWord !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        property string flowHoverWord: ""
+
+                        function pickNode(mx, my) {
+                            var arr = flowCanvas.nodes
+                            for (var i = 0; i < arr.length; i++) {
+                                var n = arr[i]
+                                var dx = mx - n.x
+                                var dy = my - n.y
+                                if (dx * dx + dy * dy <= n.r * n.r) {
+                                    return n.word
+                                }
+                            }
+                            return ""
+                        }
+
+                        onPositionChanged: flowHoverWord = pickNode(mouse.x, mouse.y)
+                        onExited: flowHoverWord = ""
+                        onClicked: {
+                            var w = pickNode(mouse.x, mouse.y)
+                            if (w !== "") vizPanel.openDrillDown(w)
+                        }
+                    }
                 }
 
                 // ============ TAB 2: DASHBOARD ============
@@ -855,6 +997,241 @@ Item {
                         text: "Start typing to build your language model"
                         color: "#666"
                         font.pixelSize: 13
+                    }
+                }
+
+                // -- Drill-down side panel --
+                // Slides in from the right when the user clicks a word
+                // in either the cloud or flow tab. Shows top
+                // successors / predecessors / trigram windows for the
+                // selected word, sourced from KeyboardBridge.getWordContext.
+                Rectangle {
+                    id: drillDownPanel
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    anchors.right: parent.right
+                    width: 260
+                    color: "#16213e"
+                    border.color: "#2a4a7a"
+                    border.width: 1
+                    radius: 8
+                    visible: vizPanel.selectedWord !== "" && vizPanel.currentTab !== 2
+                    z: 5
+
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: 12
+                        spacing: 8
+
+                        // Header
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 1
+                                Text {
+                                    text: vizPanel.wordContext
+                                        ? vizPanel.wordContext.word
+                                        : ""
+                                    color: "#fff"
+                                    font.pixelSize: 18
+                                    font.weight: Font.DemiBold
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                }
+                                Text {
+                                    text: vizPanel.wordContext
+                                        ? "seen " + vizPanel.wordContext.count
+                                          + (vizPanel.wordContext.userCount > 0
+                                             ? " — " + vizPanel.wordContext.userCount + " by you"
+                                             : "")
+                                        : ""
+                                    color: "#9bb"
+                                    font.pixelSize: 11
+                                }
+                            }
+
+                            Rectangle {
+                                width: 22; height: 22; radius: 11
+                                color: closeDrillMa.containsMouse ? "#334" : "transparent"
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "✕"
+                                    color: "#aaa"
+                                    font.pixelSize: 12
+                                }
+                                MouseArea {
+                                    id: closeDrillMa
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: vizPanel.closeDrillDown()
+                                }
+                            }
+                        }
+
+                        Rectangle { Layout.fillWidth: true; height: 1; color: "#2a4a7a" }
+
+                        Flickable {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            contentHeight: drillCol.implicitHeight
+                            clip: true
+                            boundsBehavior: Flickable.StopAtBounds
+
+                            ColumnLayout {
+                                id: drillCol
+                                width: parent.width
+                                spacing: 12
+
+                                // Successors: word → next
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 4
+                                    Text {
+                                        text: "Often followed by"
+                                        color: "#9bb"
+                                        font.pixelSize: 11
+                                        font.weight: Font.DemiBold
+                                    }
+                                    Repeater {
+                                        model: vizPanel.wordContext
+                                            ? vizPanel.wordContext.successors
+                                            : []
+                                        delegate: Rectangle {
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 22
+                                            color: succMa.containsMouse ? "#1e2e52" : "transparent"
+                                            radius: 4
+
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 6
+                                                anchors.rightMargin: 6
+                                                Text {
+                                                    text: modelData.word
+                                                    color: "#dde"
+                                                    font.pixelSize: 12
+                                                    Layout.fillWidth: true
+                                                    elide: Text.ElideRight
+                                                }
+                                                Text {
+                                                    text: modelData.count
+                                                    color: "#7ec8ff"
+                                                    font.pixelSize: 11
+                                                }
+                                            }
+                                            MouseArea {
+                                                id: succMa
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: vizPanel.openDrillDown(modelData.word)
+                                            }
+                                        }
+                                    }
+                                    Text {
+                                        visible: vizPanel.wordContext
+                                            && vizPanel.wordContext.successors.length === 0
+                                        text: "(no successors yet)"
+                                        color: "#666"
+                                        font.pixelSize: 11
+                                    }
+                                }
+
+                                // Predecessors: prev → word
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 4
+                                    Text {
+                                        text: "Often preceded by"
+                                        color: "#9bb"
+                                        font.pixelSize: 11
+                                        font.weight: Font.DemiBold
+                                    }
+                                    Repeater {
+                                        model: vizPanel.wordContext
+                                            ? vizPanel.wordContext.predecessors
+                                            : []
+                                        delegate: Rectangle {
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 22
+                                            color: predMa.containsMouse ? "#1e2e52" : "transparent"
+                                            radius: 4
+
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 6
+                                                anchors.rightMargin: 6
+                                                Text {
+                                                    text: modelData.word
+                                                    color: "#dde"
+                                                    font.pixelSize: 12
+                                                    Layout.fillWidth: true
+                                                    elide: Text.ElideRight
+                                                }
+                                                Text {
+                                                    text: modelData.count
+                                                    color: "#7ec8ff"
+                                                    font.pixelSize: 11
+                                                }
+                                            }
+                                            MouseArea {
+                                                id: predMa
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: vizPanel.openDrillDown(modelData.word)
+                                            }
+                                        }
+                                    }
+                                    Text {
+                                        visible: vizPanel.wordContext
+                                            && vizPanel.wordContext.predecessors.length === 0
+                                        text: "(no predecessors yet)"
+                                        color: "#666"
+                                        font.pixelSize: 11
+                                    }
+                                }
+
+                                // Trigram windows: X word Y / X Y word
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 4
+                                    visible: vizPanel.wordContext
+                                        && vizPanel.wordContext.trigrams.length > 0
+                                    Text {
+                                        text: "Phrase contexts"
+                                        color: "#9bb"
+                                        font.pixelSize: 11
+                                        font.weight: Font.DemiBold
+                                    }
+                                    Repeater {
+                                        model: vizPanel.wordContext
+                                            ? vizPanel.wordContext.trigrams
+                                            : []
+                                        delegate: RowLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 4
+                                            Text {
+                                                text: modelData.phrase
+                                                color: "#dde"
+                                                font.pixelSize: 12
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideRight
+                                            }
+                                            Text {
+                                                text: modelData.count
+                                                color: "#7ec8ff"
+                                                font.pixelSize: 11
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

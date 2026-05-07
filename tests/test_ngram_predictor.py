@@ -649,3 +649,110 @@ class TestUserTotalIncremental:
         q._user_total = 99999
         q.load(saved_file)
         assert q._user_total == sum(q.user_vocab.values())
+
+
+class TestUnlearnWord:
+    """Backspace-as-negative-signal: retract one sighting."""
+
+    def test_unlearn_decrements_candidate_count(self):
+        p = NgramPredictor()
+        # "zephyrish" is plausible-shape but not in the base dict, so
+        # the first learn() call lands in candidate_counts.
+        p.learn("zephyrish")
+        assert p._candidate_counts["zephyrish"] == 1
+        assert p.unlearn_word("zephyrish") is True
+        assert "zephyrish" not in p._candidate_counts
+        assert p.user_vocab.get("zephyrish", 0) == 0
+
+    def test_unlearn_partial_candidate_count(self):
+        p = NgramPredictor()
+        p.learn("zephyrish")
+        p.learn("zephyrish")
+        assert p._candidate_counts["zephyrish"] == 2
+        p.unlearn_word("zephyrish")
+        assert p._candidate_counts["zephyrish"] == 1
+        # Still not promoted.
+        assert p.user_vocab.get("zephyrish", 0) == 0
+
+    def test_unlearn_decrements_user_vocab_when_promoted(self):
+        p = NgramPredictor()
+        # Three sightings promote into user_vocab.
+        for _ in range(3):
+            p.learn("zephyrish")
+        before_user = p.user_vocab["zephyrish"]
+        before_total = p._user_total
+        before_total_words = p.total_words
+        assert p.unlearn_word("zephyrish") is True
+        assert p.user_vocab["zephyrish"] == before_user - 1
+        assert p._user_total == before_total - 1
+        assert p.total_words == before_total_words - 1
+        # Invariant preserved.
+        assert p._user_total == sum(p.user_vocab.values())
+
+    def test_unlearn_returns_false_for_unknown_word(self):
+        p = NgramPredictor()
+        # Not in candidate_counts and not in user_vocab.
+        assert p.unlearn_word("thisismadeupzzz") is False
+
+    def test_unlearn_does_not_touch_bigrams(self):
+        p = NgramPredictor()
+        # Both base-dict words → land in user_vocab and bigrams immediately.
+        p.learn("the cat")
+        bigram_before = p.bigrams["the"]["cat"]
+        p.unlearn_word("cat")
+        # One backspace shouldn't crater bigram history.
+        assert p.bigrams["the"]["cat"] == bigram_before
+
+    def test_unlearn_case_insensitive(self):
+        p = NgramPredictor()
+        p.learn("Zephyrish")  # tokenized to lowercase
+        assert p._candidate_counts["zephyrish"] == 1
+        # Caller passes whatever case (e.g. mid-word cap), unlearn lowers it.
+        p.unlearn_word("Zephyrish")
+        assert "zephyrish" not in p._candidate_counts
+
+
+class TestReinforceContext:
+    """Targeted (prev, sel) bigram + (prev2, prev1, sel) trigram bumps."""
+
+    def test_reinforces_only_trailing_bigram(self):
+        p = NgramPredictor()
+        # Establish a baseline: type "I have asked" — three bigrams formed.
+        p.learn("I have asked")
+        before_i_have = p.bigrams["i"]["have"]
+        before_have_asked = p.bigrams["have"]["asked"]
+        # User clicks "claude" — only the (asked, claude) edge should grow.
+        p.reinforce_context("I have asked", "claude")
+        assert p.bigrams["asked"]["claude"] == 1
+        # Earlier context bigrams must NOT be re-incremented.
+        assert p.bigrams["i"]["have"] == before_i_have
+        assert p.bigrams["have"]["asked"] == before_have_asked
+
+    def test_reinforces_trigram_when_two_prev_tokens(self):
+        p = NgramPredictor()
+        p.reinforce_context("I have asked", "claude")
+        # Trigram key uses the last two tokens.
+        assert p.trigrams["have asked"]["claude"] == 1
+
+    def test_no_trigram_with_only_one_prev_token(self):
+        p = NgramPredictor()
+        p.reinforce_context("hello", "world")
+        assert p.bigrams["hello"]["world"] == 1
+        # Only one prev token → no trigram bump.
+        assert "hello" not in p.trigrams or "world" not in p.trigrams.get("hello", {})
+
+    def test_no_op_with_empty_context(self):
+        p = NgramPredictor()
+        p.reinforce_context("", "claude")
+        # No prev token → no bigram, no trigram.
+        assert "claude" not in p.bigrams.get("", {})
+
+    def test_no_op_with_empty_selection(self):
+        p = NgramPredictor()
+        p.reinforce_context("hello", "")
+        assert p.bigrams.get("hello", {}) == {}
+
+    def test_reinforce_lowercases_selection(self):
+        p = NgramPredictor()
+        p.reinforce_context("hello", "World")
+        assert p.bigrams["hello"]["world"] == 1

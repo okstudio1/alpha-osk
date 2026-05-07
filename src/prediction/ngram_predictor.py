@@ -721,6 +721,79 @@ class NgramPredictor:
             self._user_total += 5
             self.total_words += 5
 
+    def reinforce_context(self, context: str, selected_word: str) -> None:
+        """Add +1 to the trailing edges into ``selected_word``.
+
+        Strengthens the (prev_word, selected_word) bigram and the
+        (prev2, prev1, selected_word) trigram, where prev1/prev2 are the
+        last 1/2 tokens of ``context``. Earlier bigrams in the context
+        are deliberately NOT touched — they were already counted when
+        the user typed those words, and re-incrementing them on every
+        prediction click would inflate them in proportion to how many
+        predictions the user picks per sentence.
+
+        Used by :meth:`HybridPredictor.learn_from_selection` so picking a
+        prediction strengthens the context→word edge that was just
+        validated, without polluting the rest of the running buffer.
+        """
+        if not selected_word:
+            return
+        sel = selected_word.lower().strip()
+        if not sel:
+            return
+        prev_tokens = self._tokenize(context)
+        if not prev_tokens:
+            return
+        prev_word = prev_tokens[-1]
+        self.bigrams[prev_word][sel] += 1
+        if len(prev_tokens) >= 2:
+            prev2 = prev_tokens[-2]
+            self.trigrams[f"{prev2} {prev_word}"][sel] += 1
+
+    def unlearn_word(self, word: str) -> bool:
+        """Reverse one sighting of a word — backspace-as-negative-signal.
+
+        When the user backspaces past a space and starts editing a word
+        whose ``learn()`` call already fired, retract that sighting so a
+        typo typed once and immediately corrected doesn't accumulate
+        toward the candidate-gate threshold.
+
+        Decrement priority:
+          - ``_candidate_counts[word]`` if present (most common — typo
+            never made it into ``user_vocab`` yet);
+          - else ``user_vocab[word]`` together with ``unigrams[word]``,
+            ``_user_total`` and ``total_words``, if the word was already
+            promoted.
+
+        Bigrams/trigrams are intentionally left alone. One backspace
+        shouldn't crater multi-word context history, and the magnitude
+        of context pollution from a single retracted sighting is small
+        compared to the user_vocab pollution this guard prevents.
+
+        Returns True if anything was decremented, False if the word was
+        unknown to the user-side tables (e.g. base-dict word with no
+        user-typed signal yet).
+        """
+        word = word.lower().strip()
+        if not word:
+            return False
+        if word in self._candidate_counts:
+            self._candidate_counts[word] -= 1
+            if self._candidate_counts[word] <= 0:
+                del self._candidate_counts[word]
+            return True
+        if word in self.user_vocab:
+            self.user_vocab[word] -= 1
+            self._user_total = max(0, self._user_total - 1)
+            self.unigrams[word] = max(0, self.unigrams.get(word, 0) - 1)
+            self.total_words = max(0, self.total_words - 1)
+            if self.user_vocab[word] <= 0:
+                del self.user_vocab[word]
+            if self.unigrams.get(word, 0) <= 0:
+                self.unigrams.pop(word, None)
+            return True
+        return False
+
     def save(self, path: Path) -> None:
         """Save model to JSON file."""
         data = {

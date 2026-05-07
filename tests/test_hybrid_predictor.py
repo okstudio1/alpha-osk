@@ -72,6 +72,26 @@ class TestHybridLearning:
         predictor.learn_from_selection("I want", "pizza")
         assert predictor._ngram.unigrams["pizza"] > 0
 
+    def test_learn_from_selection_targets_trailing_edge(self, predictor: HybridPredictor):
+        # Type a sentence so all the bigrams in the running context exist.
+        predictor.learn("I have asked")
+        before_i_have = predictor._ngram.bigrams["i"]["have"]
+        before_have_asked = predictor._ngram.bigrams["have"]["asked"]
+        # Click "claude" — only (asked, claude) should grow. Earlier
+        # bigrams used to be re-incremented on every click; that double-
+        # counted established edges in proportion to how many predictions
+        # the user picked per sentence.
+        predictor.learn_from_selection("I have asked", "claude")
+        assert predictor._ngram.bigrams["asked"]["claude"] == 1
+        assert predictor._ngram.bigrams["i"]["have"] == before_i_have
+        assert predictor._ngram.bigrams["have"]["asked"] == before_have_asked
+
+    def test_unlearn_word_forwards_to_ngram(self, predictor: HybridPredictor):
+        predictor._ngram.learn("zephyrish")
+        assert predictor._ngram._candidate_counts["zephyrish"] == 1
+        assert predictor.unlearn_word("zephyrish") is True
+        assert "zephyrish" not in predictor._ngram._candidate_counts
+
 
 class TestHybridAutocorrect:
     """Autocorrect integration."""

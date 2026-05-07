@@ -249,6 +249,14 @@ class KeyboardBridge(QObject):
     # Privacy signals
     privacyModeChanged = Signal(bool)
 
+    # Live-context signal for the language-model visualization. Fires on
+    # every keystroke that changes the typing context with
+    # ``(prev_word, current_partial)`` — the visualization uses it to
+    # pulse the active node and the active edge in the flow graph as
+    # the user types in the foreground app. Cheap by design: emits raw
+    # tokens, no formatting, and consumers throttle their own repaints.
+    activeContextChanged = Signal(str, str)
+
     # Auto-update signals — version, asset_name, notes (release-notes
     # markdown, already sanitised by the updater).  ``updateUnavailable``
     # fires after a manual "Check now" that found nothing — it lets the
@@ -1139,6 +1147,14 @@ class KeyboardBridge(QObject):
         """Request updated predictions from the engine."""
         context = self._context_buffer + self._current_word
         self._predictor.predict_with_refinement(context, n=self._prediction_count)
+        # Tell the language-model visualization what the active edge is
+        # so it can pulse the node + edge live as the user types.
+        # Privacy mode suppresses the emit — the viz must not leak
+        # password chars or password-field context.
+        if not self._privacy_mode:
+            ctx_tokens = self._context_buffer.split()
+            prev_word = ctx_tokens[-1].lower() if ctx_tokens else ""
+            self.activeContextChanged.emit(prev_word, self._current_word.lower())
 
     def _rehydrate_current_word_from_context(self) -> None:
         """Move a mid-edit partial word from context back into _current_word.
@@ -1151,6 +1167,15 @@ class KeyboardBridge(QObject):
         ``_context_buffer`` back to the last whitespace and moves them
         to ``_current_word``.  No-op when the tail is already whitespace
         (the user is between words) or when the buffer is empty.
+
+        Also retracts one sighting of the rehydrated word from the
+        n-gram predictor (backspace-as-negative-signal). The word's
+        ``learn()`` call fired when the user pressed space; if they're
+        now editing it, the most likely reason is a typo. The retract
+        only touches user-side tables (candidate_counts → user_vocab),
+        so a word the user has typed many times can't be unlearned by a
+        single backspace; if they re-complete the word with the same
+        spelling, ``learn()`` will count it again on the next space.
         """
         if not self._context_buffer:
             return
@@ -1169,6 +1194,8 @@ class KeyboardBridge(QObject):
         self._context_buffer = (
             self._context_buffer[:last_ws + 1] if last_ws >= 0 else ""
         )
+        if self._current_word and not self._privacy_mode:
+            self._predictor.unlearn_word(self._current_word)
 
     def _display_cased(self, predictions: List[str]) -> List[str]:
         """Transform predictions to match the user's active case mode.
@@ -2121,6 +2148,83 @@ class KeyboardBridge(QObject):
             "edges": edges,
             "stats": stats,
             "analytics": analytics,
+        }
+
+    @Slot(str, result="QVariant")
+    def getWordContext(self, word: str) -> Dict[str, Any]:
+        """Drill-down view of a single word's neighbourhood.
+
+        Returns the word's frequency along with its top successors
+        (bigram ``word → next``), top predecessors (``prev → word``),
+        and top trigram windows (``X word Y``). Driven by the click-
+        through panel in the language-model visualization — the cloud /
+        flow views are static aggregates, so the only way to inspect
+        *why* a word ranks where it does is to surface its actual
+        n-gram neighbours.
+
+        All counts come from the merged tables (``unigrams`` /
+        ``bigrams`` / ``trigrams``), so base-dictionary edges show
+        alongside user-typed reinforcement; the click-through is for
+        understanding the model's view of the word, not just the user's
+        contribution.
+        """
+        ngram = self._predictor._ngram
+        key = (word or "").lower().strip()
+        if not key:
+            return {
+                "word": "",
+                "count": 0,
+                "successors": [],
+                "predecessors": [],
+                "trigrams": [],
+            }
+
+        successors = sorted(
+            ngram.bigrams.get(key, {}).items(),
+            key=lambda kv: kv[1], reverse=True,
+        )[:8]
+
+        predecessors: list[tuple[str, int]] = []
+        for prev, nexts in ngram.bigrams.items():
+            cnt = nexts.get(key, 0)
+            if cnt > 0:
+                predecessors.append((prev, cnt))
+        predecessors.sort(key=lambda kv: kv[1], reverse=True)
+        predecessors = predecessors[:8]
+
+        trigram_windows: list[tuple[str, str, int]] = []
+        for tri_key, nexts in ngram.trigrams.items():
+            parts = tri_key.split(" ")
+            if len(parts) != 2:
+                continue
+            prev2, prev1 = parts
+            # Word in middle position: prev2 KEY next.
+            if prev1 == key:
+                for nxt, cnt in nexts.items():
+                    trigram_windows.append((f"{prev2} {key} {nxt}", "middle", cnt))
+            # Word in trailing position: prev2 prev1 KEY.
+            for nxt, cnt in nexts.items():
+                if nxt == key:
+                    trigram_windows.append(
+                        (f"{prev2} {prev1} {key}", "trailing", cnt),
+                    )
+        trigram_windows.sort(key=lambda t: t[2], reverse=True)
+        trigram_windows = trigram_windows[:6]
+
+        return {
+            "word": key,
+            "count": int(ngram.unigrams.get(key, 0)),
+            "userCount": int(ngram.user_vocab.get(key, 0)),
+            "successors": [
+                {"word": w, "count": int(c)} for w, c in successors
+            ],
+            "predecessors": [
+                {"word": w, "count": int(c)} for w, c in predecessors
+            ],
+            "trigrams": [
+                {"phrase": phrase, "position": pos, "count": int(c)}
+                for phrase, pos, c in trigram_windows
+            ],
         }
 
     # --- Prediction Properties ---
