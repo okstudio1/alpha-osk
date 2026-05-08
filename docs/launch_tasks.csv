@@ -1,41 +1,74 @@
-id,phase,task,status,depends_on,due,effort,where
-T01,Done,Analytics dashboard redesign (single section + 4 tiles + drop quality score),Done,,2026-05-07,—,commit 2530be4
-T02,Done,Telemetry client (src/telemetry.py) + 26 tests,Done,,2026-05-07,—,commit 0f737d1
-T03,Done,Bridge wiring + Settings Privacy UI,Done,,2026-05-07,—,commit 0f737d1
-T04,Done,docs/TELEMETRY.md + docs/PRIVACY.md,Done,,2026-05-07,—,commit 0f737d1
-T05,Done,backend/cf-worker scaffold (TypeScript + D1 + cron),Done,,2026-05-07,—,backend/cf-worker/
-T06,Done,Deployment workflow + WINDOWS release-checklist gate,Done,,2026-05-07,—,commit 8225178
-T07,Done,Launch plan + CSV tracker,Done,,2026-05-07,—,docs/LAUNCH_PLAN.md
-T08,Setup,Confirm Cloudflare account access,Pending,,2026-05-08,S,Cloudflare dashboard
-T09,Setup,Create D1 database (wrangler d1 create alpha-osk-telemetry),Pending,T08,2026-05-08,S,backend/cf-worker/README.md
-T10,Setup,Paste database_id into wrangler.toml (copy from .example),Pending,T09,2026-05-08,S,backend/cf-worker/wrangler.toml
-T11,Setup,npm install + npm run schema:remote,Pending,T10,2026-05-08,S,backend/cf-worker/
-T12,Setup,npm run deploy and note printed worker URL,Pending,T11,2026-05-08,S,backend/cf-worker/
-T13,Setup,Smoke-test POST /v1/submit with curl (expect 204),Pending,T12,2026-05-09,S,backend/cf-worker/README.md
-T14,Setup,Smoke-test GET /v1/aggregate (expect submitted row),Pending,T13,2026-05-09,S,backend/cf-worker/README.md
-T15,Setup,Smoke-test POST /v1/forget then re-aggregate (expect row gone),Pending,T13,2026-05-09,S,backend/cf-worker/README.md
-T16,Setup,Set DEFAULT_ENDPOINT in src/telemetry.py to live worker URL,Pending,T12,2026-05-09,S,src/telemetry.py
-T17,Setup,Commit + push DEFAULT_ENDPOINT change,Pending,T16,2026-05-09,S,git
-T18,Dev-validate,Open Settings → Privacy in python run.py + verify section renders,Pending,T17,2026-05-10,S,manual
-T19,Dev-validate,Toggle on + restart + confirm persists from telemetry.json,Pending,T18,2026-05-10,S,manual
-T20,Dev-validate,Force submit (clear last_submit_ts) + verify D1 row appears,Pending,T19,2026-05-11,M,manual
-T21,Dev-validate,Click Delete-my-data twice + verify D1 row disappears,Pending,T20,2026-05-11,S,manual
-T22,Dev-validate,Toggle off + verify anon_id cleared in telemetry.json,Pending,T21,2026-05-12,S,manual
-T23,Dev-validate,Toggle back on + verify a NEW anon_id is generated,Pending,T22,2026-05-12,S,manual
-T24,Build,Bump src/__version__.py to 1.1.0,Pending,T23,2026-05-15,S,src/__version__.py
-T25,Build,Replace [Unreleased] heading with [1.1.0] - 2026-05-28 in CHANGELOG.md,Pending,T24,2026-05-15,S,CHANGELOG.md
-T26,Build,Write release-notes-1.1.0.md (community impact + cleaner analytics),Pending,T25,2026-05-16,M,release-notes-1.1.0.md
-T27,Build,Run python check.py --full (matches CI exactly),Pending,T25,2026-05-18,M,check.py
-T28,Build,Build Windows release (non-elevated shell + eToken),Pending,T27,2026-05-19,M,build/windows/build.py
-T29,Build,Test installer on clean account or VM,Pending,T28,2026-05-20,M,release/
-T30,Build,Verify Privacy section appears + toggle persists in installed build,Pending,T29,2026-05-20,S,manual
-T31,Build,Build Linux AppImage (optional this cycle),Pending,T27,2026-05-21,M,build/linux/build.py
-T32,Ship,git tag v1.1.0 + push tag,Pending,T29,2026-05-26,S,git
-T33,Ship,gh release create v1.1.0 on okstudio1/alpha-osk-releases,Pending,T32,2026-05-26,S,gh
-T34,Ship,Verify auto-update path: install 1.0.16 → trigger update → land 1.1.0,Pending,T33,2026-05-27,M,manual VM
-T35,Ship,Confirm Privacy section + auto-update toast appear in updated build,Pending,T34,2026-05-27,S,manual VM
-T36,Ship,npx wrangler tail for first 24h to catch malformed payloads,Pending,T33,2026-05-28,M,wrangler tail
-T37,Ship,Optional: announcement / blog / social,Pending,T33,2026-05-28,M,—
-T38,Post-launch,Watch aggregate counter for 4-8 weeks of real data,Deferred,T33,2026-06-25,—,backend
-T39,Post-launch,Design + ship public stats page (alpha-osk.com/impact or similar),Deferred,T38,2026-07-15,L,—
-T40,Post-launch,Federated learning Phase 1 (separate workstream),Deferred,,2026-08-01,L,docs/FEDERATED_LEARNING.md
+id,category,phase,task,status,depends_on,due,effort,where
+T01,Product,Done,Analytics dashboard redesign (single section + 4 tiles + drop quality score),Done,,2026-05-07,—,commit 2530be4
+T02,Product,Done,Telemetry client (src/telemetry.py) + 26 tests,Done,,2026-05-07,—,commit 0f737d1
+T03,Product,Done,Bridge wiring + Settings Privacy UI,Done,,2026-05-07,—,commit 0f737d1
+T04,Product,Done,docs/TELEMETRY.md + docs/PRIVACY.md,Done,,2026-05-07,—,commit 0f737d1
+T05,Product,Done,backend/cf-worker scaffold (TypeScript + D1 + cron),Done,,2026-05-07,—,backend/cf-worker/
+T06,Product,Done,Deployment workflow + WINDOWS release-checklist gate,Done,,2026-05-07,—,commit 8225178
+T07,Product,Done,Launch plan + CSV tracker,Done,,2026-05-07,—,docs/LAUNCH_PLAN.md
+T08,Product,Setup,Confirm Cloudflare account access,Pending,,2026-05-08,S,Cloudflare dashboard
+T09,Product,Setup,Create D1 database (wrangler d1 create alpha-osk-telemetry),Pending,T08,2026-05-08,S,backend/cf-worker/README.md
+T10,Product,Setup,Paste database_id into wrangler.toml (copy from .example),Pending,T09,2026-05-08,S,backend/cf-worker/wrangler.toml
+T11,Product,Setup,npm install + npm run schema:remote,Pending,T10,2026-05-08,S,backend/cf-worker/
+T12,Product,Setup,npm run deploy and note printed worker URL,Pending,T11,2026-05-08,S,backend/cf-worker/
+T13,Product,Setup,Smoke-test POST /v1/submit with curl (expect 204),Pending,T12,2026-05-09,S,backend/cf-worker/README.md
+T14,Product,Setup,Smoke-test GET /v1/aggregate (expect submitted row),Pending,T13,2026-05-09,S,backend/cf-worker/README.md
+T15,Product,Setup,Smoke-test POST /v1/forget then re-aggregate (expect row gone),Pending,T13,2026-05-09,S,backend/cf-worker/README.md
+T16,Product,Setup,Set DEFAULT_ENDPOINT in src/telemetry.py to live worker URL,Pending,T12,2026-05-09,S,src/telemetry.py
+T17,Product,Setup,Commit + push DEFAULT_ENDPOINT change,Pending,T16,2026-05-09,S,git
+T18,Product,Dev-validate,Open Settings → Privacy in python run.py + verify section renders,Pending,T17,2026-05-10,S,manual
+T19,Product,Dev-validate,Toggle on + restart + confirm persists from telemetry.json,Pending,T18,2026-05-10,S,manual
+T20,Product,Dev-validate,Force submit (clear last_submit_ts) + verify D1 row appears,Pending,T19,2026-05-11,M,manual
+T21,Product,Dev-validate,Click Delete-my-data twice + verify D1 row disappears,Pending,T20,2026-05-11,S,manual
+T22,Product,Dev-validate,Toggle off + verify anon_id cleared in telemetry.json,Pending,T21,2026-05-12,S,manual
+T23,Product,Dev-validate,Toggle back on + verify a NEW anon_id is generated,Pending,T22,2026-05-12,S,manual
+T24,Product,Build,Bump src/__version__.py to 1.1.0,Pending,T23,2026-05-15,S,src/__version__.py
+T25,Product,Build,Replace [Unreleased] heading with [1.1.0] - 2026-05-26 in CHANGELOG.md,Pending,T24,2026-05-15,S,CHANGELOG.md
+T26,Product,Build,Write release-notes-1.1.0.md (community impact + cleaner analytics),Pending,T25,2026-05-16,M,release-notes-1.1.0.md
+T27,Product,Build,Run python check.py --full (matches CI exactly),Pending,T25,2026-05-18,M,check.py
+T28,Product,Build,Build Windows release (non-elevated shell + eToken),Pending,T27,2026-05-19,M,build/windows/build.py
+T29,Product,Build,Test installer on clean account or VM,Pending,T28,2026-05-20,M,release/
+T30,Product,Build,Verify Privacy section appears + toggle persists in installed build,Pending,T29,2026-05-20,S,manual
+T31,Product,Build,Build Linux AppImage (optional this cycle),Pending,T27,2026-05-21,M,build/linux/build.py
+T32,Product,Ship,git tag v1.1.0 + push tag,Pending,T29,2026-05-26,S,git
+T33,Product,Ship,gh release create v1.1.0 on okstudio1/alpha-osk-releases,Pending,T32,2026-05-26,S,gh
+T34,Product,Ship,Verify auto-update path: install 1.0.16 → trigger update → land 1.1.0,Pending,T33,2026-05-27,M,manual VM
+T35,Product,Ship,Confirm Privacy section + auto-update toast appear in updated build,Pending,T34,2026-05-27,S,manual VM
+T36,Operations,Ship,npx wrangler tail for first 24h to catch malformed payloads,Pending,T33,2026-05-28,M,wrangler tail
+T37,Product,Post-launch,Watch aggregate counter for 4-8 weeks of real data,Deferred,T33,2026-06-25,—,backend
+T38,Product,Post-launch,Design + ship public stats page (alpha-osk.com/impact or similar),Deferred,T37,2026-07-15,L,—
+T39,Product,Post-launch,Federated learning Phase 1 (separate workstream),Deferred,,2026-08-01,L,docs/FEDERATED_LEARNING.md
+M01,Content,Hype-foundation,Brand personal YouTube channel for OKStudio content (banner + about + playlist),Pending,,2026-05-08,M,YouTube Studio
+M02,Asset,Hype-foundation,Set up Buttondown newsletter at okstud.io/list (free tier + embedded form),Pending,,2026-05-08,M,Buttondown
+M03,Operations,Hype-foundation,Set up OKStudio Slack workspace (#general #support #showcase #announcements),Pending,,2026-05-09,M,Slack
+M04,Asset,Hype-foundation,Update LinkedIn profile (bio mentions OKStudio + accessibility focus + okstud.io link),Pending,,2026-05-09,S,LinkedIn
+M05,Content,Hype-foundation,Publish founder-arc Episode 1: "Why I Started OKStudio" (YT long-form + newsletter + LI + blog),Pending,M01;M02,2026-05-11,L,multi-channel
+A01,Asset,Pre-launch,Alpha-OSK landing page (above-fold value prop + demo GIF + pricing + signup CTA),Pending,M02,2026-05-12,L,web
+A02,Asset,Pre-launch,Demo video (60-90s captioned voiceover showing AI prediction),Pending,,2026-05-12,L,YouTube
+A03,Asset,Pre-launch,5+ screenshots (light + dark themes; clean compose state),Pending,T29,2026-05-13,M,assets/
+A04,Asset,Pre-launch,Press kit zip (logo SVG/PNG + screenshots + 1-para description + founder bio + photo + contact),Pending,A03;M04,2026-05-14,M,assets/press/
+A05,Content,Pre-launch,Maker comment / Show HN body (accessibility angle in first 3 sentences; peer-reviewed),Pending,,2026-05-22,M,internal
+A06,Asset,Pre-launch,Email outreach list (10-15 named bloggers/journalists/influencers + personalized openers),Pending,,2026-05-13,M,spreadsheet
+M06,Content,Pre-launch,Founder-arc Episode 2: "Typing Got Harder Then It Didn't" (YT + newsletter + LI + blog),Pending,M05,2026-05-13,L,multi-channel
+M07,Content,Pre-launch,"Alpha-OSK in 60 seconds" demo Short (typing with dwell + AI prediction completing words),Pending,A02,2026-05-14,M,YouTube + LI
+M08,Outreach,Pre-launch,Outreach batch 1: AT publications (AT Heaven + Closing The Gap + AT3 Center),Pending,A04;A06,2026-05-16,S,email
+M09,Outreach,Pre-launch,r/accessibility teaser post (beta testers wanted),Pending,M07,2026-05-17,S,Reddit
+M10,Outreach,Pre-launch,Outreach batch 2: OT LinkedIn group + special-ed mailing lists,Pending,A04;A06,2026-05-18,S,email + LI
+M11,Outreach,Pre-launch,Send unlisted demo video to AT YouTubers (5 contacts),Pending,A02;A06,2026-05-19,S,email
+M12,Outreach,Pre-launch,Draft r/disability + r/RSI cross-posts (different angles per sub),Pending,M09,2026-05-21,S,internal
+M13,Outreach,Pre-launch,AbleGamers + SpecialEffect direct send ("Free OSK for your clients"),Pending,A04,2026-05-22,S,email
+M14,Outreach,Pre-launch,Circulate Show HN draft to indie hacker peers for feedback,Pending,A05,2026-05-23,S,internal
+M15,Operations,Pre-launch,Final asset QA: signed installer + landing page + Pro upgrade flow end-to-end,Pending,T29;A01,2026-05-24,M,manual
+M16,Operations,Pre-launch,Final smoke test: install → free use → upgrade to Pro → cloud AI prediction,Pending,M15,2026-05-25,M,manual
+M17,Outreach,Launch-day,Newsletter pre-launch send (24h ahead of public push),Pending,M16,2026-05-25,S,Buttondown
+M18,Outreach,Launch-day,r/accessibility public launch post,Pending,T33;M17,2026-05-26,M,Reddit
+M19,Outreach,Launch-day,Show HN post (accessibility-first hook),Pending,T33;A05,2026-05-26,M,Hacker News
+M20,Content,Launch-day,YouTube launch flagship video flipped public,Pending,T33;A02,2026-05-26,S,YouTube
+M21,Outreach,Launch-day,LinkedIn launch post (founder-narrative framing professional tone),Pending,T33;M04,2026-05-26,S,LinkedIn
+M22,Outreach,Launch-day,Email AT publications + AbleGamers + SpecialEffect with launch announcement,Pending,T33;M08;M13,2026-05-26,M,email
+M23,Operations,Launch-day,Monitor + respond to comments first 24h (Reddit + HN + LI + YouTube),Pending,M18;M19;M20;M21,2026-05-27,L,multi-channel
+M24,Outreach,Post-launch,r/accessibility AMA (week 2 after launch),Pending,M18,2026-06-02,M,Reddit
+M25,Outreach,Post-launch,Capture testimonials from first 5-10 users (15-min call OR written paragraph OR public post),Pending,M18,2026-06-05,M,manual
+M26,Asset,Post-launch,Update press kit + landing page with launch numbers (downloads + testimonials),Pending,M25,2026-06-08,M,assets/press/
+M27,Content,Post-launch,Founder-arc Episode 3 prep ("Why I Need MacroVox" — published 2026-06-24 per playbook),Pending,,2026-06-15,L,multi-channel
+M28,Operations,Post-launch,Begin MacroVox pre-launch hype ramp (handoff to MacroVox tracker),Pending,M27,2026-06-15,—,MacroVox repo

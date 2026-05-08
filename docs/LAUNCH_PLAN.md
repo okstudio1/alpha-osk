@@ -1,6 +1,6 @@
-# Launch Plan — target 2026-05-28
+# Launch Plan — target 2026-05-26 (launch window May 26 – Jun 1)
 
-Living checklist for the next Alpha-OSK release. **Three-week window**, today is 2026-05-07. Update status fields as you go; nothing here is fixed until shipped.
+Living checklist for the next Alpha-OSK release. **Three-week window**, today is 2026-05-07. Update status fields as you go; nothing here is fixed until shipped. Aligned with the OKStudio cross-product launch sequence in `C:\Users\Owen\dev\OKStudio-Company-Info\strategy\LAUNCH_AND_HYPE_PLAYBOOK.md` (Alpha-OSK is the audience-builder for MacroVox / Octavium / Nimbus later in 2026).
 
 ## What's launching
 
@@ -45,13 +45,13 @@ This is a meaningful enough scope to warrant a **minor version bump (1.1.0)** ra
 ### Week 2 (2026-05-15 → 2026-05-21): release prep
 
 - [ ] Bump `src/__version__.py` to `1.1.0`.
-- [ ] In `CHANGELOG.md`, replace `## [Unreleased]` heading with `## [1.1.0] — 2026-05-28` (move existing entries under it). Add a fresh empty `## [Unreleased]` above.
+- [ ] In `CHANGELOG.md`, replace `## [Unreleased]` heading with `## [1.1.0] — 2026-05-26` (move existing entries under it). Add a fresh empty `## [Unreleased]` above.
 - [ ] Run `python check.py --full` (the `--full` flag enables the coverage gate; matches CI exactly, ~3 min).
 - [ ] `python build/windows/build.py` from a non-elevated shell with the eToken plugged in. (See `docs/WINDOWS.md` for the signing requirement.)
 - [ ] Test the installer in `release/` on a clean account or VM. Specifically: install, launch OSK, open Settings → Privacy, toggle on, restart, confirm toggle persisted.
 - [ ] `python build/linux/build.py --appimage --fetch-appimagetool` if the Linux build is also shipping this cycle.
 
-### Week 3 (2026-05-22 → 2026-05-28): ship
+### Week 3 (2026-05-22 → 2026-05-26): ship + launch posts
 
 - [ ] `git tag v1.1.0 && git push origin main && git push origin v1.1.0`.
 - [ ] `gh release create v1.1.0 release/Alpha-OSK-Setup-1.1.0.exe --repo okstudio1/alpha-osk-releases --title "v1.1.0 — Community impact + cleaner analytics" --notes-file release-notes-1.1.0.md`. Asset filename **must** match `Alpha-OSK-Setup-1.1.0.exe` exactly (the auto-updater rejects anything else).
@@ -86,8 +86,41 @@ This is a meaningful enough scope to warrant a **minor version bump (1.1.0)** ra
 
 ## Task tracker
 
-`docs/launch_tasks.csv` is the row-level tracker (40 tasks, ID-keyed, with dependency arrows). Open it in Excel / Numbers / Sheets / a CSV viewer to filter by status or phase. The markdown checklist above is the human-readable narrative; the CSV is the structured shadow.
+`docs/launch_tasks.csv` is the row-level tracker (73 tasks, ID-keyed, with dependency arrows). Open it in Excel / Numbers / Sheets / a CSV viewer to filter by `status`, `phase`, or `category`. The markdown checklist above covers the engineering critical path; the CSV adds the marketing surface and is the source of truth.
+
+### Categories (column `category`)
+
+| Category | Count | What |
+|----------|-------|------|
+| **Product** | 38 | Engineering, build, sign, ship, deploy. ID prefix `T`. |
+| **Outreach** | 14 | Reddit, HN, LinkedIn, email batches to AT publications + accessibility orgs + AT YouTubers. ID prefix `M`. |
+| **Asset** | 8 | Landing page, demo video, screenshots, press kit, outreach list, newsletter setup. ID prefix `A` or `M`. |
+| **Content** | 7 | Founder-arc episodes (E1, E2), 60s demo Short, launch flagship video. ID prefix `M`. |
+| **Operations** | 6 | Workspace setup, asset QA, day-1 monitoring, hand-off to MacroVox. ID prefix `T` or `M`. |
+
+### Phases (column `phase`)
+
+| Phase | Window | What lives here |
+|-------|--------|-----------------|
+| **Done** | up to 2026-05-07 | Already shipped to main |
+| **Setup** | 2026-05-08 → 05-09 | Cloudflare Worker deploy + endpoint config |
+| **Dev-validate** | 2026-05-10 → 05-12 | Privacy UI smoke checks against the live worker |
+| **Hype-foundation** | 2026-05-08 → 05-11 | OKStudio audience scaffolding (newsletter, YouTube branding, Slack workspace, Episode 1) |
+| **Pre-launch** | 2026-05-12 → 05-25 | Alpha-OSK hype window — Episode 2, demo Short, outreach batches, press kit, final smoke test |
+| **Build** | 2026-05-15 → 05-21 | Version bump, signed Windows build, installer test, optional Linux AppImage |
+| **Launch-day** | 2026-05-26 | Tag, gh release, newsletter send, Reddit / HN / LinkedIn / YouTube launch posts |
+| **Ship** | 2026-05-26 → 05-28 | Auto-update verify, day-1 monitoring |
+| **Post-launch** | 2026-06-02 → 2026-08-01 | AMA, testimonials, MacroVox hand-off, deferred (public stats page, federated learning) |
+
+The marketing critical path runs **parallel** to the engineering one through the build phase, then they converge at Launch-day. Hype-foundation tasks (M01-M05) gate the pre-launch tasks (newsletter must exist before Episode 1 can drive signups; YouTube channel must be branded before Episode 2 lives there).
+
+### Asset dependencies you'll feel
+
+- Landing page (A01) needs the newsletter signup embed (M02) before it's worth shipping.
+- Press kit (A04) needs screenshots (A03) which need a clean build (T29).
+- Show HN body (A05) is the slowest-to-write asset — start it 2-3 days before posting, not the night of.
+- Email outreach list (A06) is research-heavy; spreading it across Pre-launch week pays off.
 
 ## Next action (today)
 
-If launching 2026-05-28, the deploy step needs to land in Week 1 to leave room for build/test/release. Concretely: open `backend/cf-worker/README.md` and walk through the "One-time setup" section. ~30 min of work.
+If launching 2026-05-26, the deploy step needs to land in Week 1 to leave room for build/test/release. Concretely: open `backend/cf-worker/README.md` and walk through the "One-time setup" section. ~30 min of work.
