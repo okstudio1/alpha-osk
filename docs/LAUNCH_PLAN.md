@@ -86,7 +86,7 @@ This is a meaningful enough scope to warrant a **minor version bump (1.1.0)** ra
 
 ## Task tracker
 
-`docs/launch_tasks.csv` is the row-level tracker (73 tasks, ID-keyed, with dependency arrows). Open it in Excel / Numbers / Sheets / a CSV viewer to filter by `status`, `phase`, or `category`. The markdown checklist above covers the engineering critical path; the CSV adds the marketing surface and is the source of truth.
+`docs/launch_tasks.csv` is the row-level tracker (76 tasks, ID-keyed, with dependency arrows). Open it in Excel / Numbers / Sheets / a CSV viewer to filter by `status`, `phase`, or `category`. The markdown checklist above covers the engineering critical path; the CSV adds the marketing surface and is the source of truth.
 
 ### Categories (column `category`)
 
@@ -94,7 +94,7 @@ This is a meaningful enough scope to warrant a **minor version bump (1.1.0)** ra
 |----------|-------|------|
 | **Product** | 38 | Engineering, build, sign, ship, deploy. ID prefix `T`. |
 | **Outreach** | 14 | Reddit, HN, LinkedIn, email batches to AT publications + accessibility orgs + AT YouTubers. ID prefix `M`. |
-| **Asset** | 8 | Landing page, demo video, screenshots, press kit, outreach list, newsletter setup. ID prefix `A` or `M`. |
+| **Asset** | 11 | Landing page, demo video, screenshots, press kit, four contact-tier lists (A06a-d), newsletter setup, post-launch press kit refresh. ID prefix `A` or `M`. |
 | **Content** | 7 | Founder-arc episodes (E1, E2), 60s demo Short, launch flagship video. ID prefix `M`. |
 | **Operations** | 6 | Workspace setup, asset QA, day-1 monitoring, hand-off to MacroVox. ID prefix `T` or `M`. |
 
@@ -119,7 +119,7 @@ The marketing critical path runs **parallel** to the engineering one through the
 - Landing page (A01) needs the newsletter signup embed (M02) before it's worth shipping.
 - Press kit (A04) needs screenshots (A03) which need a clean build (T29).
 - Show HN body (A05) is the slowest-to-write asset — start it 2-3 days before posting, not the night of.
-- Email outreach list (A06) is research-heavy; spreading it across Pre-launch week pays off.
+- Email outreach lists are split into four tier-specific rows (A06a-d), each with its own opener template, due staggered May 15-19. Each outreach task (M08, M10, M11, M13) depends on its matching list row, not a single mega-list. Compiling Tier 1 accessibility press (A06d) is the slowest because Verge / Wired bylines rotate and need spotting from recent articles.
 
 ## Next action (today)
 

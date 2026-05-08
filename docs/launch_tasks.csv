@@ -48,15 +48,18 @@ A02,Asset,Pre-launch,Demo video (60-90s captioned voiceover showing AI predictio
 A03,Asset,Pre-launch,5+ screenshots (light + dark themes; clean compose state),Pending,T29,2026-05-13,M,assets/
 A04,Asset,Pre-launch,Press kit zip (logo SVG/PNG + screenshots + 1-para description + founder bio + photo + contact),Pending,A03;M04,2026-05-14,M,assets/press/
 A05,Content,Pre-launch,Maker comment / Show HN body (accessibility angle in first 3 sentences; peer-reviewed),Pending,,2026-05-22,M,internal
-A06,Asset,Pre-launch,Email outreach list (10-15 named bloggers/journalists/influencers + personalized openers),Pending,,2026-05-13,M,spreadsheet
+A06a,Asset,Pre-launch,AT publications contact list + opener template (AT Heaven + Closing The Gap + AT3 Center; named editors + emails),Pending,,2026-05-15,M,spreadsheet
+A06b,Asset,Pre-launch,OT / special-ed channels list + opener template (OT LinkedIn group admins + special-ed mailing list owners + RSI community leads),Pending,,2026-05-16,M,spreadsheet
+A06c,Asset,Pre-launch,AT YouTubers contact list + opener template (5 channels; recent-video reference per creator for personalization),Pending,,2026-05-17,M,spreadsheet
+A06d,Asset,Pre-launch,Tier 1 accessibility press list + opener template (Can I Play That? + GAconf + AbleGamers + SpecialEffect + Verge a11y + Wired a11y; rotating bylines need byline-spotting),Pending,,2026-05-19,L,spreadsheet
 M06,Content,Pre-launch,Founder-arc Episode 2: "Typing Got Harder Then It Didn't" (YT + newsletter + LI + blog),Pending,M05,2026-05-13,L,multi-channel
 M07,Content,Pre-launch,"Alpha-OSK in 60 seconds" demo Short (typing with dwell + AI prediction completing words),Pending,A02,2026-05-14,M,YouTube + LI
-M08,Outreach,Pre-launch,Outreach batch 1: AT publications (AT Heaven + Closing The Gap + AT3 Center),Pending,A04;A06,2026-05-16,S,email
+M08,Outreach,Pre-launch,Outreach batch 1: AT publications (AT Heaven + Closing The Gap + AT3 Center),Pending,A04;A06a,2026-05-16,S,email
 M09,Outreach,Pre-launch,r/accessibility teaser post (beta testers wanted),Pending,M07,2026-05-17,S,Reddit
-M10,Outreach,Pre-launch,Outreach batch 2: OT LinkedIn group + special-ed mailing lists,Pending,A04;A06,2026-05-18,S,email + LI
-M11,Outreach,Pre-launch,Send unlisted demo video to AT YouTubers (5 contacts),Pending,A02;A06,2026-05-19,S,email
+M10,Outreach,Pre-launch,Outreach batch 2: OT LinkedIn group + special-ed mailing lists,Pending,A04;A06b,2026-05-18,S,email + LI
+M11,Outreach,Pre-launch,Send unlisted demo video to AT YouTubers (5 contacts),Pending,A02;A06c,2026-05-19,S,email
 M12,Outreach,Pre-launch,Draft r/disability + r/RSI cross-posts (different angles per sub),Pending,M09,2026-05-21,S,internal
-M13,Outreach,Pre-launch,AbleGamers + SpecialEffect direct send ("Free OSK for your clients"),Pending,A04,2026-05-22,S,email
+M13,Outreach,Pre-launch,AbleGamers + SpecialEffect direct send ("Free OSK for your clients"),Pending,A04;A06d,2026-05-22,S,email
 M14,Outreach,Pre-launch,Circulate Show HN draft to indie hacker peers for feedback,Pending,A05,2026-05-23,S,internal
 M15,Operations,Pre-launch,Final asset QA: signed installer + landing page + Pro upgrade flow end-to-end,Pending,T29;A01,2026-05-24,M,manual
 M16,Operations,Pre-launch,Final smoke test: install → free use → upgrade to Pro → cloud AI prediction,Pending,M15,2026-05-25,M,manual
