@@ -1,14 +1,14 @@
 # Alpha-OSK: A Predictive On-Screen Keyboard for Motor-Impaired Users
 
-**Version:** 1.0.14
-**Date:** April 2026
+**Version:** 1.1.0
+**Date:** May 2026
 **Audience:** Software engineers, accessibility researchers, assistive-technology practitioners
 
 ---
 
 ## Abstract
 
-Alpha-OSK is an on-screen keyboard (OSK) for Windows and Linux designed for users whose primary input device is a mouse or pointer rather than a physical keyboard. It targets people with motor impairments — muscular dystrophy, ALS, spinal cord injury, severe arthritis, post-stroke hemiparesis — for whom every avoided keystroke is meaningful. The system pairs a Qt Quick (QML) UI with a Python bridge, synthesises keystrokes through OS-native APIs (`SendInput` on Windows, `xdotool`/`ydotool` on Linux), and runs a hybrid CPU-only prediction engine (n-gram + variable-order PPM + spatial fuzzy recognition) that learns the user's vocabulary on-device. There is no GPU, no cloud round-trip, no LLM dependency, and no telemetry. This paper describes the architecture, the prediction stack, the accessibility-driven engineering trade-offs that shaped the system, the privacy and security model, and the open work.
+Alpha-OSK is an on-screen keyboard (OSK) for Windows and Linux designed for users whose primary input device is a mouse or pointer rather than a physical keyboard. It targets people with motor impairments (muscular dystrophy, ALS, spinal cord injury, severe arthritis, post-stroke hemiparesis) for whom every avoided keystroke is meaningful. The system pairs a Qt Quick (QML) UI with a Python bridge, synthesises keystrokes through OS-native APIs (`SendInput` on Windows, `xdotool`/`ydotool` on Linux), and runs a hybrid CPU-only prediction engine (n-gram + variable-order PPM + spatial fuzzy recognition) that learns the user's vocabulary on-device. There is no GPU, no cloud round-trip, and no LLM dependency. The system is **off-network by default**: predictions, learning, and analytics are local-only. As of 1.1.0, an opt-in usage-stats pipeline (a small weekly POST of lifetime counters; never any content) lets users contribute to a public community-impact aggregate; it is off by default and described in §5.6. This paper describes the architecture, the prediction stack, the accessibility-driven engineering trade-offs that shaped the system, the privacy and security model, and the open work.
 
 ---
 
@@ -26,7 +26,7 @@ Alpha-OSK is shaped by five goals, in priority order:
 
 1. **The OSK must never steal focus from the target application.** A focus loss to the keyboard is not just an annoyance — it can drop a modifier, abort a drag, or lose the user's place in a long composition.
 2. **Predictions must be useful from the first keystroke.** A user who can only type 5–10 words per minute cannot afford a "warm-up" period where the engine learns their vocabulary before earning its keep.
-3. **No cloud, no GPU, no LLM.** The system must run on the modest hardware that motor-impaired users typically inherit (older laptops, low-power desktops) and must not exfiltrate keystrokes — this is a category where data sensitivity is unusually high (passwords, medical communication, intimate correspondence).
+3. **Local-first: no cloud round-trip on the prediction or learning path; no GPU; no LLM.** The system must run on the modest hardware motor-impaired users typically inherit (older laptops, low-power desktops). Keystrokes must never be exfiltrated — this is a category where data sensitivity is unusually high (passwords, medical communication, intimate correspondence). The community-impact pipeline added in 1.1.0 (§5.5) is the only optional egress and is gated on explicit user consent; even when enabled, it submits only the lifetime counters the user already sees on the in-app dashboard, never content.
 4. **Spatial errors must be corrected without punishing deliberate typing.** A user with hand tremor will land off-centre on keys; a user typing "thru" deliberately must not be autocorrected to "throw".
 5. **Every interaction must be reachable from the mouse.** Keyboard shortcuts, modal dialogs that require Enter, and physical-keyboard fallbacks are non-options.
 
@@ -105,6 +105,7 @@ The prediction engine is the most novel component of the system and the most sal
 | `fuzzy_recognizer.py` | Spatial error correction. Considers nearby keys as substitution candidates and applies edit-distance penalties. |
 | `hybrid_predictor.py` | The merge layer. Runs all three predictors in parallel, normalises scores, applies suppression and capitalisation, returns up to N suggestions. |
 | `vocabulary_pack.py` | Domain-specific vocab packs (medical, programming, etc.) that contribute weighted unigram/bigram/trigram counts into the n-gram tables. |
+| `symspell.py` | Precomputed-deletion edit-distance index used by the fuzzy recogniser. Built eagerly at startup; per-query lookup runs in well under 1 ms on a 10 K dictionary. See §3.6. |
 | `swipe_recognizer.py` | Shape-matching gesture decoder for glide typing. |
 | `transformer_predictor.py` | Optional LLM re-ranking pass. Disabled by default; not on the hot path. |
 
@@ -296,9 +297,9 @@ This is a small example of a pattern that recurs: accessibility constraints (in 
 
 ## 5. Privacy and Security
 
-### 5.1 No telemetry, no cloud
+### 5.1 Off-network by default
 
-Alpha-OSK does not connect to the network at runtime except for the auto-update check (described in §7). There is no analytics endpoint, no crash reporter, no model-improvement upload path. Lifetime statistics persist to a local `analytics.json` and are visible to the user through the dashboard; they are never transmitted anywhere.
+Alpha-OSK does not connect to the network at runtime except for the auto-update check (§7) and, only if the user explicitly opts in, the usage-stats pipeline (§5.6). There is no crash reporter, no model-improvement upload path, and no implicit telemetry. Lifetime statistics persist to a local `analytics.json` and are visible to the user through the in-app dashboard; **the dashboard is always local-only**, regardless of the §5.6 toggle. The toggle controls a separate, narrower pipeline that submits only the same lifetime counters the dashboard already shows the user, and only when explicitly enabled.
 
 ### 5.2 Privacy mode and password-field detection
 
@@ -327,7 +328,28 @@ The regression tests for these properties are in `tests/test_vocabulary_pack.py:
 
 Both the n-gram and PPM model loaders reject files over 50 MB. The n-gram loader additionally rejects models with more than 500,000 unigrams, 500,000 bigram prefixes, or 100,000 capitalisation entries — anything beyond these is assumed to be corrupt or hostile and is silently skipped (the in-memory base dictionary is kept). These limits are intentionally well above what real long-term users produce.
 
-### 5.5 Auto-update threat model
+### 5.5 Opt-in usage telemetry (1.1.0+)
+
+Alpha-OSK has a community-impact pipeline that lets users contribute to a shared "X million keystrokes saved" aggregate. **It is off by default.** Both the user-facing data policy (`docs/PRIVACY.md`) and the design (`docs/TELEMETRY.md`) are versioned in the repo.
+
+The toggle lives in *Settings → Privacy → "Share anonymous usage stats"*. When on, a weekly POST sends nine integer fields: a randomly-generated `anon_id` (UUID4), `app_version`, `os` (`windows` / `linux`), and the seven lifetime counters that already render on the in-app dashboard (`keystrokes`, `words`, `predictions`, `keystrokes_saved`, `minutes`, `sessions`, `prediction_offers`). **Nothing else.** The pipeline never sends content, word frequencies, key frequencies, IP, hostname, machine identifiers, or per-session breakdowns. The privacy-mode interaction is implicit: privacy mode (§5.2) suppresses learning and counter increments at the analytics layer, so password-field activity never enters the lifetime totals in the first place. The telemetry layer just forwards what the dashboard would show.
+
+The `anon_id` is generated on first opt-in and **cleared on opt-out**, so opt-in/opt-out cycles produce unlinkable contributions. A user who wants their already-submitted row removed can use the "Delete my contributed data" button in the same Settings section, which POSTs to `/v1/forget` (the server returns 204 regardless of whether the id existed, so request-pattern probing yields no information). Reinstallation or deletion of the per-user config directory also produces a fresh id; the old row becomes orphaned and is garbage-collected by the daily cron after 365 days of inactivity.
+
+The submission cadence is enforced by an hourly QTimer in the bridge that calls `maybe_submit()`; the function short-circuits unless the consent flag is on, the endpoint is configured, an `anon_id` exists, and at least seven days have elapsed since the last successful submission. A second hook (`submit_on_quit` from `KeyboardBridge.shutdown`) covers the case where the user runs the app for less than a week between sessions; it bypasses the weekly window with a 60 s anti-spam guard. Failures (HTTP 5xx, 429, network error) retry with backoff `[5 s, 30 s, 120 s]` and then drop until the next cycle. There are no user-visible error toasts: a network failure is not the user's problem.
+
+The backend is a Cloudflare Worker (`backend/cf-worker/`) backed by D1. Two tables: `users(anon_id PK, first_seen, last_seen, app_version, os)` and `submissions_latest(anon_id PK, ts, …counters…)`. The latest submission overwrites the previous because lifetime counters are monotonic. Three routes: `POST /v1/submit` validates each counter against a sanity ceiling (e.g. 10⁹ keystrokes) and upserts both tables; `GET /v1/aggregate` returns sums across `submissions_latest`, cached at the edge for five minutes; `POST /v1/forget` deletes the user's row. A daily cron prunes users whose `last_seen` is older than 365 days, with `ON DELETE CASCADE` cleaning up the child row.
+
+The `DEFAULT_ENDPOINT` constant in `src/telemetry.py` is the kill switch. While it is the empty string, the client treats the endpoint as not configured and silently no-ops every submit even when the toggle is on; setting it to a deployed worker URL activates the pipeline. This decoupling lets the client and the toggle UI ship in a release that has the backend not yet deployed (or for a release where telemetry is intentionally disabled across the board, e.g. a regression-investigation build).
+
+#### 5.5.1 Threat model for the telemetry pipeline
+
+- **An operator with full backend access** sees `anon_id`s, app-version distribution, OS distribution, and lifetime counters per user. Cannot see content, individual sessions, words used, or anything that would identify a user.
+- **A passive network observer** sees that the user POSTed to the telemetry endpoint, plus the payload size (~200 bytes). TLS hides the payload contents.
+- **A compromised backend** could backfill submissions to fake the public aggregate. Sanity ceilings on each counter limit the blast radius; per-IP rate limiting at the Cloudflare edge limits volume.
+- **An adversary trying to deanonymize a user** has very little to work with: the `anon_id` is opaque, no IP is stored, no User-Agent is stored, no submission history is retained (only `latest`), and the aggregate endpoint never exposes individual rows.
+
+### 5.6 Auto-update threat model
 
 Auto-update fetches from the public release repository `okstudio1/alpha-osk-releases` (the source repo is private). The threat model and per-defence rationale are in `docs/AUTO_UPDATE.md`; the short version is:
 
@@ -381,18 +403,20 @@ The auto-update flow is documented end-to-end in `docs/AUTO_UPDATE.md`. The user
 
 ## 8. Evaluation, Known Gaps, and Future Work
 
-### 8.1 Quality scoring
+### 8.1 In-app analytics dashboard
 
-`src/analytics.py` computes a 0–100 prediction quality score from four weighted components:
+`src/analytics.py` records the lifetime counters that drive the in-app analytics dashboard and the §5.5 telemetry payload. Counters are session and `_alltime_*` paired; persisted to `<config_dir>/analytics.json` on shutdown and on explicit save; loaded at launch and incremented in-place. Persisted fields: keystrokes, words, predictions, keystrokes_saved, sessions, minutes, backspaces, prediction_offers, prediction_rank_sum, prediction_rank_count, top_pick_count, plus capped word_freq and key_freq Counters (top 5 000 retained on save so the file stays bounded over years of typing).
 
-- **Keystroke savings rate (40%)** — characters saved by accepted predictions ÷ total characters typed.
-- **Prediction hit rate (25%)** — predictions accepted ÷ predictions offered.
-- **Rank accuracy (20%)** — fraction of accepted predictions that were rank 1.
-- **Low correction rate (15%)** — `1 − backspace_rate`.
+The dashboard (`qml/components/AnalyticsDashboard.qml`) presents four impact tiles in a single 2×2 grid with a Lifetime / This Session toggle:
 
-Both session and lifetime variants are computed from the same kwargs-driven function. The dashboard surfaces the lifetime score on the "Prediction Quality" card because the session score is too noisy to be useful in short sittings.
+- **Keystrokes Saved** — absolute count, the headline number ("keys you didn't have to press").
+- **Time Saved** — `keystrokes_saved × user's own seconds per keystroke` (`alltime_minutes × 60 / alltime_keystrokes`, fallback 0.5 s/key for new installs). Using the user's own pace makes the number honest: a slow OSK user genuinely saves more wall-clock time per avoided keystroke than a fast one.
+- **Effort Saved** — savings as a percentage of total typing effort (`keystrokes_saved / (keystrokes + keystrokes_saved)`), the percentage view of the same engine value as Time Saved.
+- **Acceptance** — `prediction_hits / prediction_offers`, asking "when the keyboard offered a suggestion, how often was it useful enough to take". Distinct from the keystroke-share metric Effort Saved measures.
 
-These metrics are useful for tracking regressions and improvements over time but are not a substitute for benchmark comparisons against other keyboards. We do not currently have a published benchmark; building one is open work.
+Earlier builds also surfaced a composite 0–100 "Prediction Quality" score (weighted: 40% savings, 25% hit rate, 20% rank-1 accuracy, 15% low backspace rate). It was removed in 1.1.0 because the number wasn't actionable: a user can act on "you've saved 4.2 hours" or "67% of your picks were the first suggestion" but a "73/100" composite hides which lever moved. Per-component metrics are still tracked and exposed in `getAnalytics()` (`predictionHitRate`, `topPickRate`, `backspaceRate`, etc.) for the Model Visualization panel and downstream callers; only the composite was retired. Don't reintroduce the composite as a primary surface; if a single internal scoring number is needed for ranking-strategy comparisons, compute it ad-hoc in tests rather than baking it back into `get_session_stats`.
+
+These metrics track regressions and improvements over time but are not a substitute for benchmark comparisons against other keyboards. We do not yet have a published benchmark; building one is open work.
 
 ### 8.2 Known gaps relative to commercial keyboards
 
@@ -430,9 +454,9 @@ All four target the same mouse-driven, accessibility-first user. Integration pha
 
 ## 9. Conclusion
 
-Alpha-OSK is what happens when an accessibility-first OSK is built from scratch with a hard requirement that prediction quality match modern mobile keyboards on commodity hardware without a cloud round-trip. The architecture — a Qt Quick UI on top of a Python bridge, with a hybrid n-gram + PPM + fuzzy prediction stack — is conventional in its parts, but the constraints from the user population (no focus stealing, no lost modifiers, no destructive prediction insertion, no telemetry, no GPU) shape the implementation in ways that diverge consistently from how a mainstream keyboard would be built.
+Alpha-OSK is what happens when an accessibility-first OSK is built from scratch with a hard requirement that prediction quality match modern mobile keyboards on commodity hardware without a cloud round-trip. The architecture (a Qt Quick UI on top of a Python bridge, with a hybrid n-gram + PPM + fuzzy prediction stack) is conventional in its parts, but the constraints from the user population (no focus stealing, no lost modifiers, no destructive prediction insertion, no GPU, off-network by default with the only optional egress being the explicitly opted-in usage-stats pipeline) shape the implementation in ways that diverge consistently from how a mainstream keyboard would be built.
 
-The prediction stack is honest about its limits. It does not match Gboard's quality on rare contexts, it does not have SymSpell's lookup speed, and it does not yet have unified scoring that lets the literal typed word compete against corrections. Each of these has a documented path forward and a rough cost estimate. None of them require fundamentally rethinking the architecture.
+The prediction stack is honest about its limits. It does not match Gboard's quality on rare contexts, it does not yet have unified scoring that lets the literal typed word compete against corrections in a single ranked frame, and the seed corpus is small. Each of these has a documented path forward and a rough cost estimate. None of them require fundamentally rethinking the architecture.
 
 The accessibility-driven engineering decisions — the non-focus invariant, sticky modifiers held at the OS level, suffix-only prediction insertion, the right-click shifted variant, the edit-popup pattern — are the part of the work that does not appear in textbooks. They are also the part most likely to transfer to other accessibility tools building on the same hardware target.
 
@@ -447,8 +471,10 @@ The accessibility-driven engineering decisions — the non-focus invariant, stic
 - `docs/HYBRID_MERGING.md` — Merge weights, validation, capitalisation pipeline.
 - `docs/SWIPE_TYPING.md` — Shape-matching swipe decoder.
 - `docs/AUTO_UPDATE.md` — Update flow, threat model, defences.
+- `docs/TELEMETRY.md` — Opt-in usage stats: payload schema, anon_id lifecycle, backend, deployment workflow.
+- `docs/PRIVACY.md` — User-facing data policy.
 - `docs/PLATFORM_ARCHITECTURE.md` — Cross-platform abstraction details.
-- `docs/FEDERATED_LEARNING.md` — Federated-learning roadmap.
+- `docs/FEDERATED_LEARNING.md` — Federated-learning roadmap (separate from §5.5 telemetry; not yet implemented).
 - `docs/ECOSYSTEM.md` — Four-tool adaptive-input platform.
 - `docs/SECURITY_AUDIT.md` — Pack-import hardening, model load caps.
 - `docs/LINUX.md` / `docs/WINDOWS.md` — Platform-specific build and packaging.
