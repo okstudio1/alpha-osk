@@ -284,11 +284,17 @@ def _is_dev_target(target_exe: str) -> bool:
     with ``--target-exe sys.executable`` (the python that's running the
     OSK), since there's no real install dir to poll. Production
     spawns it with the installed alpha-osk.exe path. Matching on
-    ``python`` / ``pythonw`` in the basename is enough — there's no
+    ``python`` / ``pythonw`` in the basename is enough: there's no
     realistic case where a real install lives at a path containing
     ``python`` in the exe name.
+
+    Normalises backslashes to forward slashes before splitting so the
+    function gives the same answer on Linux (where tests run) as on
+    Windows (where production runs). Without that, `Path` on POSIX
+    treats the whole `C:\\...\\python.exe` string as a single name.
     """
-    name = Path(target_exe).name.lower()
+    normalised = target_exe.replace("\\", "/")
+    name = Path(normalised).name.lower()
     return name.startswith("python") or name.startswith("pythonw")
 
 
