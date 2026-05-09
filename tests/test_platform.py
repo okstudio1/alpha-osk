@@ -446,9 +446,9 @@ class TestWindowsScancodeDispatch:
     def _make_synth(
         self,
         *,
-        vk_scan: Optional[Dict[str, int]] = None,
-        vsc: Optional[Dict[int, int]] = None,
-        char_probe: Optional[Dict[int, int]] = None,
+        vk_scan: dict[str, int] | None = None,
+        vsc: dict[int, int] | None = None,
+        char_probe: dict[int, int] | None = None,
         caps_on: bool = False,
         shift_held: bool = False,
     ):
