@@ -176,44 +176,45 @@ Start with **Option A** (GitHub Releases check). Add **Option C** (WinGet) as a 
 
 ---
 
-## Update progress indicator (planned, T40)
+## Update progress indicator (T40, shipped)
 
 ### Problem
 
-Reported after a 1.0.15 → 1.0.17 update: the new keyboard does come back (the relauncher fix from this release works), but there's a ~15-60 s gap between the installer's `taskkill /F /IM alpha-osk.exe` and the relauncher launching the new exe. During that gap **no UI is alive at all** (intentional per `_update_relauncher.py`'s docstring: "Failures are deliberately silent. There is no UI surface to report into."). For an accessibility audience that just lost their primary input method, that silence reads as "the update broke the keyboard." The user reported thinking it was broken until it eventually came back.
+Reported after a 1.0.15 → 1.0.17 update: the new keyboard does come back (the relauncher fix from 1.0.17 works), but there's a ~15-60 s gap between the installer's `taskkill /F /IM alpha-osk.exe` and the relauncher launching the new exe. During that gap **no UI was alive at all** (intentional per `_update_relauncher.py`'s original docstring: "Failures are deliberately silent. There is no UI surface to report into."). For an accessibility audience that just lost their primary input method, that silence read as "the update broke the keyboard." The user reported thinking it was broken until it eventually came back.
 
-The on-startup ✓ Updated toast we added in this release fires *after* the gap and helps confirm "yes, that worked", but it can't bridge the silence during the gap itself.
+The on-startup ✓ Updated toast added in 1.0.17 fires *after* the gap and helps confirm "yes, that worked", but it can't bridge the silence during the gap itself.
 
 ### Where the gap comes from
 
-`_update_relauncher.run_relauncher` has three sequential waits, all silent:
+`_update_relauncher.run_relauncher` has three sequential waits, all silent in the original implementation:
 1. `_wait_for_parent_exit` — up to 60 s for the installer's taskkill to land (usually < 1 s).
 2. `time.sleep(_INSTALLER_GRACE_S)` — fixed 5 s for the installer to finish file copies.
 3. `_wait_for_new_exe` — up to 180 s polling for `$INSTDIR\alpha-osk.exe` mtime to advance past parent-death.
 
 So the floor is ~5 s and the ceiling is ~245 s. Real installs land at ~15-30 s on a healthy machine; AV scanning of the freshly-extracted DLLs can push it higher.
 
-### Proposed fix (two layers, tiered by effort)
+### Implementation (two layers, both shipping together)
 
-**Layer 1: pre-update expectation-setting in the live OSK** (small, ship first)
-Before `updater.py::download_and_install` spawns the installer, surface a non-modal toast in the running OSK: *"Installing v1.0.X. The keyboard will reappear in about 30 seconds."* The toast is visible for the few seconds until the installer's taskkill arrives. This alone resolves most of the "I thought it was broken" framing because the user knows the silence is expected. Implementation is a sibling to `updateAppliedToast` in `Main.qml` (call it `updateStartingToast`); fire it from a new `KeyboardBridge.notifyUpdateStarting(version)` slot called by `updater.py` immediately before the installer Popen.
+**Layer 1: pre-update expectation-setting in the live OSK.** Before `updater.download_and_install` spawns the installer (after download + signature verify succeed), it invokes a new optional `on_installer_launching` callback. The bridge wires this to emit `updateInstallHandoffPending(version)` and then sleep 1.8 s in the worker thread, so the toast paints and is legible before the installer's taskkill arrives. The QML side adds an `updateStartingToast` Popup ("Installing v1.0.X. The keyboard will disappear briefly and come back.") modeled on the existing `updateAppliedToast`. Worth noting: the toast deliberately has no auto-close timer, because the installer's taskkill closes the whole process within ~1-2 s anyway, and a timer that fires just before the taskkill would leave the user with the same silence we're trying to avoid.
 
-**Layer 2: visible relauncher splash during the gap** (larger, defer if Layer 1 is enough)
-Have `_update_relauncher` show a small always-on-top window for the duration of the wait. Three implementation options:
+**Layer 2: visible relauncher splash during the gap.** `_update_relauncher` grew a `--show-splash` flag that the production caller (`updater._spawn_relauncher`) always passes. When the flag is set, `run_relauncher` dispatches to `_run_with_splash` instead of the original `_run_headless`. The splash is a frameless `WindowStaysOnTopHint` `QWidget` (not `QSplashScreen` — the latter's image-background model didn't fit the text-and-progress display we wanted). The polling logic was refactored into a `QTimer` state machine driven by `_poll_parent` → `_start_new_exe_phase` → `_poll_new_exe` → `_launch`, with a new `_new_exe_ready` single-shot helper replacing the blocking `_wait_for_new_exe` poll loop so the event loop can repaint between checks. Phase-aware messages: "Waiting for the installer to finish…" → "Installing files…" → "Launching the new keyboard…" → "Done!" (800 ms dwell so the splash doesn't vanish a frame before the new OSK draws its first window). Failure paths surface a "Find Alpha-OSK in your Start Menu" message for 6 s instead of vanishing silently. Splash colours match the in-app toast (`#1e3354` background, `#4a8eff` border, `#7ec8ff` title, `#cfe0ff` body) so it visually belongs to Alpha-OSK rather than looking like a stray system dialog.
 
-- **A. PySide6 QSplashScreen**. The relauncher already runs from the same `alpha-osk.exe` that has Qt bundled, so no new dependencies. QSplashScreen is the canonical use case. Cost: ~1-2 s extra startup latency for `QApplication.__init__` in the relauncher process. Refactor the polling loops to fire from `QTimer.singleShot` so the splash gets a real event loop.
-- **B. ctypes Win32 native window**. Zero dependencies, no event-loop overhead. Cost: ~150 lines of CreateWindowExW + DefWindowProcW glue from scratch, easy to get wrong on HiDPI / dark-mode.
-- **C. Windows toast notification**. Fire-and-forget via PowerShell / BurntToast — appears in Action Center, no continuous status. Cheapest, but doesn't bridge the silence; just punctuates it.
+If the splash path raises (PySide6 import error, no display server), `run_relauncher` logs and falls back to `_run_headless` rather than aborting the relaunch — better to silently relaunch than to leave the user with nothing.
 
-Recommendation: A, since Qt is already loaded, the visual matches the rest of the app, and the splash window can show a real progress message that updates as the relauncher transitions through its three phases ("Waiting for installer to finish…" → "Installing files…" → "Launching new keyboard…").
+**Headless path preserved.** `_run_headless` is the original blocking-poll implementation, kept intact. Tests target it (so they don't have to stand up a `QApplication`), and it serves as the splash-failure fallback. Production never reaches it on a healthy machine because `--show-splash` is always passed.
 
-### Acceptance criteria
+**Dismiss button.** The splash has a small ✕ in the top-right corner that *hides* the splash without aborting the relaunch — the user is dismissing the visual, not the work. Polling continues invisibly so the new OSK still launches when ready. A real-world test session left a splash stuck at "Installing files…" for the full `_NEW_EXE_TIMEOUT_S` window because dev mode (see below) had no escape; the dismiss button is the user-facing safety valve.
 
-- A user updating from 1.0.17 to the next version sees a toast *before* the keyboard disappears that explicitly tells them the keyboard is about to be unavailable for ~30 s.
-- (Layer 2) During the gap, a small "Updating Alpha-OSK…" window is visible on screen with a progress message reflecting the current relauncher phase.
-- The post-update ✓ Updated toast still fires after relaunch (no regression).
-- If the relauncher fails (Popen raises, timeout), the splash from Layer 2 surfaces an error message + a path to the install log instead of vanishing silently.
+**Dev-mode short-circuit.** `updater._spawn_relauncher` passes `--target-exe sys.executable` in dev mode (since there's no real install dir to poll). The splash's `_new_exe_ready` check then waits for `python.exe`'s mtime to advance past parent-death, which never happens, so the splash would sit at "Installing files…" until the 180 s timeout. New `_is_dev_target()` helper detects target paths whose basename starts with `python` / `pythonw` and routes those straight to headless. The check is gated only on the target-exe basename, so a real production install (which always points at `alpha-osk.exe`) is unaffected. This was the original cause of the stuck-splash incident — discovered immediately after the initial commit and patched the same session.
 
 ### Why not just make the installer non-silent?
 
 The interactive NSIS UI would solve the visibility problem trivially, but at the cost of a UAC prompt + a Next/Next/Next dialog the user has to drive *without a keyboard*. Silent install is the right default for our audience; the fix has to live around it, not replace it.
+
+### Files
+
+- `src/updater.py` — `download_and_install` accepts `on_installer_launching: Optional[HandoffCb]`; `_spawn_relauncher` adds `--show-splash` to the relauncher cmd in both frozen and dev paths.
+- `src/keyboard_bridge.py` — `updateInstallHandoffPending = Signal(str)`; `installUpdate` worker passes a callback that emits the signal then sleeps `_PRE_INSTALL_TOAST_DWELL_S` (1.8 s).
+- `src/_update_relauncher.py` — `run_relauncher` dispatch, `_run_headless` (legacy + fallback), `_run_with_splash` (Qt path), `_build_splash_widget`, `_new_exe_ready`, `_is_dev_target`.
+- `qml/Main.qml` — `updateStartingToast` Popup + the `Connections.onUpdateInstallHandoffPending` handler that flashes it.
+- Tests: `tests/test_updater.py::TestInstallerLaunchingCallback` (4), `tests/test_update_relauncher.py::TestNewExeReady` (5), `TestShowSplashFlag` (4 incl. dev-mode skip), `TestIsDevTarget` (4).

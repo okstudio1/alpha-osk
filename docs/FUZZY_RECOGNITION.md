@@ -24,6 +24,17 @@ Implementation: `src/prediction/fuzzy_recognizer.py`.
 stagger (home row offset +0.25, bottom row +0.75).  Units are
 key-widths.
 
+The number row sits at row -1 directly above the qwerty row, with no
+horizontal stagger (5 above t, 6 above y, etc.).  Including digits in
+the spatial model means an off-by-one-row mistype between letter and
+digit is recoverable: typing "h3llo" surfaces "hello" because '3' is
+now a near-neighbour of 'e' (distance 1.0).  Same-row digit-to-digit
+nearness (4↔5↔6) falls out of the same Euclidean distance metric for
+free, so no special-casing is needed.  Punctuation and the numpad
+remain unmapped — punctuation has a different error mode (different
+fix), and the numpad is spatially isolated from letters and has no
+dictionary to correct against.
+
 ### P(intended | clicked)
 
 For a clicked key, the neighbour cache stores every key within
@@ -44,8 +55,8 @@ Gaussian mass sits inside the configured uncertainty radius.
 ### Neighbour cache
 
 Built once in `_build_neighbor_cache`: O(K²) in the number of keys
-(~676 pair checks for 26 letters — cheap).  Rebuilt only if
-`set_uncertainty_radius` is called at runtime; otherwise the cache
+(~1296 pair checks for the 36 mapped keys — still cheap).  Rebuilt
+only if `set_uncertainty_radius` is called at runtime; otherwise the cache
 is permanent.
 
 ## Candidate Generation — `FuzzyWordGenerator`

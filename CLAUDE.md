@@ -188,6 +188,8 @@ Hardcoded in `src/prediction/fuzzy_recognizer.py` as `DEFAULT_*` / `_*_PROB` con
 
 To tune, override the class attributes on `FuzzyRecognizer`. There's no UI for it.
 
+The spatial layout (`QWERTY_POSITIONS`) covers a-z plus 0-9 — the digit row sits at row -1 directly above qwerty (5 above t, 6 above y, etc.) so an off-by-one-row mistype between letter and digit ("h3llo" → "hello") is recoverable. Punctuation and the numpad are deliberately unmapped: punctuation has a different error mode, and the numpad is spatially isolated from letters and has no dictionary to correct against. If you add a new layout (Dvorak, Colemak), mirror this — letters + digit row only.
+
 ## Testing
 
 ```bash
@@ -337,6 +339,18 @@ Implemented in `src/updater.py`. Flow walkthrough, threat model + defences table
 > ⚠️ **Releases live in a separate public repo** — `okstudio1/alpha-osk-releases`. The source repo is private (returns 404 on `/releases/latest` to unauthenticated update clients). Always pass `--repo okstudio1/alpha-osk-releases` to `gh release create`.
 
 Version source of truth is `src/__version__.py`. The release-asset filename **must** match `Alpha-OSK-Setup-{version}.exe` exactly — the updater rejects anything else. User-facing toggle: *Settings → Updates → "Check for updates on startup"* (persisted as `appSettings.savedAutoCheckUpdates`).
+
+### Update progress UI (T40)
+
+Three pieces cover the gap between "user clicks install" and "new keyboard appears":
+
+1. **Pre-install toast in the live OSK** (`updateInstallHandoffPending` signal → `updateStartingToast` in `Main.qml`). Fired by `updater.download_and_install` via the `on_installer_launching` callback, immediately before `_launch_installer`. The bridge callback emits the signal then sleeps `_PRE_INSTALL_TOAST_DWELL_S` (1.8 s) in the worker thread so the toast paints before the installer's taskkill arrives. Without this dwell, the toast and the keyboard would both vanish before the user could read it.
+2. **Relauncher splash** (`_run_with_splash` in `_update_relauncher.py`). A frameless `WindowStaysOnTopHint` widget owned by the detached relauncher process. The polling logic was refactored from blocking sleep loops into a `QTimer` state machine (`_poll_parent` → `_poll_new_exe` → `_launch`) so the splash stays painted between checks. New `_new_exe_ready` is the single-shot mirror of `_wait_for_new_exe`. Splash colours match the in-app toast. Has a ✕ dismiss button that *hides* the splash but keeps polling running — the user is dismissing the visual, not the work.
+3. **Post-update ✓ toast** (already shipped in 1.0.17, `updateAppliedToast` driven by `consumeUpdateHandoff`). Confirms the install completed.
+
+**`_run_headless` is preserved** as the legacy code path. Tests target it (so they don't have to stand up `QApplication`) and it's the fallback when the splash fails to start (PySide6 import error, no display server). Production always passes `--show-splash` so the splash path runs.
+
+**Dev-mode short-circuit**: `_spawn_relauncher` passes `--target-exe sys.executable` in dev mode; `_new_exe_ready` would then wait for `python.exe`'s mtime to advance past parent-death, which never happens, leaving the splash stuck at "Installing files…" for the full `_NEW_EXE_TIMEOUT_S`. `_is_dev_target()` detects `python` / `pythonw` basenames and routes those straight to headless. Production installs always point at `alpha-osk.exe`, so this guard never trips for real users.
 
 ## Accessibility Ecosystem
 
