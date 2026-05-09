@@ -17,6 +17,7 @@ import json
 import logging
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from pathlib import Path
@@ -288,6 +289,14 @@ class TelemetryClient:
         """Default submit: POST JSON, return status code. Raises on
         network error so the retry loop can catch.
         """
+        # Refuse anything but https://. The endpoint comes from a build
+        # constant, but a misconfigured build that pointed at file:// or
+        # plain http:// would otherwise leak telemetry over an
+        # unauthenticated channel.
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme != "https" or not parsed.hostname:
+            raise urllib.error.URLError(f"refusing non-https endpoint: {url!r}")
+
         req = urllib.request.Request(
             url,
             data=body,
@@ -295,7 +304,7 @@ class TelemetryClient:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_SECONDS) as resp:
+            with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_SECONDS) as resp:  # noqa: S310
                 return int(resp.status)
         except urllib.error.HTTPError as e:
             # HTTPError IS a response with a status code -- not a

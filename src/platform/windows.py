@@ -1131,6 +1131,10 @@ def create_shortcut(
         result = subprocess.run(
             ["powershell", "-NoProfile", "-Command", ps_script],
             capture_output=True, text=True, timeout=10,
+            # Suppress the PowerShell console window during shortcut
+            # creation; otherwise a cmd window flashes (and on GUI-only
+            # hosts can stick around) every time we touch the Start Menu.
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         if result.returncode == 0:
             _logger.info("Shortcut created: %s", shortcut_path)

@@ -90,6 +90,9 @@ def _configure_log(log_dir: Path) -> None:
         root.addHandler(handler)
         root.setLevel(logging.INFO)
     except Exception:
+        # No fallback log surface for the relauncher (no console attached
+        # in detached mode); swallow so a logging-init failure never kills
+        # the relauncher itself.
         pass
 
 
@@ -161,6 +164,8 @@ def _wait_for_new_exe(
                     if after_mtime is None or stat.st_mtime > after_mtime:
                         return True
         except OSError:
+            # Transient stat race against the installer mid-write; retry
+            # on the next poll tick rather than aborting the wait.
             pass
         time.sleep(_POLL_INTERVAL_S)
     return False

@@ -137,6 +137,10 @@ def _surface_existing_alpha_osk() -> None:
             try:
                 user32.AllowSetForegroundWindow(-1)
             except Exception:
+                # Probe-only: if AllowSetForegroundWindow isn't available
+                # the next SetForegroundWindow may flash the taskbar
+                # instead of stealing focus, which is acceptable degraded
+                # behaviour for a single-instance surface.
                 pass
             user32.SetForegroundWindow(hwnd)
     except Exception as exc:

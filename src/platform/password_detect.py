@@ -293,6 +293,9 @@ if sys.platform == "win32":
             try:
                 _vtable_func(obj, 2, ctypes.c_ulong)(obj)
             except Exception:
+                # Best-effort teardown: a failing Release during shutdown
+                # (e.g. process exit, COM apartment torn down underneath
+                # us) must never raise into the caller.
                 pass
 
     class _WindowsUIADetector:
@@ -333,6 +336,8 @@ if sys.platform == "win32":
                     try:
                         ctypes.windll.ole32.CoUninitialize()
                     except Exception:
+                        # Init already failed; CoUninitialize is best-effort
+                        # cleanup and must not mask the original error.
                         pass
                     self._owns_com = False
 
@@ -346,6 +351,8 @@ if sys.platform == "win32":
                 try:
                     ctypes.windll.ole32.CoUninitialize()
                 except Exception:
+                    # Shutdown path: swallow so a teardown failure can't
+                    # crash the host process during exit.
                     pass
                 self._owns_com = False
 

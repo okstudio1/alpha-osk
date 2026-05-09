@@ -384,6 +384,11 @@ def _verify_signature(exe_path: Path) -> bool:
             capture_output=True,
             text=True,
             timeout=30,
+            # Suppress the PowerShell console window. Without this,
+            # auto-update sig verification briefly flashes (and on some
+            # GUI-only hosts, leaves a stuck) cmd window the user has to
+            # close manually.
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
         _logger.error("PowerShell signature check failed: %s", e)
@@ -436,6 +441,9 @@ def _make_private_tempdir() -> Path:
     try:
         os.chmod(d, 0o700)
     except OSError:
+        # No-op on Windows (chmod has no NTFS effect there); the per-user
+        # TEMP ACL already restricts access. POSIX mkdtemp also already
+        # creates with 0o700, so this is belt-and-braces only.
         pass
     return d
 

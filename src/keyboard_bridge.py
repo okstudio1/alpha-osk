@@ -1483,6 +1483,8 @@ class KeyboardBridge(QObject):
         try:
             path.unlink()
         except OSError:
+            # File may already be gone or held open by AV; the breadcrumb
+            # is non-critical, so swallow rather than surface to the user.
             pass
 
     def shutdown(self) -> None:
@@ -1542,6 +1544,8 @@ class KeyboardBridge(QObject):
             from .platform import password_detect
             password_detect.shutdown()
         except Exception:
+            # Shutdown path: COM teardown failures must not crash the
+            # exit handler. The OS will reap the apartment regardless.
             pass
 
     @Slot()
@@ -2109,6 +2113,8 @@ class KeyboardBridge(QObject):
                 if isinstance(key_centers, QJSValue):
                     key_centers = key_centers.toVariant()
             except ImportError:
+                # Non-Qt test runner: key_centers is already a native
+                # Python dict, no QJSValue conversion needed.
                 pass
 
             mapping: Dict[str, tuple] = {}
@@ -2144,6 +2150,8 @@ class KeyboardBridge(QObject):
             if isinstance(points, QJSValue):
                 points = points.toVariant()
         except ImportError:
+            # Non-Qt test runner: points is already a native Python
+            # list, no QJSValue conversion needed.
             pass
 
         try:
