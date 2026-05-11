@@ -755,6 +755,81 @@ Item {
                             }
                         }
 
+                        // -- Boosted Words --
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: boostCol.implicitHeight + 28
+                            color: "#222244"
+                            radius: 8
+                            visible: vizData && vizData.stats && vizData.stats.preferredCount > 0
+
+                            ColumnLayout {
+                                id: boostCol
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 6
+
+                                Text {
+                                    text: "Boosted Words"
+                                    color: "#ccc"
+                                    font.pixelSize: 14
+                                    font.weight: Font.DemiBold
+                                }
+
+                                Text {
+                                    text: "Click to remove boost"
+                                    color: "#777"
+                                    font.pixelSize: 11
+                                    Layout.bottomMargin: 2
+                                }
+
+                                Flow {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+
+                                    Repeater {
+                                        model: (vizData && vizData.stats && vizData.stats.preferred) ? vizData.stats.preferred : []
+                                        delegate: Rectangle {
+                                            width: prefRow.implicitWidth + 16
+                                            height: 26
+                                            radius: 4
+                                            color: prefMa.containsMouse ? "#1f4a2e" : "#1a2f24"
+                                            border.color: prefMa.containsMouse ? "#7d7" : "#5a8"
+                                            border.width: 1
+
+                                            Row {
+                                                id: prefRow
+                                                anchors.centerIn: parent
+                                                spacing: 4
+                                                Text {
+                                                    text: modelData.word + " (+" + modelData.count + ")"
+                                                    color: "#9e9"
+                                                    font.pixelSize: 11
+                                                }
+                                                Text {
+                                                    text: "✕"
+                                                    color: "#8c8"
+                                                    font.pixelSize: 10
+                                                    visible: prefMa.containsMouse
+                                                }
+                                            }
+
+                                            MouseArea {
+                                                id: prefMa
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    if (keyboard) keyboard.unprefer(modelData.word)
+                                                    vizPanel.refresh()
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         // -- Suppressed Words --
                         Rectangle {
                             Layout.fillWidth: true

@@ -208,18 +208,27 @@ gates GitHub Actions runs).  Default mode skips coverage tracking
 (~85 s); add `--full` to include the `--cov-fail-under=60` gate
 (~3 min, matches CI exactly).
 
-## Word Suppression
+## Word Suppression and Boosting
 
 Users can right-click prediction pills to:
-- **Remove from vocabulary** — adds to `ngram_predictor.blacklist` (word never appears again)
-- **Bad suggestion** — increments `ngram_predictor.dispreference` (word is downweighted by `1 / (1 + count * 0.5)`)
+- **Show more** — clears any prior dispreference and bumps `ngram_predictor.unigrams` / `user_vocab` by +5 (same magnitude as the prediction-click reinforcement), then records the boost in `ngram_predictor.preferred` so the dashboard can surface it and the user can roll it back.
+- **Show less** — increments `ngram_predictor.dispreference` (word is downweighted by `1 / (1 + count * 0.5)`)
+- **Remove** — adds to `ngram_predictor.blacklist` (word never appears again)
 
-Both are persisted in `ngram_model.json` and applied in `hybrid_predictor._merge_predictions()`.
+All three are persisted in `ngram_model.json`. Suppression is applied in `hybrid_predictor._merge_predictions()`; boosting is implicit in the bumped unigram counts (no separate multiplier — the engine treats a boosted word the same as a heavily-typed word).
 
-### Restoring Suppressed Words
-In the Model Visualization dashboard (Settings → Tools → Language Model Visualization → Dashboard tab → Suppressed Words), blacklisted and dispreferred words display as clickable tags. Click a tag to restore it.
+### Boost rollback math
+`unprefer(word)` decrements `unigrams` / `user_vocab` / `_user_total` / `total_words` by the cumulative boost amount, capped at the current `user_vocab` count so a word that was also organically learned keeps its organic count after the boost is removed. The `preferred` entry is then dropped. Boosts are never applied to bigrams or trigrams.
 
-Bridge slots: `keyboard.unblacklistWord(word)`, `keyboard.undisprefer(word)`.
+### Restoring Suppressed and Boosted Words
+In the Model Visualization dashboard (Settings → Tools → Language Model Visualization → Dashboard tab), three sections surface user-adjusted words as clickable tags:
+- **Boosted Words** — green tags labelled `word (+N)` where N is the cumulative boost. Click to call `keyboard.unprefer(word)` which rolls back the boost (see math above).
+- **Suppressed Words → Blocked** — red tags for blacklisted words. Click to call `keyboard.unblacklistWord(word)`.
+- **Suppressed Words → Downweighted** — yellow tags for dispreferred words. Click to call `keyboard.undisprefer(word)`.
+
+Each section is hidden when the corresponding list is empty (`preferredCount > 0`, `blacklistCount > 0`, `dispreferenceCount > 0`).
+
+Bridge slots: `keyboard.markGoodSuggestion(word)`, `keyboard.markBadSuggestion(word)`, `keyboard.blacklistWord(word)`, `keyboard.unprefer(word)`, `keyboard.unblacklistWord(word)`, `keyboard.undisprefer(word)`.
 
 ### Auto-Rehabilitation
 If a user manually types a blacklisted word 3 times (completing it with space), the word is automatically restored to predictions. Tracked via `ngram_predictor._blacklist_type_count`, persisted in `ngram_model.json`.
@@ -229,7 +238,7 @@ If a user manually types a blacklisted word 3 times (completing it with space), 
 Accessed via Settings → Tools → Language Model Visualization. Three tabs:
 - **Word Cloud** — circle-packed bubble chart of top words, sized by frequency
 - **Word Flow** — network graph of bigram word→word connections
-- **Dashboard** — stats cards, top words bar chart, interactive suppressed words, top word pairs
+- **Dashboard** — stats cards, top words bar chart, interactive boosted words, interactive suppressed words, top word pairs
 
 Data provided by `keyboard_bridge.getVisualizationData()` → `ModelVisualization.qml`.
 

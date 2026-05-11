@@ -1008,9 +1008,18 @@ class HybridPredictor(QObject):
         """Downweight a word in future predictions."""
         self._ngram.mark_bad(word)
 
+    def mark_good_suggestion(self, word: str) -> None:
+        """Boost a word and record the boost for later undo."""
+        self._ngram.remove_dispreference(word)
+        self._ngram.mark_good(word)
+
     def remove_dispreference(self, word: str) -> None:
         """Remove dispreference penalty from a word."""
         self._ngram.remove_dispreference(word)
+
+    def unprefer(self, word: str) -> None:
+        """Roll back an explicit user boost."""
+        self._ngram.unprefer(word)
 
     def record_typed_word(self, word: str) -> Optional[str]:
         """Track typed word for auto-rehabilitation of blacklisted words."""

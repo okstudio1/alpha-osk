@@ -2015,6 +2015,22 @@ class KeyboardBridge(QObject):
         self._add_debug_log(f"Marked bad: {word}")
 
     @Slot(str)
+    def markGoodSuggestion(self, word: str) -> None:
+        """Boost a word in future predictions. Clears any prior dispreference
+        then bumps the unigram count by the same +5 used for prediction-click
+        reinforcement and records the boost so the dashboard can show it
+        and the user can undo it later.
+        """
+        self._predictor.mark_good_suggestion(word)
+        self._add_debug_log(f"Marked good: {word}")
+
+    @Slot(str)
+    def unprefer(self, word: str) -> None:
+        """Roll back an explicit user boost (dashboard restore action)."""
+        self._predictor.unprefer(word)
+        self._add_debug_log(f"Unpreferred: {word}")
+
+    @Slot(str)
     def unblacklistWord(self, word: str) -> None:
         """Restore a previously blacklisted word to predictions."""
         self._predictor.unblacklist_word(word)
@@ -2311,10 +2327,15 @@ class KeyboardBridge(QObject):
         stats = ngram.get_stats()
         stats["blacklistCount"] = len(ngram.blacklist)
         stats["dispreferenceCount"] = len(ngram.dispreference)
+        stats["preferredCount"] = len(ngram.preferred)
         stats["blacklist"] = list(ngram.blacklist)[:30]
         stats["dispreference"] = [
             {"word": w, "count": c}
             for w, c in sorted(ngram.dispreference.items(), key=lambda x: x[1], reverse=True)[:20]
+        ]
+        stats["preferred"] = [
+            {"word": w, "count": c}
+            for w, c in sorted(ngram.preferred.items(), key=lambda x: x[1], reverse=True)[:20]
         ]
 
         # Analytics

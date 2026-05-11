@@ -1242,6 +1242,35 @@ Window {
                 // Divider
                 Rectangle { width: parent.width - 24; height: 1; color: "#3a3a4a"; anchors.horizontalCenter: parent.horizontalCenter }
 
+                // Upweight
+                Rectangle {
+                    width: parent.width - 8
+                    height: 34
+                    x: 4
+                    radius: 6
+                    color: goodMa.containsMouse ? "#2a4a3a" : "transparent"
+
+                    Row {
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+                        anchors.leftMargin: 12
+                        spacing: 10
+                        Text { text: "\u25B2"; font.pixelSize: 11; color: "#7d7"; anchors.verticalCenter: parent.verticalCenter }
+                        Text { text: "Show more"; font.pixelSize: 13; color: "#ddd"; anchors.verticalCenter: parent.verticalCenter }
+                    }
+
+                    MouseArea {
+                        id: goodMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (keyboard) keyboard.markGoodSuggestion(predContextMenu.targetWord)
+                            predContextMenu.close()
+                        }
+                    }
+                }
+
                 // Downweight
                 Rectangle {
                     width: parent.width - 8

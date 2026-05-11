@@ -66,6 +66,11 @@ class NgramPredictor:
         # Word suppression: blacklisted words never appear, dispreferred are downweighted
         self.blacklist: set[str] = set()
         self.dispreference: Dict[str, int] = defaultdict(int)
+        # Explicit user boosts via the prediction-pill "Show more" menu.
+        # Value is the cumulative +5 boosts applied to ``unigrams`` /
+        # ``user_vocab``; tracking it lets the dashboard surface the
+        # word as boosted AND lets ``unprefer`` roll the boost back.
+        self.preferred: Dict[str, int] = defaultdict(int)
 
         # Auto-rehabilitation: track how many times a blacklisted word is typed
         self._blacklist_type_count: Dict[str, int] = defaultdict(int)
@@ -686,6 +691,51 @@ class NgramPredictor:
             del self.dispreference[word_lower]
             _logger.info("Removed dispreference: %s", word)
 
+    def mark_good(self, word: str) -> None:
+        """Boost a word and record the boost so it can be undone.
+
+        Bumps ``unigrams`` / ``user_vocab`` by +5 (same magnitude as
+        :meth:`learn_word` and the prediction-click reinforcement) and
+        increments ``preferred[word]`` so the dashboard can surface
+        the word and :meth:`unprefer` can roll the boost back later.
+        """
+        word_lower = word.lower().strip()
+        if not word_lower:
+            return
+        self.learn_word(word_lower)
+        self.preferred[word_lower] += 5
+        _logger.info("Marked good: %s (boost now %d)", word, self.preferred[word_lower])
+
+    def unprefer(self, word: str) -> None:
+        """Roll back an explicit user boost.
+
+        Decrements ``unigrams`` / ``user_vocab`` / ``_user_total`` /
+        ``total_words`` by the cumulative boost amount, then drops the
+        ``preferred`` entry. Capped at the current counter values so a
+        word that was also organically learned still keeps its
+        organic count after the boost is removed.
+        """
+        word_lower = word.lower().strip()
+        if not word_lower or word_lower not in self.preferred:
+            return
+        amount = self.preferred[word_lower]
+        rollback = min(amount, self.user_vocab.get(word_lower, 0))
+        if rollback > 0:
+            self.user_vocab[word_lower] -= rollback
+            self._user_total = max(0, self._user_total - rollback)
+            self.unigrams[word_lower] = max(0, self.unigrams.get(word_lower, 0) - rollback)
+            self.total_words = max(0, self.total_words - rollback)
+            if self.user_vocab[word_lower] <= 0:
+                del self.user_vocab[word_lower]
+            if self.unigrams.get(word_lower, 0) <= 0:
+                self.unigrams.pop(word_lower, None)
+        del self.preferred[word_lower]
+        _logger.info("Unpreferred: %s (rolled back %d)", word, rollback)
+
+    def get_preference(self, word: str) -> int:
+        """Get the explicit boost count for a word (0 if not boosted)."""
+        return self.preferred.get(word.lower(), 0)
+
     def is_suppressed(self, word: str) -> bool:
         """Check if a word is blacklisted."""
         return word.lower() in self.blacklist
@@ -804,6 +854,7 @@ class NgramPredictor:
             "total_words": self.total_words,
             "blacklist": sorted(self.blacklist),
             "dispreference": dict(self.dispreference),
+            "preferred": dict(self.preferred),
             "blacklist_type_count": dict(self._blacklist_type_count),
             "capitalization": dict(self.capitalization),
             "candidate_counts": dict(self._candidate_counts),
@@ -890,6 +941,7 @@ class NgramPredictor:
             self.total_words = data.get("total_words", 0)
             self.blacklist = set(data.get("blacklist", []))
             self.dispreference = defaultdict(int, data.get("dispreference", {}))
+            self.preferred = defaultdict(int, data.get("preferred", {}))
             self._blacklist_type_count = defaultdict(int, data.get("blacklist_type_count", {}))
             self._candidate_counts = defaultdict(int, data.get("candidate_counts", {}))
             # Merge saved capitalization with built-in proper nouns (user overrides win)
@@ -1052,6 +1104,7 @@ class NgramPredictor:
         self.total_words = 0
         self.blacklist.clear()
         self.dispreference.clear()
+        self.preferred.clear()
         self._blacklist_type_count.clear()
         self._candidate_counts.clear()
         self._learn_count = 0
