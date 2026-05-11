@@ -235,10 +235,10 @@ Item {
         }
         KeyButton {
             keyText: "numlock"
-            displayText: "NumLock"
+            displayText: "Num"
             keyWidth: numpadPanel.keyW
             keyHeight: numpadPanel.keyH
-            fontSize: 11
+            fontSize: 12
             isSpecial: true
             isActive: numpadPanel.numLockOn
             keyColor: numpadPanel.specialKeyColor
