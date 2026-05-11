@@ -25,66 +25,7 @@ Item {
         rowSpacing: numpadPanel.keySpacing
         columnSpacing: numpadPanel.keySpacing
 
-        // Row 1: NumLock, /, *, -
-        KeyButton {
-            keyText: "numlock"
-            displayText: "Num"
-            keyWidth: numpadPanel.keyW
-            keyHeight: numpadPanel.keyH
-            fontSize: 12
-            isSpecial: true
-            isActive: numpadPanel.numLockOn
-            keyColor: numpadPanel.specialKeyColor
-            keyPressedColor: numpadPanel.keyPressedColor
-            keyTextColor: numpadPanel.keyTextColor
-            accentColor: numpadPanel.accentColor
-            borderColor: numpadPanel.borderColor
-            onKeyPressed: {
-                keyboard.pressSpecialKey("numlock")
-                numpadPanel.numLockOn = !numpadPanel.numLockOn
-            }
-        }
-        KeyButton {
-            keyText: "/"
-            displayText: "/"
-            keyWidth: numpadPanel.keyW
-            keyHeight: numpadPanel.keyH
-            fontSize: 14
-            keyColor: numpadPanel.specialKeyColor
-            keyPressedColor: numpadPanel.keyPressedColor
-            keyTextColor: numpadPanel.keyTextColor
-            accentColor: numpadPanel.accentColor
-            borderColor: numpadPanel.borderColor
-            onKeyPressed: keyboard.pressKey("/")
-        }
-        KeyButton {
-            keyText: "*"
-            displayText: "*"
-            keyWidth: numpadPanel.keyW
-            keyHeight: numpadPanel.keyH
-            fontSize: 14
-            keyColor: numpadPanel.specialKeyColor
-            keyPressedColor: numpadPanel.keyPressedColor
-            keyTextColor: numpadPanel.keyTextColor
-            accentColor: numpadPanel.accentColor
-            borderColor: numpadPanel.borderColor
-            onKeyPressed: keyboard.pressKey("*")
-        }
-        KeyButton {
-            keyText: "-"
-            displayText: "-"
-            keyWidth: numpadPanel.keyW
-            keyHeight: numpadPanel.keyH
-            fontSize: 14
-            keyColor: numpadPanel.specialKeyColor
-            keyPressedColor: numpadPanel.keyPressedColor
-            keyTextColor: numpadPanel.keyTextColor
-            accentColor: numpadPanel.accentColor
-            borderColor: numpadPanel.borderColor
-            onKeyPressed: keyboard.pressKey("-")
-        }
-
-        // Row 2: 7/Home, 8/Up, 9/PgUp, +
+        // Row 1: 7/Home, 8/Up, 9/PgUp, /
         KeyButton {
             displayText: numpadPanel.numLockOn ? "7" : "Home"
             keyWidth: numpadPanel.keyW
@@ -98,7 +39,7 @@ Item {
             onKeyPressed: numpadPanel.numLockOn ? keyboard.pressKey("7") : keyboard.pressSpecialKey("home")
         }
         KeyButton {
-            displayText: numpadPanel.numLockOn ? "8" : "\u2191"
+            displayText: numpadPanel.numLockOn ? "8" : "↑"
             keyWidth: numpadPanel.keyW
             keyHeight: numpadPanel.keyH
             fontSize: 14
@@ -122,22 +63,22 @@ Item {
             onKeyPressed: numpadPanel.numLockOn ? keyboard.pressKey("9") : keyboard.pressSpecialKey("pageup")
         }
         KeyButton {
-            displayText: "+"
+            keyText: "/"
+            displayText: "/"
             keyWidth: numpadPanel.keyW
-            keyHeight: numpadPanel.keyH * 2 + numpadPanel.keySpacing
+            keyHeight: numpadPanel.keyH
             fontSize: 14
             keyColor: numpadPanel.specialKeyColor
             keyPressedColor: numpadPanel.keyPressedColor
             keyTextColor: numpadPanel.keyTextColor
             accentColor: numpadPanel.accentColor
             borderColor: numpadPanel.borderColor
-            Layout.rowSpan: 2
-            onKeyPressed: keyboard.pressKey("+")
+            onKeyPressed: keyboard.pressKey("/")
         }
 
-        // Row 3: 4/Left, 5, 6/Right
+        // Row 2: 4/Left, 5, 6/Right, *
         KeyButton {
-            displayText: numpadPanel.numLockOn ? "4" : "\u2190"
+            displayText: numpadPanel.numLockOn ? "4" : "←"
             keyWidth: numpadPanel.keyW
             keyHeight: numpadPanel.keyH
             fontSize: 14
@@ -162,7 +103,7 @@ Item {
             onKeyPressed: if (numpadPanel.numLockOn) keyboard.pressKey("5")
         }
         KeyButton {
-            displayText: numpadPanel.numLockOn ? "6" : "\u2192"
+            displayText: numpadPanel.numLockOn ? "6" : "→"
             keyWidth: numpadPanel.keyW
             keyHeight: numpadPanel.keyH
             fontSize: 14
@@ -173,8 +114,21 @@ Item {
             borderColor: numpadPanel.borderColor
             onKeyPressed: numpadPanel.numLockOn ? keyboard.pressKey("6") : keyboard.pressSpecialKey("right")
         }
+        KeyButton {
+            keyText: "*"
+            displayText: "*"
+            keyWidth: numpadPanel.keyW
+            keyHeight: numpadPanel.keyH
+            fontSize: 14
+            keyColor: numpadPanel.specialKeyColor
+            keyPressedColor: numpadPanel.keyPressedColor
+            keyTextColor: numpadPanel.keyTextColor
+            accentColor: numpadPanel.accentColor
+            borderColor: numpadPanel.borderColor
+            onKeyPressed: keyboard.pressKey("*")
+        }
 
-        // Row 4: 1/End, 2/Down, 3/PgDn, Enter
+        // Row 3: 1/End, 2/Down, 3/PgDn, -
         KeyButton {
             displayText: numpadPanel.numLockOn ? "1" : "End"
             keyWidth: numpadPanel.keyW
@@ -188,7 +142,7 @@ Item {
             onKeyPressed: numpadPanel.numLockOn ? keyboard.pressKey("1") : keyboard.pressSpecialKey("end")
         }
         KeyButton {
-            displayText: numpadPanel.numLockOn ? "2" : "\u2193"
+            displayText: numpadPanel.numLockOn ? "2" : "↓"
             keyWidth: numpadPanel.keyW
             keyHeight: numpadPanel.keyH
             fontSize: 14
@@ -212,21 +166,20 @@ Item {
             onKeyPressed: numpadPanel.numLockOn ? keyboard.pressKey("3") : keyboard.pressSpecialKey("pagedown")
         }
         KeyButton {
-            displayText: "\u23CE"
+            keyText: "-"
+            displayText: "-"
             keyWidth: numpadPanel.keyW
-            keyHeight: numpadPanel.keyH * 2 + numpadPanel.keySpacing
-            fontSize: 16
-            isSpecial: true
-            keyColor: numpadPanel.enterKeyColor
+            keyHeight: numpadPanel.keyH
+            fontSize: 14
+            keyColor: numpadPanel.specialKeyColor
             keyPressedColor: numpadPanel.keyPressedColor
             keyTextColor: numpadPanel.keyTextColor
             accentColor: numpadPanel.accentColor
             borderColor: numpadPanel.borderColor
-            Layout.rowSpan: 2
-            onKeyPressed: keyboard.pressSpecialKey("return")
+            onKeyPressed: keyboard.pressKey("-")
         }
 
-        // Row 5: 0/Ins (wide), ./Del
+        // Row 4: 0/Ins (span 2), ./Del, +
         KeyButton {
             displayText: numpadPanel.numLockOn ? "0" : "Ins"
             keyWidth: numpadPanel.keyW * 2 + numpadPanel.keySpacing
@@ -251,6 +204,52 @@ Item {
             accentColor: numpadPanel.accentColor
             borderColor: numpadPanel.borderColor
             onKeyPressed: numpadPanel.numLockOn ? keyboard.pressKey(".") : keyboard.pressSpecialKey("delete")
+        }
+        KeyButton {
+            displayText: "+"
+            keyWidth: numpadPanel.keyW
+            keyHeight: numpadPanel.keyH
+            fontSize: 14
+            keyColor: numpadPanel.specialKeyColor
+            keyPressedColor: numpadPanel.keyPressedColor
+            keyTextColor: numpadPanel.keyTextColor
+            accentColor: numpadPanel.accentColor
+            borderColor: numpadPanel.borderColor
+            onKeyPressed: keyboard.pressKey("+")
+        }
+
+        // Row 5: Enter (span 3), NumLock
+        KeyButton {
+            displayText: "Enter"
+            keyWidth: numpadPanel.keyW * 3 + numpadPanel.keySpacing * 2
+            keyHeight: numpadPanel.keyH
+            fontSize: 14
+            isSpecial: true
+            keyColor: numpadPanel.enterKeyColor
+            keyPressedColor: numpadPanel.keyPressedColor
+            keyTextColor: numpadPanel.keyTextColor
+            accentColor: numpadPanel.accentColor
+            borderColor: numpadPanel.borderColor
+            Layout.columnSpan: 3
+            onKeyPressed: keyboard.pressSpecialKey("return")
+        }
+        KeyButton {
+            keyText: "numlock"
+            displayText: "NumLock"
+            keyWidth: numpadPanel.keyW
+            keyHeight: numpadPanel.keyH
+            fontSize: 11
+            isSpecial: true
+            isActive: numpadPanel.numLockOn
+            keyColor: numpadPanel.specialKeyColor
+            keyPressedColor: numpadPanel.keyPressedColor
+            keyTextColor: numpadPanel.keyTextColor
+            accentColor: numpadPanel.accentColor
+            borderColor: numpadPanel.borderColor
+            onKeyPressed: {
+                keyboard.pressSpecialKey("numlock")
+                numpadPanel.numLockOn = !numpadPanel.numLockOn
+            }
         }
     }
 }
