@@ -124,6 +124,11 @@ def check_dependencies():
             [str(venv_python), "-c", "import PySide6"],
             capture_output=True,
             text=True,
+            # Output is captured; CREATE_NO_WINDOW suppresses the flash of a
+            # console window that Windows would otherwise open when the
+            # parent has no inherited console (e.g. launched via Explorer
+            # or after re-elevation).  No effect on POSIX.
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
 
         if result.returncode != 0:

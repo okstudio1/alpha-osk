@@ -79,6 +79,10 @@ def _have_module(name: str) -> bool:
             [sys.executable, "-m", name, "--version"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             check=True,
+            # Output is discarded; CREATE_NO_WINDOW suppresses the flash
+            # of a console window on Windows when the parent has no
+            # inherited console.  No effect on POSIX.
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
