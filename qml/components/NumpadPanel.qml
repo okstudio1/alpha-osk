@@ -179,10 +179,12 @@ Item {
             onKeyPressed: keyboard.pressKey("-")
         }
 
-        // Row 4: 0/Ins (span 2), ./Del, +
+        // Row 4: 0/Ins (span 3), +
+        // 0 spans 3 columns (instead of the prior 2) so the period
+        // can move down to row 5 col 4, directly under the +.
         KeyButton {
             displayText: numpadPanel.numLockOn ? "0" : "Ins"
-            keyWidth: numpadPanel.keyW * 2 + numpadPanel.keySpacing
+            keyWidth: numpadPanel.keyW * 3 + numpadPanel.keySpacing * 2
             keyHeight: numpadPanel.keyH
             fontSize: numpadPanel.numLockOn ? 14 : 12
             keyColor: numpadPanel.keyColor
@@ -190,20 +192,8 @@ Item {
             keyTextColor: numpadPanel.keyTextColor
             accentColor: numpadPanel.accentColor
             borderColor: numpadPanel.borderColor
-            Layout.columnSpan: 2
+            Layout.columnSpan: 3
             onKeyPressed: numpadPanel.numLockOn ? keyboard.pressKey("0") : keyboard.pressSpecialKey("insert")
-        }
-        KeyButton {
-            displayText: numpadPanel.numLockOn ? "." : "Del"
-            keyWidth: numpadPanel.keyW
-            keyHeight: numpadPanel.keyH
-            fontSize: numpadPanel.numLockOn ? 14 : 12
-            keyColor: numpadPanel.keyColor
-            keyPressedColor: numpadPanel.keyPressedColor
-            keyTextColor: numpadPanel.keyTextColor
-            accentColor: numpadPanel.accentColor
-            borderColor: numpadPanel.borderColor
-            onKeyPressed: numpadPanel.numLockOn ? keyboard.pressKey(".") : keyboard.pressSpecialKey("delete")
         }
         KeyButton {
             displayText: "+"
@@ -218,10 +208,13 @@ Item {
             onKeyPressed: keyboard.pressKey("+")
         }
 
-        // Row 5: Enter (span 3), NumLock
+        // Row 5: Enter (span 2), NumLock, ./Del
+        // Period sits in col 4, directly below +.  NumLock shifts
+        // one column left to col 3.  Enter shrinks from span-3 to
+        // span-2 to make room.
         KeyButton {
             displayText: "Enter"
-            keyWidth: numpadPanel.keyW * 3 + numpadPanel.keySpacing * 2
+            keyWidth: numpadPanel.keyW * 2 + numpadPanel.keySpacing
             keyHeight: numpadPanel.keyH
             fontSize: 14
             isSpecial: true
@@ -230,7 +223,7 @@ Item {
             keyTextColor: numpadPanel.keyTextColor
             accentColor: numpadPanel.accentColor
             borderColor: numpadPanel.borderColor
-            Layout.columnSpan: 3
+            Layout.columnSpan: 2
             onKeyPressed: keyboard.pressSpecialKey("return")
         }
         KeyButton {
@@ -250,6 +243,18 @@ Item {
                 keyboard.pressSpecialKey("numlock")
                 numpadPanel.numLockOn = !numpadPanel.numLockOn
             }
+        }
+        KeyButton {
+            displayText: numpadPanel.numLockOn ? "." : "Del"
+            keyWidth: numpadPanel.keyW
+            keyHeight: numpadPanel.keyH
+            fontSize: numpadPanel.numLockOn ? 14 : 12
+            keyColor: numpadPanel.keyColor
+            keyPressedColor: numpadPanel.keyPressedColor
+            keyTextColor: numpadPanel.keyTextColor
+            accentColor: numpadPanel.accentColor
+            borderColor: numpadPanel.borderColor
+            onKeyPressed: numpadPanel.numLockOn ? keyboard.pressKey(".") : keyboard.pressSpecialKey("delete")
         }
     }
 }
