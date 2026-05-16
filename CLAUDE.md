@@ -468,10 +468,20 @@ Full step-by-step release checklist, signing details, troubleshooting table, and
 3. Build + sign from a **non-elevated shell** with the eToken plugged in: `python build/windows/build.py`.
 4. Test the installer in `release/`, including UIAccess against an elevated shell.
 5. `git tag vX.Y.Z && git push origin main && git push origin vX.Y.Z`.
-6. **Public repo for binaries**: `gh release create vX.Y.Z release/Alpha-OSK-Setup-X.Y.Z.exe --repo okstudio1/alpha-osk-releases ...`. The `--repo` flag is mandatory — source repo is private and the auto-updater can't see private releases.
+6. **Public repo for binaries**: `gh release create vX.Y.Z release/Alpha-OSK-Setup-X.Y.Z.exe release/Alpha-OSK-Setup-X.Y.Z-requirements.lock.txt --repo okstudio1/alpha-osk-releases ...`. The `--repo` flag is mandatory — source repo is private and the auto-updater can't see private releases. Upload the lockfile asset alongside the installer (see *Dependency Lockfile* below).
 7. **Track downloads**: `python scripts/downloads.py` prints per-release and total download counts via `gh api`. Includes auto-updater fetches, so it's a directional number rather than unique-install count.
 
 The eToken-non-elevated requirement is the single most common build trap: SafeNet exposes the cert to the user session only, so elevated shells get "Cannot find certificate."
+
+### Dependency Lockfile (release-time)
+
+Both `build/windows/build.py::freeze_lockfile` and `build/linux/build.py::freeze_lockfile` run `pip freeze --all` against the build venv on every build and write the result to `release/Alpha-OSK-Setup-{version}-requirements.lock.txt` (Windows) or `release/Alpha-OSK-{version}-linux-requirements.lock.txt` (Linux). Runs unconditionally — even on `--skip-build`, since bumping the version is what `--skip-build` is for and the lockfile name encodes the version.
+
+**What it is.** A plaintext, pip-installable record of every Python package + exact version PyInstaller bundled. Anyone reviewing the release (auditor, future-you debugging "what changed between 1.0.16 and 1.0.17") can `pip install -r <lockfile>` into a fresh venv to recreate the dependency tree. Always upload it as a release asset.
+
+**What it is NOT.** Not a CycloneDX / SPDX SBOM. There are no licenses, no purls, no signed statements. The cheap-path lockfile is the floor; upgrading to a proper SBOM means `cyclonedx-bom` for Python (`backend/cf-worker/` would use `@cyclonedx/cyclonedx-npm`) plus an `osv-scanner` CI job that reads the lockfile and flags transitive CVEs on every PR. Full upgrade walkthrough is in `docs/WINDOWS.md` § *Dependency Lockfile*. Do the upgrade before any institutional review pipeline (hospital procurement, federal supply-chain audit per Executive Order 14028); don't pre-build it before then.
+
+**`backend/cf-worker/package-lock.json` is committed** alongside `package.json` so Wrangler / TypeScript versions are deterministic between local and CI. `node_modules/` is in `.gitignore` — the lockfile is the source of truth, run `npm install` (or `npm ci` in CI) to materialise it. Generating the lockfile surfaced 4 dev-only CVEs through Wrangler 3.x (3 moderate esbuild, 1 high undici) — these affect only the local `wrangler dev --local` dev server, not the deployed worker on Cloudflare's edge runtime. Upgrading to Wrangler 4.x fixes them but is a breaking change for the worker; deferred as a separate task.
 
 ## Linux build
 

@@ -112,11 +112,21 @@ Outputs:
 |------|-------------|
 | `dist/alpha-osk/alpha-osk` | PyInstaller single-directory bundle |
 | `release/Alpha-OSK-<version>-x86_64.AppImage` | `--appimage` wrapper |
+| `release/Alpha-OSK-<version>-linux-requirements.lock.txt` | `pip freeze --all` of the build venv — reproducible record of every Python package + version bundled. See *Dependency Lockfile* below. Always emitted (even on `--skip-build`). |
 
 Run the bundle directly with `./dist/alpha-osk/alpha-osk` — no install
 needed. Runtime still requires `xdotool` or `ydotool` on the host,
 because those are OS-level tools (not Python libraries) and are not
 bundled.
+
+### Dependency Lockfile
+
+`build/linux/build.py::freeze_lockfile` writes
+`release/Alpha-OSK-<version>-linux-requirements.lock.txt` alongside
+the AppImage / .deb / tarball. Same shape and rationale as the Windows
+version — see `docs/WINDOWS.md` § *Dependency Lockfile* for what it is,
+what it isn't (not a CycloneDX/SPDX SBOM), and the upgrade path to a
+proper SBOM via `cyclonedx-bom`.
 
 ---
 

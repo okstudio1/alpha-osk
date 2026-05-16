@@ -45,5 +45,8 @@ release/
 # PyInstaller temp
 *.manifest.bak
 
+# Node / cf-worker (lockfile is committed; downloaded deps are not)
+node_modules/
+
 # Project specific
 *.log

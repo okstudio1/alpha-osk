@@ -352,6 +352,7 @@ python build/windows/sign.py dist/alpha-osk/alpha-osk.exe --verify
 |------|-------------|
 | `dist/alpha-osk/alpha-osk.exe` | Portable executable + dependencies |
 | `release/Alpha-OSK-Setup-{version}.exe` | NSIS installer (if NSIS is installed) |
+| `release/Alpha-OSK-Setup-{version}-requirements.lock.txt` | `pip freeze --all` of the build venv at release time — the reproducible record of every Python package + version that PyInstaller bundled. Not a CycloneDX/SPDX SBOM (no licenses, no purls); just a plaintext answer to "what shipped in X.Y.Z?". See *Dependency Lockfile* below for the upgrade path to a proper SBOM. |
 
 ### What the Build Includes
 
@@ -544,12 +545,18 @@ git push origin vX.Y.Z
 
 ### 7. Create the GitHub release — on the PUBLIC releases repo
 
+Upload both the installer **and** the lockfile so the release page carries the build's dependency record:
+
 ```bash
-gh release create vX.Y.Z release/Alpha-OSK-Setup-X.Y.Z.exe \
+gh release create vX.Y.Z \
+  release/Alpha-OSK-Setup-X.Y.Z.exe \
+  release/Alpha-OSK-Setup-X.Y.Z-requirements.lock.txt \
   --repo okstudio1/alpha-osk-releases \
   --title "vX.Y.Z" \
   --notes "See https://github.com/okstudio1/alpha-osk/blob/main/CHANGELOG.md"
 ```
+
+The lockfile is small (~5-10 KB) and gives anyone reviewing the release (auditors, future-us debugging "what changed between 1.0.16 and 1.0.17") an exact pip-installable record of the build venv. See *Dependency Lockfile* below for what it is and isn't.
 
 > ⚠️ **The `--repo okstudio1/alpha-osk-releases` flag is mandatory.** The source repo is private; the auto-updater can't see private releases (returns 404 to unauthenticated callers). Forgetting `--repo` will create the release in the source repo where end users' updaters won't find it. Tag the source repo for changelog tracking; publish binaries in the public repo.
 
@@ -574,6 +581,24 @@ To inspect the bundle:
 ```bash
 du -sm dist/alpha-osk/PySide6/* | sort -rn | head -20
 ```
+
+### Dependency Lockfile
+
+`build/windows/build.py::freeze_lockfile` runs `pip freeze --all` against the build venv and writes `release/Alpha-OSK-Setup-{version}-requirements.lock.txt` alongside the installer. It runs unconditionally on every build (including `--skip-build`, since bumping the version is what `--skip-build` is for and the lockfile name encodes the version). A short header at the top names the version and explains how to reproduce the env.
+
+**What it is.** A plaintext, pip-installable record of every Python package + exact version that was resolved when the build venv was last `pip install -r requirements-dev.txt`'d. PyInstaller bundles whatever pip resolved at build time, so this lockfile is the closest thing we have to "what shipped in 1.0.X?". Anyone reviewing the release (a hospital procurement reviewer, a security researcher, future-you debugging what changed between two releases) can `pip install -r Alpha-OSK-Setup-1.0.X-requirements.lock.txt` into a fresh venv and recreate the exact dependency tree.
+
+**What it is NOT.** Not a CycloneDX or SPDX SBOM. There are no license fields, no package URLs (purl), no signed statements, no transitive provenance. US Executive Order 14028 and most enterprise procurement processes ask for a structured SBOM, not a `pip freeze` dump. The plaintext lockfile is the cheap floor; a proper SBOM is the next step up.
+
+**Upgrade path to a proper SBOM.** When the audience demands it:
+
+1. `pip install cyclonedx-bom` in the build venv.
+2. Add a step in `build/windows/build.py` after `freeze_lockfile`: `cyclonedx-py environment -o release/Alpha-OSK-Setup-{version}-sbom.cyclonedx.json`.
+3. Same for the worker: `npm install --save-dev @cyclonedx/cyclonedx-npm` in `backend/cf-worker/`, add a `npm run sbom` script that emits `cf-worker-sbom.cyclonedx.json`, wire into deploy.
+4. Upload both SBOMs alongside the installer in step 7's `gh release create` invocation.
+5. (Optional but recommended) Add `osv-scanner` as a CI job so transitive-dep CVEs flag on every PR — the lockfile makes this trivial: `osv-scanner --lockfile=requirements-lock.txt`.
+
+The cheap-path lockfile is doing 80% of the reproducibility work for ~30 lines of build script. Don't skip the upgrade if the project ever lands in an institutional review pipeline, but don't over-build it before then either.
 
 ### Regenerating the app icon
 
