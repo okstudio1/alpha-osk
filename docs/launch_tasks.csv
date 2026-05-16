@@ -16,7 +16,7 @@ T14,Product,Setup,Smoke-test GET /v1/aggregate (expect submitted row),Pending,T1
 T15,Product,Setup,Smoke-test POST /v1/forget then re-aggregate (expect row gone),Pending,T13,2026-05-09,S,backend/cf-worker/README.md
 T16,Product,Setup,Set DEFAULT_ENDPOINT in src/telemetry.py to live worker URL,Pending,T12,2026-05-09,S,src/telemetry.py
 T17,Product,Setup,Commit + push DEFAULT_ENDPOINT change,Pending,T16,2026-05-09,S,git
-T18,Product,Dev-validate,Open Settings → Privacy in python run.py + verify section renders,Pending,T17,2026-05-10,S,manual
+T18,Product,Dev-validate,Open Settings → Data & Privacy → Privacy in python run.py + verify section renders,Pending,T17,2026-05-10,S,manual
 T19,Product,Dev-validate,Toggle on + restart + confirm persists from telemetry.json,Pending,T18,2026-05-10,S,manual
 T20,Product,Dev-validate,Force submit (clear last_submit_ts) + verify D1 row appears,Pending,T19,2026-05-11,M,manual
 T21,Product,Dev-validate,Click Delete-my-data twice + verify D1 row disappears,Pending,T20,2026-05-11,S,manual

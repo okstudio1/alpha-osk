@@ -191,7 +191,7 @@ Settings adjust `spatial_uncertainty` (how far from center a press is still coun
 - Layout toggles: Function keys, Navigation keys, Numpad
 - Suggestions: toggle, count (3–10)
 - Accessibility profiles with descriptive labels
-- Vocabulary packs (Medical, Programming, Academic, Gaming, Business)
+- Custom vocabulary pack import (drop a folder with `dictionary.txt`)
 - Theme selector (5 themes)
 - Appearance: key click sound toggle, window opacity slider
 - Session analytics dashboard

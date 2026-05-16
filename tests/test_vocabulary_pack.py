@@ -197,81 +197,15 @@ class TestPackManager:
         assert predictor.unigrams.get("word_pack_a_one", 0) == 0
 
 
-# --- Real packs on disk ---
-
-
-class TestRealPacks:
-    """Verify the actual packs in data/packs/ are valid."""
-
-    @pytest.fixture(params=["medical", "programming", "academic", "gaming", "business"])
-    def pack_id(self, request) -> str:
-        return request.param
-
-    def test_pack_directory_exists(self, pack_id: str):
-        assert (DATA_PACKS_DIR / pack_id).is_dir()
-
-    def test_pack_has_metadata(self, pack_id: str):
-        meta = DATA_PACKS_DIR / pack_id / "pack.json"
-        assert meta.exists()
-        data = json.loads(meta.read_text())
-        assert "name" in data
-        assert "description" in data
-
-    def test_pack_has_dictionary(self, pack_id: str):
-        dict_path = DATA_PACKS_DIR / pack_id / "dictionary.txt"
-        assert dict_path.exists()
-        words = [
-            line.strip()
-            for line in dict_path.read_text().splitlines()
-            if line.strip() and not line.startswith("#")
-        ]
-        assert len(words) >= 50, f"Pack '{pack_id}' has only {len(words)} words"
-
-    def test_dictionary_is_one_word_per_line(self, pack_id: str):
-        dict_path = DATA_PACKS_DIR / pack_id / "dictionary.txt"
-        for i, line in enumerate(dict_path.read_text().splitlines(), 1):
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            # Allow hyphenated compound words and single words
-            assert " " not in line, (
-                f"Pack '{pack_id}' line {i}: multi-word entry {line!r}"
-            )
-
-    def test_pack_loads_successfully(self, pack_id: str):
-        pack = VocabularyPack.from_directory(DATA_PACKS_DIR / pack_id)
-        assert pack is not None
-        assert pack.load()
-        assert len(pack.words) > 0
-
-    def test_pack_bigrams_valid(self, pack_id: str):
-        bigrams_path = DATA_PACKS_DIR / pack_id / "bigrams.txt"
-        if not bigrams_path.exists():
-            pytest.skip("No bigrams file")
-        for i, line in enumerate(bigrams_path.read_text().splitlines(), 1):
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            parts = line.split()
-            assert len(parts) >= 2, (
-                f"Pack '{pack_id}' bigrams line {i}: needs 2+ words, got {line!r}"
-            )
-
-    def test_pack_trigrams_valid(self, pack_id: str):
-        trigrams_path = DATA_PACKS_DIR / pack_id / "trigrams.txt"
-        if not trigrams_path.exists():
-            pytest.skip("No trigrams file")
-        for i, line in enumerate(trigrams_path.read_text().splitlines(), 1):
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            parts = line.split()
-            assert len(parts) >= 3, (
-                f"Pack '{pack_id}' trigrams line {i}: needs 3+ words, got {line!r}"
-            )
-
-
 # --- Integration with HybridPredictor ---
+#
+# Built-in packs (medical / programming / etc.) were removed -- the
+# vocab system is now import-only, so these tests no longer have a
+# pre-shipped pack to drive against.  The TestRealPacks class that
+# used to live here (per-pack dictionary / bigram / trigram structure
+# checks across 5 hardcoded built-ins) is gone for the same reason.
+# If a future release reintroduces a built-in pack, mirror that class
+# back in for it; the `sample_pack_dir` fixture above shows the shape.
 
 
 class TestPackHybridIntegration:
@@ -285,24 +219,13 @@ class TestPackHybridIntegration:
         return HybridPredictor(model_dir=tmp_path / "models", enable_llm=False)
 
     def test_get_available_packs_returns_list(self, predictor):
+        # No built-ins ship anymore; user-imported packs land in the
+        # real config dir.  Just confirm the call returns a list.
         packs = predictor.get_available_packs()
         assert isinstance(packs, list)
-        # Should find our 5 real packs
-        assert len(packs) >= 5
-
-    def test_enable_and_disable_pack(self, predictor):
-        assert predictor.enable_vocabulary_pack("medical")
-        assert "medical" in predictor.get_enabled_packs()
-        assert predictor.disable_vocabulary_pack("medical")
-        assert "medical" not in predictor.get_enabled_packs()
 
     def test_enable_invalid_pack(self, predictor):
         assert not predictor.enable_vocabulary_pack("nonexistent")
-
-    def test_enabled_pack_affects_predictions(self, predictor):
-        predictor.enable_vocabulary_pack("medical")
-        # Medical terms should now be known to the predictor
-        assert predictor._ngram.unigrams.get("diagnosis", 0) > 0
 
 
 class TestImportPackSecurity:

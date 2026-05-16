@@ -151,7 +151,7 @@ Commit this change. Treat it like a configuration constant, not a secret — it'
 ### 3. Test in dev, then ship a release
 
 In dev (`python run.py`):
-- Open Settings → Privacy. Toggle on.
+- Open Settings → Data & Privacy → Privacy. Toggle on.
 - Restart the keyboard. Toggle should remember its state (read from `<config_dir>/telemetry.json`).
 - Force a submit by editing the `last_submit_ts` field in `telemetry.json` to `0` (clears the weekly window), then triggering the hourly timer or quitting (`submit_on_quit` runs from `shutdown()`).
 - Check the D1 table for the row. Confirm the `anon_id` matches the one in `telemetry.json`.

@@ -359,7 +359,7 @@ class KeyboardBridge(QObject):
 
         # Telemetry — opt-in, off by default.  Pulls lifetime counters
         # from the analytics dashboard's getter so there is one source
-        # of truth.  Settings → Privacy controls it; the QTimer below
+        # of truth.  Settings → Data & Privacy → Privacy controls it; the QTimer below
         # checks once an hour whether the weekly window has elapsed.
         # See docs/TELEMETRY.md (design) and docs/PRIVACY.md (user-facing).
         self._telemetry = TelemetryClient(
@@ -1855,7 +1855,7 @@ class KeyboardBridge(QObject):
     def forgetTelemetryData(self) -> bool:
         """Ask the server to delete this user's contributed row.
         Triggered by the 'Delete my contributed data' button in
-        Settings → Privacy.  Returns True if the request was sent.
+        Settings → Data & Privacy → Privacy.  Returns True if the request was sent.
         """
         return self._telemetry.forget()
 
@@ -1975,7 +1975,7 @@ class KeyboardBridge(QObject):
 
     @Slot(str, result=bool)
     def enableVocabularyPack(self, pack_id: str) -> bool:
-        """Enable a vocabulary pack by ID (e.g., 'medical', 'programming')."""
+        """Enable a vocabulary pack by ID (the directory name under user_packs_dir)."""
         result = self._predictor.enable_vocabulary_pack(pack_id)
         if result:
             self._add_debug_log(f"Vocabulary pack enabled: {pack_id}")

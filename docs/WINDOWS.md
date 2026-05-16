@@ -532,7 +532,7 @@ The script: checks prereqs → runs PyInstaller → signs all `.exe` in `dist/al
 3. Verify install to `C:\Program Files\Alpha-OSK` and Desktop + Start Menu shortcuts.
 4. Launch via the installer's "Launch Alpha-OSK" checkbox.
 5. **Test UIAccess**: open an elevated Command Prompt (Run as Admin) and verify keystrokes reach it.
-6. Verify `Settings → Updates` shows the new version.
+6. Verify `Settings → Data & Privacy → Updates` shows the new version.
 
 ### 6. Tag
 

@@ -133,7 +133,7 @@ class HybridPredictor(QObject):
 
         # Active merge strategy.  Default "rank" preserves byte-identical
         # behaviour with prior versions; "rrf", "linear", "loglinear" are
-        # opt-in alternatives surfaced via Settings → Suggestion Engine.
+        # opt-in alternatives surfaced via Settings → Smart Typing → Suggestion Engine.
         # See ``docs/HYBRID_MERGING.md`` for the trade-offs.
         self._merge_strategy: str = "rank"
 
@@ -942,7 +942,7 @@ class HybridPredictor(QObject):
         Enable a vocabulary pack and inject its vocabulary.
 
         Args:
-            pack_id: Pack directory name (e.g., "medical", "programming")
+            pack_id: Pack directory name (the folder the user imported)
 
         Returns:
             True if pack was found and enabled

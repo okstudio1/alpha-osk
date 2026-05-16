@@ -13,7 +13,7 @@ An accessible on-screen keyboard designed for users with motor disabilities, fea
 | Area | Status |
 |------|--------|
 | Core Keyboard | ✅ Complete |
-| AI Prediction | ✅ Smart learning, trigrams, vocabulary packs |
+| AI Prediction | ✅ Smart learning, trigrams, custom vocabulary import |
 | Test Suite | ✅ 266 tests passing |
 | Voice Dictation | ⏳ Planned |
 | Federated Learning | ⏳ Planned |
@@ -73,12 +73,12 @@ Current on-screen keyboards on Linux (GNOME On-Board) and Windows (built-in OSK)
 - ✅ **Dark theme** with press animations and key hover effect
 - ✅ **Draggable window** — stays on top, doesn't steal focus
 - ✅ **Prediction bar** — hybrid n-gram/PPM/fuzzy engine with smart learning (up to 8 suggestions)
-- ✅ **Suggestions toggle** — "Aa" button in title bar to quickly enable/disable predictions
-- ✅ **Persistent preferences** — layout panels, theme, and suggestions setting saved across sessions
+- ✅ **Title bar controls** — Learning/Paused privacy toggle, ⟲ clear-suggestion-context, ⚙ settings, minimize, close, plus a download indicator when an update is pending. Every button has a hover tooltip.
+- ✅ **Persistent preferences** — layout panels, theme, suggestions, input timing, and compatibility mode all saved across sessions
 - ✅ **Navigation panel** — arrow keys, Ins/Del/Home/End/PgUp/PgDn, plus PrtSc/ScrLk/Pause (open by default)
 - ✅ **Escape key** always visible in the number row
-- ✅ **Vocabulary packs** — medical, programming, academic, gaming, business (enable/disable at runtime)
-- ✅ **Settings panel** — layout, suggestions (toggle + count), accessibility profiles, vocabulary packs, theme, data management
+- ✅ **Custom vocabulary import** — drop a folder with `dictionary.txt` (and optional bigrams/trigrams) for domain-specific words. No built-in packs ship; the engine learns your typing instead.
+- ✅ **Settings panel** — drill-down into four categories: Appearance (panels, layout, theme, opacity), Smart Typing (suggestions, prediction engine, input behaviour), Your Language Model (custom vocab import, learned data, dashboard), Data & Privacy (telemetry, updates, help)
 
 ## Inspiration
 

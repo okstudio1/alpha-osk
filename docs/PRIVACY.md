@@ -4,7 +4,7 @@ The short version: by default, **nothing leaves your computer**. Alpha-OSK predi
 
 ## Optional usage telemetry
 
-Settings → Privacy has one toggle: **"Share anonymous usage stats"**. It is off by default. If you turn it on, Alpha-OSK sends a small weekly report so we can track total impact across the community (e.g. "X million keystrokes saved across Y users").
+Settings → Data & Privacy → Privacy has one toggle: **"Share anonymous usage stats"**. It is off by default. If you turn it on, Alpha-OSK sends a small weekly report so we can track total impact across the community (e.g. "X million keystrokes saved across Y users").
 
 ### What's in the report
 
@@ -33,7 +33,7 @@ These are exactly the lifetime numbers shown on your Analytics dashboard. Nothin
 - Per-session data. Only your running totals.
 - Your IP address. Not logged on the server.
 - Your machine. No hostname, MAC address, hardware ID, or operating-system install ID.
-- Anything from typing into a password field. Privacy mode (the play/pause icon in the title bar) blocks all tracking when a password field is focused, so password-field activity never enters the totals in the first place.
+- Anything from typing into a password field. Privacy mode (the "Learning" / "Paused" toggle in the title bar) blocks all tracking when a password field is focused, so password-field activity never enters the totals in the first place.
 
 ### Where the data goes
 
@@ -41,7 +41,7 @@ To a Cloudflare Worker that we control. The worker stores one row per `anon_id` 
 
 ### Opting out
 
-Turn the toggle off in Settings → Privacy. Future weekly reports stop. Already-submitted data is **not** automatically deleted — your row in the database stays until either (a) you click "Delete my contributed data" in the same Settings section, or (b) you don't open Alpha-OSK for 365 days, after which the row is automatically removed.
+Turn the toggle off in Settings → Data & Privacy → Privacy. Future weekly reports stop. Already-submitted data is **not** automatically deleted — your row in the database stays until either (a) you click "Delete my contributed data" in the same Settings section, or (b) you don't open Alpha-OSK for 365 days, after which the row is automatically removed.
 
 If you opt back in later, you get a **new** `anon_id`. Your prior contribution and your new contribution cannot be linked. This is intentional.
 
@@ -55,7 +55,7 @@ A separate planned feature (`docs/FEDERATED_LEARNING.md`) that would share *lear
 
 ## Auto-update
 
-Alpha-OSK checks GitHub Releases on startup if "Check for updates on startup" is enabled in Settings → Updates. This sends an HTTPS request to GitHub for the latest release metadata. GitHub sees the request the same way it would see any unauthenticated HTTPS visit (your IP, your User-Agent, the URL). No Alpha-OSK identity is attached. This is unrelated to the telemetry toggle.
+Alpha-OSK checks GitHub Releases on startup if "Check for updates on startup" is enabled in Settings → Data & Privacy → Updates. This sends an HTTPS request to GitHub for the latest release metadata. GitHub sees the request the same way it would see any unauthenticated HTTPS visit (your IP, your User-Agent, the URL). No Alpha-OSK identity is attached. This is unrelated to the telemetry toggle.
 
 ## Questions or concerns
 

@@ -18,7 +18,7 @@ This is **not** Gboard's drag-to-select model. On a phone, you press-and-hold, t
 
 ## Settings
 
-- **Toggle:** *Settings → Input → "Long-press for accented characters"* (default **OFF** — the timing change is opt-in).
+- **Toggle:** *Settings → Smart Typing → Input → "Long-press for accented characters"* (default **OFF** — the timing change is opt-in).
 - **Delay slider:** 250–800 ms, default 400 ms.
 - Both persist as `appSettings.savedLongPressAlternates` / `savedLongPressDelay`.
 

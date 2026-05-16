@@ -114,7 +114,7 @@ For limited screen space or one-handed use:
 ### Prediction Display
 - Show up to 8 predictions above keyboard (fills available space)
 - Predictions only appear for alphabetic input (not numbers/symbols)
-- Quick toggle via "Aa" button in title bar; preference is persisted
+- Quick toggle via *Settings → Smart Typing → Suggestions → Show Suggestions*; preference is persisted
 - Predictions clear when keyboard loses focus (user clicks away)
 - First prediction can be selected with Space (optional)
 - Predictions update after each keystroke
@@ -279,7 +279,7 @@ For limited screen space or one-handed use:
 - ✅ Multi-modifier shortcuts (Win+Shift+S, Ctrl+Shift+T, etc.) — Shift sent as modifier when combined with Ctrl/Alt/Win
 - ✅ Key hover effect — keys lighten on mouse hover
 - ✅ Prediction bar UI (up to 8 suggestions, fixed height to prevent window resizing)
-- ✅ Suggestions toggle ("Aa" button in title bar, persisted across sessions)
+- ✅ Suggestions toggle (Settings → Smart Typing → Suggestions, persisted across sessions)
 - ✅ Dark theme with gradients and press animations
 - ✅ Draggable via top handle
 - ✅ Special keys: Backspace, Enter, Tab, Arrows, Space
@@ -294,7 +294,7 @@ For limited screen space or one-handed use:
 - ✅ Comprehensive settings panel — layout toggles, suggestions (toggle + count), accessibility profiles, vocabulary packs, theme swatches, data management (save model, clear learned data)
 - ✅ Configurable suggestion count (3–10, adjustable in settings)
 - ✅ Accessibility profiles selectable from settings (precise, normal, tremor levels, limited mobility)
-- ✅ Vocabulary pack management in settings (medical, programming, academic, gaming, business)
+- ✅ Custom vocabulary import in settings (drop a folder with dictionary.txt; no built-in packs ship)
 
 ### Pending Features
 - ⏳ Dwell-click mode

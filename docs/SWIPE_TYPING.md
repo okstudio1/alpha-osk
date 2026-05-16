@@ -6,7 +6,7 @@ work on phones.  In Alpha-OSK this is mouse-driven: press, drag through
 the letters in order, release.
 
 The feature is **off by default**.  Toggle it under
-*Settings → Suggestions → Swipe Typing*.
+*Settings → Smart Typing → Suggestions → Swipe Typing*.
 
 ## Files
 

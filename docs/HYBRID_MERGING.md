@@ -535,7 +535,7 @@ quality.  Three findings worth holding next to any ranking change:
 
 ### Status — all four strategies now ship behind a setting
 
-As of the merge-strategy-picker work (Settings → Suggestions →
+As of the merge-strategy-picker work (Settings → Smart Typing →
 Suggestion Engine), all four merge formulae are implemented and
 user-selectable at runtime:
 
@@ -598,7 +598,7 @@ Migration progress:
    raw per-source scores end-to-end.  Each source still uses its own
    scale; the strategies normalise per source before combining.
 2. ~~Ship A and C behind a flag.~~  **Done** — both are
-   user-selectable in Settings → Suggestion Engine, alongside RRF.
+   user-selectable in Settings → Smart Typing → Suggestion Engine, alongside RRF.
    The default stays `rank` so existing users see no change.
 3. **Tune `λ` empirically.**  Still open.  Grid-search on a held-out
    corpus of the user's own typing for held-out perplexity.  The

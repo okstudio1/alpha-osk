@@ -168,8 +168,16 @@ class VocabularyPack:
         self.trigrams.clear()
 
     def get_info(self) -> dict:
-        """Return pack metadata for UI display."""
+        """Return pack metadata for UI display.
+
+        ``id`` is the directory name (which is also the pack id used by
+        ``enable_pack`` / ``disable_pack``).  The QML side iterates this
+        list and binds each entry's id to the toggle's enable/disable
+        callback, so omitting it would force every caller to thread the
+        id separately from the rest of the metadata.
+        """
         return {
+            "id": self.path.name,
             "name": self.name,
             "description": self.description,
             "version": self.version,

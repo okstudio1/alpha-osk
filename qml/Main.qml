@@ -36,14 +36,14 @@ Window {
         property bool savedAutoCheckUpdates: true
         // Hold-to-repeat timing (Backspace, arrow keys, Delete, PgUp/PgDn).
         // Defaults match KeyButton.qml's hardcoded values.  Exposed in
-        // Settings → Input so motor-impaired users can tune the threshold
+        // Settings → Smart Typing → Input so motor-impaired users can tune the threshold
         // (slow clicks systematically tipped past the 500 ms default and
         // produced "double" Backspace keystrokes).
         property int savedRepeatDelay: 500
         property int savedRepeatInterval: 120
         // Prediction merge strategy.  "rank" (default) is the
         // historical rank-based fusion; "rrf" / "linear" / "loglinear"
-        // are alternatives surfaced via Settings → Suggestion Engine.
+        // are alternatives surfaced via Settings → Smart Typing → Suggestion Engine.
         // See docs/HYBRID_MERGING.md for the trade-offs.  Default
         // MUST stay "rank" — every existing user's pill ranking
         // depends on it.
@@ -250,7 +250,7 @@ Window {
     // Hold-to-repeat timing for Backspace, arrows, Delete, PgUp/PgDn.
     // ``repeatDelay`` is the threshold below which a press counts as a
     // single click; ``repeatInterval`` is the cadence once auto-repeat
-    // is firing.  Exposed in Settings → Input.
+    // is firing.  Exposed in Settings → Smart Typing → Input.
     property int repeatDelay: appSettings.savedRepeatDelay
     property int repeatInterval: appSettings.savedRepeatInterval
 
@@ -536,7 +536,7 @@ Window {
             MouseArea {
                 id: dragArea
                 anchors.fill: parent
-                anchors.rightMargin: 155  // Leave space for buttons
+                anchors.rightMargin: 230  // Leave space for buttons (privacy widened for "Learning"/"Paused" text)
                 cursorShape: Qt.SizeAllCursor
                 
                 property real startMouseX
@@ -594,6 +594,10 @@ Window {
                     color: updateBtnArea.containsMouse ? "#444" : "transparent"
                     border.color: root.updateError !== "" ? "#c33" : root.themeAccent
                     border.width: 1
+
+                    ToolTip.visible: updateBtnArea.containsMouse
+                    ToolTip.text: qsTr("Update available")
+                    ToolTip.delay: 400
 
                     Text {
                         anchors.centerIn: parent
@@ -688,47 +692,40 @@ Window {
                     }
                 }
 
-                // Privacy mode toggle (play/pause learning)
+                // Privacy mode toggle (learning on/off).  Used to be
+                // a play/pause icon, but a media-player metaphor
+                // doesn't read as "is the keyboard learning from me"
+                // — users misread it as "is something playing".
+                // Now a fixed-width text label that just shows the
+                // current state.  The hover tooltip says what
+                // clicking will do, so the label-vs-action ambiguity
+                // is resolved before the click.
                 Rectangle {
-                    width: 28
+                    // Width sized for the longer label "Learning"
+                    // (8 chars at 11 px DemiBold) so toggling between
+                    // "Learning" and "Pause" doesn't reflow the title
+                    // bar's button row.  If you change the labels to
+                    // longer words, bump both this width and the
+                    // dragArea.rightMargin further up.
+                    width: 62
                     height: 24
                     radius: 4
                     color: root.privacyMode ? "#4a2a2a" : privacyBtn.containsMouse ? "#444" : "transparent"
                     border.color: root.privacyMode ? "#ff6b6b" : "transparent"
                     border.width: root.privacyMode ? 1 : 0
 
-                    Canvas {
-                        id: privacyIcon
+                    ToolTip.visible: privacyBtn.containsMouse
+                    ToolTip.text: root.privacyMode
+                                  ? qsTr("Resume learning from typing")
+                                  : qsTr("Pause learning from typing")
+                    ToolTip.delay: 400
+
+                    Text {
                         anchors.centerIn: parent
-                        width: 14; height: 14
-                        onPaint: {
-                            var ctx = getContext("2d")
-                            ctx.clearRect(0, 0, width, height)
-                            ctx.fillStyle = root.privacyMode ? "#ff6b6b" : "#999"
-                            if (root.privacyMode) {
-                                // Pause icon: two vertical bars
-                                ctx.fillRect(2, 1, 3.5, 12)
-                                ctx.fillRect(8.5, 1, 3.5, 12)
-                            } else {
-                                // Play icon: right-pointing triangle
-                                ctx.beginPath()
-                                ctx.moveTo(2, 1)
-                                ctx.lineTo(13, 7)
-                                ctx.lineTo(2, 13)
-                                ctx.closePath()
-                                ctx.fill()
-                            }
-                        }
-                        Connections {
-                            target: root
-                            // Inside Connections, `parent` doesn't
-                            // resolve to the enclosing Canvas — Qt
-                            // logs "ReferenceError: parent is not
-                            // defined" on every privacy-mode toggle
-                            // and the icon glyph silently doesn't
-                            // repaint.  Reference the Canvas by id.
-                            function onPrivacyModeChanged() { privacyIcon.requestPaint() }
-                        }
+                        text: root.privacyMode ? qsTr("Paused") : qsTr("Learning")
+                        color: root.privacyMode ? "#ff6b6b" : "#bbb"
+                        font.pixelSize: 11
+                        font.weight: Font.DemiBold
                     }
 
                     MouseArea {
@@ -742,20 +739,61 @@ Window {
                     }
                 }
 
+                // Clear-context button. Wipes the prediction context
+                // buffers (current word, sentence buffer, sliding
+                // 200-char context) so the next pill is computed from
+                // scratch. App-switch already does this automatically,
+                // but the foreground-window poll misses things like
+                // tab changes inside a browser or a focus change to a
+                // child window that keeps the same hwnd, so a manual
+                // override is the escape hatch.
+                Rectangle {
+                    width: 28
+                    height: 24
+                    radius: 4
+                    color: clearCtxBtn.containsMouse ? "#444" : "transparent"
+
+                    ToolTip.visible: clearCtxBtn.containsMouse
+                    ToolTip.text: qsTr("Clear suggestion context")
+                    ToolTip.delay: 400
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "⟲"
+                        font.pixelSize: 16
+                        color: "#999"
+                    }
+
+                    MouseArea {
+                        id: clearCtxBtn
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (keyboard) keyboard.resetContext()
+                            contextClearedToast.flash()
+                        }
+                    }
+                }
+
                 // Settings button (gear icon) - opens unified settings
                 Rectangle {
                     width: 28
                     height: 24
                     radius: 4
                     color: settingsBtn.containsMouse ? "#444" : "transparent"
-                    
+
+                    ToolTip.visible: settingsBtn.containsMouse
+                    ToolTip.text: qsTr("Settings")
+                    ToolTip.delay: 400
+
                     Text {
                         anchors.centerIn: parent
                         text: "⚙"
                         font.pixelSize: 16
                         color: root.showSettings ? root.themeAccent : "#999"
                     }
-                    
+
                     MouseArea {
                         id: settingsBtn
                         anchors.fill: parent
@@ -775,6 +813,10 @@ Window {
                     height: 24
                     radius: 4
                     color: minBtn.containsMouse ? "#444" : "transparent"
+
+                    ToolTip.visible: minBtn.containsMouse
+                    ToolTip.text: qsTr("Minimize")
+                    ToolTip.delay: 400
 
                     Rectangle {
                         anchors.centerIn: parent
@@ -799,7 +841,11 @@ Window {
                     height: 24
                     radius: 4
                     color: closeBtn.containsMouse ? "#c33" : "transparent"
-                    
+
+                    ToolTip.visible: closeBtn.containsMouse
+                    ToolTip.text: qsTr("Close")
+                    ToolTip.delay: 400
+
                     Text {
                         anchors.centerIn: parent
                         text: "✕"
@@ -1676,6 +1722,56 @@ Window {
             }
         }
 
+        // "Context cleared" confirmation toast, fired from the title-bar
+        // ⟲ button.  Mirrors editSavedToast's pattern: non-modal, centered
+        // near the top, auto-closes after a short dwell.
+        Popup {
+            id: contextClearedToast
+            parent: Overlay.overlay
+            x: (root.width - width) / 2
+            y: 36
+            width: 150
+            height: 32
+            modal: false
+            dim: false
+            closePolicy: Popup.NoAutoClose
+
+            background: Rectangle {
+                color: "#1e2e3e"
+                border.color: "#4a8"
+                border.width: 1
+                radius: 8
+            }
+
+            contentItem: Row {
+                spacing: 6
+                Text {
+                    text: "⟲"
+                    color: "#6cf"
+                    font.pixelSize: 14
+                    font.weight: Font.Bold
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                Text {
+                    text: "Context cleared"
+                    color: "#cef"
+                    font.pixelSize: 13
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+            }
+
+            Timer {
+                id: contextClearedToastTimer
+                interval: 1400
+                onTriggered: contextClearedToast.close()
+            }
+
+            function flash() {
+                open()
+                contextClearedToastTimer.restart()
+            }
+        }
+
 
         // Debug Panel
         Comp.DebugPanel {
@@ -1815,11 +1911,15 @@ Window {
         // Frameless so we can draw our own drag handle; stays on top
         flags: Qt.Window | Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.Tool
 
-        // Center on screen when first shown
+        // Center on screen when first shown.  Also reset the
+        // drill-down panel to its home view -- otherwise re-opening
+        // settings would land on whatever sub-page the user was
+        // viewing last time, which reads as "the menu changed".
         onVisibleChanged: {
             if (visible) {
                 settingsWindow.x = Screen.width / 2 - settingsWindow.width / 2
                 settingsWindow.y = Screen.height / 2 - settingsWindow.height / 2
+                if (settingsPanel) settingsPanel.resetToHome()
             }
         }
 
@@ -1829,6 +1929,7 @@ Window {
         color: "#1e1e1e"
 
         Comp.UnifiedSettingsPanel {
+            id: settingsPanel
             anchors.fill: parent
 
             showFunctionRow: root.showFunctionRow
