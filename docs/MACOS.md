@@ -55,7 +55,7 @@ What's already running on macOS vs the other backends:
 | `"win"` modifier maps to ⌘ Command | ✅ | `_MOD_INFO["win"]` → `kVK_Command` + `kCGEventFlagMaskCommand`. Mirrors how `"win"` → Super on Linux: each platform's primary shortcut modifier |
 | Compatibility Mode auto-detection | ⛔ | Stays off on macOS. The Windows-only IDE / RDP whitelist lives behind `sys.platform != "win32"` in `_window_needs_compat_mode` |
 | Password-field auto-detection | ✅ | `_MacOSAXDetector` in `password_detect.py`. Frontmost-app pid → `AXUIElementCreateApplication` → `kAXFocusedUIElementAttribute` → `AXSecureTextField` subrole. Works in Cocoa, WebKit, and Chromium. Needs the Accessibility TCC grant. |
-| **Typing INTO** a password field | ⛔ | Blocked by macOS Secure Event Input. Every third-party OSK hits this; only Apple's built-in Accessibility Keyboard bypasses it. See *Phase 4 § Known constraint*. |
+| **Typing INTO** a password field | 🟡 partial | Depends where the field lives. System sheets (System Settings, Keychain, login window, sudo) trigger macOS *Secure Event Input* and block synthesized keystrokes; web `<input type=password>` and many app-level password fields usually work. See *Phase 4 § Known constraint*. |
 | Auto-update | ⛔ | Windows-only path, unchanged. Mac users update via re-running the installer / `brew upgrade alpha-osk` once a Homebrew tap exists |
 | Code signing / notarization | ⛔ | `.app` is unsigned today — open via right-click → Open. See *Phase 3* |
 
@@ -292,39 +292,74 @@ Failure mode if the AX grant is missing: detector reports
 control. Logged at INFO so it's visible in `~/Library/Application
 Support/alpha-osk/alpha-osk.log`.
 
-#### Known constraint: Secure Event Input blocks OSK typing into password fields
+#### Known constraint: Secure Event Input blocks OSK typing into *some* password fields
 
 Detecting a password field is one thing. **Actually typing into one
-via synthesized keystrokes is something macOS deliberately
-prevents.** When any app's `NSSecureTextField` becomes first
-responder, the OS enables a system-wide flag — `IsSecureEventInputEnabled()`
-— that blocks every event tap and `CGEventPost{,ToPid}` call from
-reaching the secure field. This is a security feature: it stops
-malicious processes from logging *or* injecting password keystrokes.
-It applies to every third-party app uniformly; no entitlement
-available to third-party developers bypasses it.
+via synthesized keystrokes depends on which password field.** macOS
+has a feature called *Secure Event Input* (SEI): when an app's
+`NSSecureTextField` becomes first responder, the app can ask the OS
+to enable SEI, which blocks every event tap and `CGEventPost{,ToPid}`
+call from reaching the secure field. The OS check is
+`IsSecureEventInputEnabled()`. The block applies to all event-tap-
+based input synthesis equally — there's no third-party-accessible
+entitlement that bypasses it.
 
-Apple's built-in **Accessibility Keyboard** can type into password
-fields because it uses a privileged system path inside the
-accessibility subsystem itself — same trust level as the OS's own
-input methods. That path isn't exposed to third-party apps.
+But not every password field triggers SEI. The breakdown observed
+in testing:
 
-The user-facing implication: **Alpha-OSK can detect password fields
-(so privacy mode protects them) but cannot type into them on Mac.**
-The user has to fall back to:
-- Their physical keyboard for that specific input, or
+| Where the field lives | OSK typing? | Why |
+|-----------------------|------------|-----|
+| System password sheets (System Settings, Keychain Access, FileVault, login window, `sudo` in Terminal) | ⛔ | These apps explicitly enable SEI when the secure field gains focus. Hardened, locked down. |
+| Web `<input type="password">` (Safari, Chrome, Firefox, Edge) | 🟡 Usually works | Browsers generally don't enable SEI for HTML password inputs — they're rendered by the browser, not by Cocoa's `NSSecureTextField`. Confirmed for Safari + Chrome login forms in dev testing. |
+| App login fields outside the system shell (Slack, Spotify, Mail account add) | 🟡 Depends per-app | Apps that use Cocoa `NSSecureTextField` *and* call `EnableSecureEventInput` are blocked; apps using a custom obscured text field, or not enabling SEI, accept synthesized keystrokes. |
+| 1Password / Bitwarden / Apple Password autofill | ✅ Bypassed | These tools paste filled values through their own browser/app integrations, not through keystroke synthesis. Use the manager's autofill UI rather than the OSK. |
+
+**Apple's built-in Accessibility Keyboard** can type into the
+⛔ rows above because it uses a privileged system path inside the
+accessibility subsystem — same trust level as the OS's own input
+methods. That path is not exposed to third-party apps. For the
+⛔ cases, the user's options are:
+
+- Physical keyboard for that one password field
 - Apple's Accessibility Keyboard (System Settings → Accessibility →
-  Keyboard → Accessibility Keyboard) for password fields, switching
-  back to Alpha-OSK afterwards.
+  Keyboard → Accessibility Keyboard) for that specific input, then
+  switch back to Alpha-OSK
+- A password manager that supports macOS autofill (1Password,
+  Bitwarden, Apple Passwords, Dashlane) — autofill bypasses both
+  SEI and any typing path entirely
 
-This is a **macOS-only** limitation. The same OSK pattern works
-freely on Windows (SendInput delivers to secure fields when the
-process has UIAccess) and on Linux (xdotool / ydotool don't have an
+This is **macOS-only**. The same Alpha-OSK code path works freely
+on Windows (SendInput delivers to secure fields when the process
+has UIAccess) and on Linux (xdotool / ydotool don't have an
 equivalent block).
 
-If a future workaround appears — a published entitlement, a TCC
-grant variant, a privileged helper tool — it'd belong in this same
-section. For now: detect, suppress learning, surface the limitation.
+##### Possible future workaround: AX value-write fallback
+
+`AXUIElementSetAttributeValue(field, kAXValueAttribute, password)`
+writes the field's value through the accessibility tree rather than
+synthesizing keystrokes. It goes through the AX trust gate
+(`AXIsProcessTrusted`) that we already hold, not through the event
+tap layer that SEI guards. Untested in this codebase — may work for
+some of the 🟡 apps above and might extend coverage to a subset of
+the ⛔ rows; may also be blocked by hardened apps (System Settings is
+likely to refuse). Worth a separate spike if password typing matters
+for the user's daily flow. Tracking notes:
+
+- Detect the focused element via the existing `_MacOSAXDetector`.
+- When privacy mode is on, route `pressKey` / `send_text` through an
+  AX `kAXValueAttribute` write instead of `CGEventPostToPid`.
+- Multi-character routing: AX writes set the whole value, so we'd
+  need to track the in-progress password locally and re-write the
+  full string each keystroke. Backspace = drop the last char then
+  re-write.
+- Privacy guarantee preserved: the in-progress buffer never enters
+  the prediction model (privacy mode already blocks learning); we'd
+  just need to zeroise it on field-blur.
+
+If a published entitlement, TCC variant, or privileged helper tool
+ever opens up for third-party OSKs, that's the right answer for the
+⛔ rows. For now: detect, suppress learning, surface the limitation
+to the user.
 
 ### Phase 5 — Auto-update
 Skip on Mac for now. The Windows `updater.py` flow is EV-cert
