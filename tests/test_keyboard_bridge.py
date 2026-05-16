@@ -190,6 +190,39 @@ class TestModifierState:
         bridge.pressSpecialKey("backspace")
         assert not bridge._ctrl_active
 
+    def test_shift_auto_releases_after_special_key(self, bridge: KeyboardBridge):
+        # Regression: Shift+Tab (and any sticky-shift + special key
+        # chord) used to leave _shift_active=True and the OS-held shift
+        # in place. Subsequent keys came out under Shift until the user
+        # tapped Shift again. Match Windows on-screen keyboard, which
+        # treats Shift as one-shot for chord and character keys alike.
+        bridge.toggleShift()
+        bridge._synth.release_modifier.reset_mock()
+        bridge.pressSpecialKey("tab")
+        assert not bridge._shift_active
+        bridge._synth.release_modifier.assert_any_call("shift")
+
+    def test_alt_auto_releases_after_special_key(self, bridge: KeyboardBridge):
+        bridge.toggleAlt()
+        bridge.pressSpecialKey("tab")
+        assert not bridge._alt_active
+
+    def test_win_auto_releases_after_special_key(self, bridge: KeyboardBridge):
+        bridge.toggleWin()
+        bridge.pressSpecialKey("left")
+        assert not bridge._win_active
+
+    def test_shift_special_key_emits_change_signal(self, bridge: KeyboardBridge):
+        # QML binds the Shift key highlight to shiftActiveChanged; the
+        # auto-release path has to emit the signal or the visual stays
+        # latched after the chord even though the underlying state is
+        # already False.
+        bridge.toggleShift()
+        emissions = []
+        bridge.shiftActiveChanged.connect(emissions.append)
+        bridge.pressSpecialKey("tab")
+        assert emissions and emissions[-1] is False
+
 
 class TestLayerManagement:
     """Keyboard layer switching."""

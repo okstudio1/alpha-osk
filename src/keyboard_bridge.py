@@ -943,7 +943,18 @@ class KeyboardBridge(QObject):
             self._word_typed_under_caps_lock = False
             self._update_predictions()
 
-        # Auto-release ctrl/alt/win after special key too
+        # Auto-release shift/ctrl/alt/win after special key too. Without
+        # this, Shift+Tab (or any sticky-Shift + special key combo) left
+        # _shift_active=True and the OS-held Shift from hold_modifier in
+        # place, so every following click was also under Shift until the
+        # user tapped Shift again. The character-key path in _press_char
+        # already auto-releases all four; special keys must match so the
+        # chord behaviour mirrors the Windows on-screen keyboard.
+        if self._shift_active and not self._caps_lock_active:
+            self._shift_active = False
+            self._synth.release_modifier("shift")
+            self._update_layer()
+            self.shiftActiveChanged.emit(self._shift_active)
         if self._ctrl_active:
             self._synth.release_modifier("ctrl")
             self._ctrl_active = False
