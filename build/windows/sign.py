@@ -209,7 +209,18 @@ def verify_file(file_path: str, signtool: str | None = None) -> bool:
         signtool = find_signtool()
 
     cmd = [signtool, "verify", "/pa", "/v", file_path]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    # CREATE_NO_WINDOW: signtool is console-mode, capture_output=True hides
+    # its stdout from a GUI parent -- without this flag, the parent (with
+    # no inherited console) gets an empty cmd window per verify call.
+    # verify_build() runs verify_file() for both alpha-osk.exe and the
+    # installer, so the symptom was *two* blank windows at the end of
+    # every build.  Portable: 0 on POSIX, 0x08000000 on Windows.
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
 
     if result.returncode == 0:
         print(f"[Sign] Verified: {Path(file_path).name} — signature valid")

@@ -134,9 +134,13 @@ def check_pyinstaller() -> bool:
     """Verify PyInstaller is installed."""
     step("Checking PyInstaller...")
     try:
+        # CREATE_NO_WINDOW: python.exe is console-mode + we suppress its
+        # output via capture_output, so without this flag the GUI parent
+        # pops an empty cmd window per invocation.
         result = subprocess.run(
             [sys.executable, "-m", "PyInstaller", "--version"],
             capture_output=True, text=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         if result.returncode == 0:
             success(f"PyInstaller {result.stdout.strip()}")
@@ -215,9 +219,13 @@ def check_certificate() -> bool:
     from sign import CERTIFICATE_SHA1
 
     try:
+        # CREATE_NO_WINDOW: certutil is console-mode + we suppress its
+        # output via capture_output, so without this flag the GUI parent
+        # pops an empty cmd window during certificate detection.
         result = subprocess.run(
             ["certutil", "-store", "-user", "My"],
             capture_output=True, text=True, timeout=30,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         if CERTIFICATE_SHA1.lower() in result.stdout.lower():
             success("EV certificate found (OK Studio Inc.)")
