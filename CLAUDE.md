@@ -487,7 +487,18 @@ Every release ships **two** dependency artefacts alongside the installer: a plai
 
 **CI-time CVE scanning.** `.github/workflows/ci.yml` has an `osv-scan` job pinned to `google/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2` (v2.3.8) that reads both lockfiles (`requirements-dev.txt` + `backend/cf-worker/package-lock.json`) and queries the OSV database on every push/PR. **Merges are gated** (`fail-on-vuln: true`): any CVE in either lockfile fails CI. The earlier known noise (six Wrangler-3.x findings: one moderate esbuild, five medium-to-high undici) was resolved by upgrading the worker to Wrangler 4.x, which ships clean esbuild and miniflare 4. The Python side had one transitive lxml CVE (GHSA-vfmq-68hx-4jfw, fixed in 6.1.0) coming through cyclonedx-bom; it's pinned away via `lxml>=6.1.0` in `requirements-dev.txt`. If a new advisory lands that we genuinely cannot fix before the next push, quarantine it with an `osv-scanner.toml` ignore entry rather than flipping `fail-on-vuln` back to false globally. Findings surface in the job's annotations / summary; SARIF upload to the Security tab is **disabled** (`upload-sarif: false`) because the source repo is private and GitHub Advanced Security (required for code scanning on private repos) is not enabled. Flip `upload-sarif: true` if/when GHAS is enabled or the repo goes public.
 
-**When to bump the toolchain.** `cyclonedx-bom>=7.0.0` is pinned in `requirements-dev.txt`. `@cyclonedx/cyclonedx-npm` follows the worker's `^` range. The action's pinned SHA in `ci.yml` needs an occasional bump — Dependabot doesn't yet auto-bump reusable-workflow refs reliably, so it's a manual `gh api repos/google/osv-scanner-action/releases/latest --jq .tag_name` + update the pinned SHA. Both action and tool spec-version should stay aligned (we pin CycloneDX spec to 1.6 in both Python and npm calls).
+**When to bump the toolchain.** `cyclonedx-bom>=7.0.0` is pinned in `requirements-dev.txt`. `@cyclonedx/cyclonedx-npm` follows the worker's `^` range. `wrangler` is pinned `^4.0.0` (was `^3.80.0` until the May 2026 supply-chain bump that cleared six transitive CVEs); bump it when transitives flow new findings into the worker lockfile, and run `osv-scanner --lockfile=backend/cf-worker/package-lock.json` locally to confirm before pushing. The action's pinned SHA in `ci.yml` needs an occasional bump too. Dependabot doesn't yet auto-bump reusable-workflow refs reliably, so it's a manual `gh api repos/google/osv-scanner-action/releases/latest --jq .tag_name` + update the pinned SHA. Both action and tool spec-version should stay aligned (we pin CycloneDX spec to 1.6 in both Python and npm calls).
+
+**Quarantining an unfixable CVE.** Now that `fail-on-vuln: true`, a new advisory blocks every PR until it's addressed. Normal path: upgrade the direct dep, or pin a transitive constraint (the way `lxml>=6.1.0` and `Pygments>=2.20.0` work). If a fix genuinely is not yet available upstream, add an `osv-scanner.toml` at the repo root with a specific advisory ID, a reason, and a short `ignoreUntil` (weeks, not months):
+
+```toml
+[[IgnoredVulns]]
+id = "GHSA-xxxx-xxxx-xxxx"
+ignoreUntil = 2026-08-01
+reason = "Upstream fix not yet released; tracked in upstream issue #1234."
+```
+
+osv-scanner reads it automatically. Do not flip `fail-on-vuln` back to false globally to work around a single advisory.
 
 ## Linux build
 

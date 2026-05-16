@@ -603,7 +603,7 @@ Both emit unconditionally on every build (including `--skip-build`, since bumpin
 
 **CI-time CVE scanning.** `.github/workflows/ci.yml` has an `osv-scan` job pinned to `google/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2` (v2.3.8) that reads both lockfiles (`requirements-dev.txt` + `backend/cf-worker/package-lock.json`) and queries the OSV database on every push and PR. **Merges are gated** (`fail-on-vuln: true`): any CVE in either lockfile fails CI. The earlier known noise (six Wrangler-3.x findings: one moderate esbuild, five medium-to-high undici) was resolved by upgrading the worker to Wrangler 4.x, which ships clean esbuild and miniflare 4. The Python side had one transitive lxml advisory (GHSA-vfmq-68hx-4jfw, fixed in 6.1.0) flowing through `cyclonedx-bom`; it's pinned away via `lxml>=6.1.0` in `requirements-dev.txt`. SARIF upload to the Security tab is **disabled** (`upload-sarif: false`) because the source repo is private and GitHub Advanced Security is not enabled; findings surface in the job's annotations / summary. If a new advisory lands that we cannot fix before the next push, quarantine it with an `osv-scanner.toml` ignore entry rather than flipping `fail-on-vuln` back to false.
 
-**Maintenance.** Bump `cyclonedx-bom` in `requirements-dev.txt` when CVE advisories appear (it's a build-only tool, so bumps are low-risk). Bump the `google/osv-scanner-action` pinned SHA in `ci.yml` quarterly or when a feature is needed (Dependabot does not yet reliably bump reusable-workflow refs):
+**Maintenance.** Bump `cyclonedx-bom` in `requirements-dev.txt` when CVE advisories appear (it's a build-only tool, so bumps are low-risk). Bump `wrangler` in `backend/cf-worker/package.json` when transitive CVEs flow through it (run `osv-scanner --lockfile=backend/cf-worker/package-lock.json` locally to confirm the fix before pushing; the worker is a minimal ESM-module / D1-binding worker, so major bumps are typically drop-in). Bump the `google/osv-scanner-action` pinned SHA in `ci.yml` quarterly or when a feature is needed (Dependabot does not yet reliably bump reusable-workflow refs):
 
 ```bash
 gh api repos/google/osv-scanner-action/releases/latest --jq '.tag_name'
@@ -611,6 +611,17 @@ gh api repos/google/osv-scanner-action/git/refs/tags/<tag> --jq '.object.sha'
 ```
 
 Update the `@<sha> # <tag>` line in `ci.yml` and commit.
+
+**Quarantining an unfixable advisory.** With `fail-on-vuln: true`, an unpatched CVE will block every PR until it's addressed. The normal path is to upgrade the affected package (bump the direct dep, or pin a transitive constraint as we did for `lxml`). If a fix genuinely is not yet available upstream, add an `osv-scanner.toml` at the repo root listing the specific advisory IDs to ignore, with a reason and a review date:
+
+```toml
+[[IgnoredVulns]]
+id = "GHSA-xxxx-xxxx-xxxx"
+ignoreUntil = 2026-08-01
+reason = "Upstream fix not yet released; tracked in upstream issue #1234. Re-check on the review date."
+```
+
+`osv-scanner` reads the file automatically. Keep the list short and each entry's `ignoreUntil` short (weeks, not months) so the quarantine does not silently become permanent. Do **not** flip `fail-on-vuln` back to `false` globally to work around a single advisory.
 
 ### Regenerating the app icon
 
