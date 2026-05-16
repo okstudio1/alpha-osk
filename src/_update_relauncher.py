@@ -362,6 +362,7 @@ def _run_with_splash(args: argparse.Namespace) -> int:
         QApplication,
         QFrame,
         QLabel,
+        QProgressBar,
         QVBoxLayout,
         QWidget,
     )
@@ -372,7 +373,9 @@ def _run_with_splash(args: argparse.Namespace) -> int:
     existing_app = QApplication.instance()
     app = existing_app if isinstance(existing_app, QApplication) else QApplication([])
 
-    splash = _build_splash_widget(QWidget, QFrame, QLabel, QVBoxLayout, QFont, Qt)
+    splash = _build_splash_widget(
+        QWidget, QFrame, QLabel, QProgressBar, QVBoxLayout, QFont, Qt,
+    )
     # The close button hides the splash but lets the polling continue —
     # the user is dismissing the visual, not aborting the relaunch.
     # The new OSK still gets launched when the install completes; the
@@ -414,6 +417,20 @@ def _run_with_splash(args: argparse.Namespace) -> int:
         # before any further processing happens.
         splash.repaint()
 
+    def _settle_progress(full: bool) -> None:
+        """Stop the marquee and pin the bar full or empty.
+
+        Called on terminal phases (Done / failure) so the bar visibly
+        stops moving. Without this, a successful update would close the
+        splash with the marquee still sliding, which reads as "still
+        working" the instant before the window vanishes.
+        """
+        bar = splash.findChild(QProgressBar, "progress")
+        if bar is not None:
+            bar.setRange(0, 1)
+            bar.setValue(1 if full else 0)
+            splash.repaint()
+
     def _finish(code: int) -> None:
         state.exit_code = code
         QTimer.singleShot(0, app.quit)
@@ -444,6 +461,7 @@ def _run_with_splash(args: argparse.Namespace) -> int:
                           target_exe, _NEW_EXE_TIMEOUT_S)
             _set_message("Update finished, but the keyboard didn't appear.\n"
                          "Find Alpha-OSK in your Start Menu.")
+            _settle_progress(full=False)
             QTimer.singleShot(_FAILURE_DWELL_MS, lambda: _finish(3))
             return
         QTimer.singleShot(int(_POLL_INTERVAL_S * 1000), _poll_new_exe)
@@ -454,6 +472,7 @@ def _run_with_splash(args: argparse.Namespace) -> int:
             _logger.error("Launch failed")
             _set_message("Couldn't launch the new keyboard.\n"
                          "Find Alpha-OSK in your Start Menu.")
+            _settle_progress(full=False)
             QTimer.singleShot(_FAILURE_DWELL_MS, lambda: _finish(4))
             return
         _write_handoff(config_dir, args.new_version, args.previous_version)
@@ -461,6 +480,7 @@ def _run_with_splash(args: argparse.Namespace) -> int:
         # before the new OSK draws its first window — otherwise
         # there's still a visible blank moment.
         _set_message("Done!")
+        _settle_progress(full=True)
         QTimer.singleShot(_DONE_DWELL_MS, lambda: _finish(0))
 
     state.deadline = time.monotonic() + _PARENT_EXIT_TIMEOUT_S
@@ -472,7 +492,7 @@ def _run_with_splash(args: argparse.Namespace) -> int:
     return state.exit_code
 
 
-def _build_splash_widget(QWidget, QFrame, QLabel, QVBoxLayout, QFont, Qt):
+def _build_splash_widget(QWidget, QFrame, QLabel, QProgressBar, QVBoxLayout, QFont, Qt):
     """Construct the splash window. Pulled out to keep ``_run_with_splash``
     short — and to make the styling tweakable in one place."""
     win = QWidget()
@@ -484,7 +504,10 @@ def _build_splash_widget(QWidget, QFrame, QLabel, QVBoxLayout, QFont, Qt):
         | Qt.WindowDoesNotAcceptFocus
     )
     win.setAttribute(Qt.WA_ShowWithoutActivating, True)
-    win.setFixedSize(420, 140)
+    # Slightly taller than the original 140 px to accommodate the
+    # indeterminate progress bar below the message. Without the extra
+    # row the bar overlaps the message text.
+    win.setFixedSize(420, 170)
     # Match the in-app toast colour (#1e3354 on #4a8eff border) so the
     # splash visually belongs to Alpha-OSK rather than looking like a
     # stray system dialog.
@@ -494,13 +517,20 @@ def _build_splash_widget(QWidget, QFrame, QLabel, QVBoxLayout, QFont, Qt):
         "QLabel#msg { color: #cfe0ff; }"
         "QLabel#close { color: #7ec8ff; }"
         "QLabel#close:hover { color: #ffffff; background-color: #2a4570; border-radius: 4px; }"
+        # Indeterminate marquee bar. NSIS silent (/S) install gives us
+        # no real percentage to report, but a moving bar is the
+        # difference between "is it stuck?" and "still working" — every
+        # commercial installer ships some motion during the silent phase.
+        "QProgressBar { background-color: #14233a; border: 1px solid #2a4570;"
+        " border-radius: 4px; height: 10px; }"
+        "QProgressBar::chunk { background-color: #4a8eff; border-radius: 3px; }"
     )
 
     frame = QFrame(win)
     frame.setStyleSheet(
         "QFrame { border: 1px solid #4a8eff; border-radius: 8px; }"
     )
-    frame.setGeometry(0, 0, 420, 140)
+    frame.setGeometry(0, 0, 420, 170)
 
     # Close button — top-right corner. The user can dismiss the splash
     # if it ever gets stuck (network glitch during install, AV scanning
@@ -541,6 +571,19 @@ def _build_splash_widget(QWidget, QFrame, QLabel, QVBoxLayout, QFont, Qt):
     msg.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
     msg.setWordWrap(True)
     layout.addWidget(msg)
+
+    # Indeterminate (marquee) progress bar. setRange(0, 0) puts Qt's
+    # built-in progress bar into a busy/marquee state where the chunk
+    # slides back and forth without representing real percentage. We
+    # cannot get a real % out of the silent NSIS installer (it suppresses
+    # its own UI under /S), but constant motion still tells the user
+    # the relauncher is alive and the install hasn't hung.
+    progress = QProgressBar(win)
+    progress.setObjectName("progress")
+    progress.setRange(0, 0)
+    progress.setTextVisible(False)
+    progress.setFixedHeight(10)
+    layout.addWidget(progress)
 
     # Raise the close label above the layout-managed children so it
     # always sits on top. The QLabel is a sibling of the layout host,

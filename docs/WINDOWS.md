@@ -363,6 +363,28 @@ python build/windows/sign.py dist/alpha-osk/alpha-osk.exe --verify
 - Data files (`data/` — dictionaries, training corpus).
 - Dashboard templates (`templates/`).
 - Windows UIAccess manifest (embedded in `.exe`).
+- NSIS installer license page (rendered from `build/windows/LICENSE.rtf`).
+
+### Installer pages and the EULA
+
+The generated NSIS installer ships these pages (interactive install only — silent install via `/S` bypasses pages entirely, which is what the auto-updater path uses):
+
+| Order | Page | Notes |
+|-------|------|-------|
+| 1 | Welcome | "The smartest keyboard you'll never touch." Friendly tagline + Next button. |
+| 2 | **License (EULA)** | Renders `build/windows/LICENSE.rtf` in a scrollable control. **Clickwrap**: Next is greyed out until the user ticks "I have read and accept the terms of the license agreement." `MUI_LICENSEPAGE_TEXT_TOP` carries a one-line hint so the action is obvious without reading the body. RTF (not TXT) because the NSIS license control renders RTF with bold headers and the recent NSIS high-contrast-mode fix targets it. |
+| 3 | Directory | Default `C:\Program Files\Alpha-OSK` (required for UIAccess — see *UIAccess and EV Code Signing*). |
+| 4 | Shortcut options | Custom page: checkboxes for Desktop + Start Menu shortcuts (both default on). |
+| 5 | Install | Progress bar driven by NSIS during file extraction. |
+| 6 | Finish | "Launch Alpha-OSK" checkbox (defaults on) launches via `explorer.exe` for medium-IL semantics. |
+
+If you ever need to rewrite the EULA:
+
+1. Edit `build/windows/LICENSE.rtf` in an RTF-aware editor (WordPad, LibreOffice Writer, the VS Code RTF extension). Avoid pasting Unicode characters that need RTF unicode escapes — `→`, `—`, smart quotes all need `\uXXXX?` entities or they render as mojibake on the installer's old-style license control. The current copy uses ASCII (`>`, `-`, `"`) for that reason.
+2. Keep the top-level `LICENSE` file at repo root in sync. That plaintext copy is what GitHub's repository UI and pip metadata read. The two files don't have to be byte-identical (the RTF carries the accessibility / privacy / auto-update preamble, the plaintext is the bare MIT body) but the MIT body itself must match.
+3. Rebuild + visually confirm the page renders correctly. The "I accept" checkbox should appear at the bottom of the page and Next should grey out until it's ticked.
+
+`build/windows/build.py::_generate_nsi_script` gates the license page on `(SCRIPT_DIR / "LICENSE.rtf").exists()`, so a missing RTF degrades to "no license page" rather than a build error. Production releases must keep the RTF present; CI doesn't currently enforce it.
 
 ### Build Options
 
@@ -530,11 +552,13 @@ The script: checks prereqs → runs PyInstaller → signs all `.exe` in `dist/al
 ### 5. Test the installer
 
 1. Run `release/Alpha-OSK-Setup-x.y.z.exe`.
-2. Verify it detects and removes the previous version (same directory: silent uninstall; different: prompts).
-3. Verify install to `C:\Program Files\Alpha-OSK` and Desktop + Start Menu shortcuts.
-4. Launch via the installer's "Launch Alpha-OSK" checkbox.
-5. **Test UIAccess**: open an elevated Command Prompt (Run as Admin) and verify keystrokes reach it.
-6. Verify `Settings → Data & Privacy → Updates` shows the new version.
+2. **Confirm the License page appears between Welcome and Directory.** The "I have read and accept…" checkbox should be unchecked by default and Next should be greyed out until it's ticked. If the page is missing, `build/windows/LICENSE.rtf` is absent or unreadable — see *Installer pages and the EULA*.
+3. Verify it detects and removes the previous version (same directory: silent uninstall; different: prompts).
+4. Verify install to `C:\Program Files\Alpha-OSK` and Desktop + Start Menu shortcuts.
+5. Launch via the installer's "Launch Alpha-OSK" checkbox.
+6. **Test UIAccess**: open an elevated Command Prompt (Run as Admin) and verify keystrokes reach it.
+7. Verify `Settings → Data & Privacy → Updates` shows the new version.
+8. **(If updater changed)** Manually trigger an auto-update from a prior version: confirm the download popup shows live MB/% progress, the pre-install toast appears, the relauncher splash shows the marquee progress bar settling on Done, and the post-install ✓ toast confirms the new version.
 
 ### 6. Tag
 

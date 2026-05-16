@@ -109,6 +109,11 @@ Window {
     property string updateNotes: ""
     property bool updateInstalling: false
     property string updateError: ""
+    // Download progress for the in-flight installer fetch. -1 total means
+    // the server omitted Content-Length, in which case the popup shows
+    // an indeterminate spinner instead of a percentage.
+    property int updateDownloadBytes: 0
+    property int updateDownloadTotal: 0
     // "" / "checking" / "uptodate" / "available" / "failed" — drives the
     // settings-panel status text after a manual "Check now".  Auto-checks
     // also update this so the panel reflects reality if the user opens
@@ -473,6 +478,12 @@ Window {
         function onUpdateInstallStarted() {
             root.updateInstalling = true
             root.updateError = ""
+            root.updateDownloadBytes = 0
+            root.updateDownloadTotal = 0
+        }
+        function onUpdateDownloadProgress(bytes, total) {
+            root.updateDownloadBytes = bytes
+            root.updateDownloadTotal = total
         }
         function onUpdateInstallHandoffPending(version) {
             // Fired right before the installer's taskkill arrives. The
@@ -653,12 +664,45 @@ Window {
 
                             Text {
                                 Layout.fillWidth: true
-                                text: root.updateError !== ""
-                                      ? root.updateError
-                                      : qsTr("Installing will close and relaunch the app.")
+                                text: {
+                                    if (root.updateError !== "")
+                                        return root.updateError
+                                    if (root.updateInstalling) {
+                                        if (root.updateDownloadTotal > 0) {
+                                            var mb = (root.updateDownloadBytes / 1048576).toFixed(1)
+                                            var totalMb = (root.updateDownloadTotal / 1048576).toFixed(1)
+                                            var pct = Math.floor(
+                                                100 * root.updateDownloadBytes / root.updateDownloadTotal
+                                            )
+                                            return qsTr("Downloading %1 / %2 MB (%3%)").arg(mb).arg(totalMb).arg(pct)
+                                        }
+                                        if (root.updateDownloadBytes > 0) {
+                                            var mb2 = (root.updateDownloadBytes / 1048576).toFixed(1)
+                                            return qsTr("Downloading %1 MB…").arg(mb2)
+                                        }
+                                        return qsTr("Starting download…")
+                                    }
+                                    return qsTr("Installing will close and relaunch the app.")
+                                }
                                 color: Qt.darker(root.themeTextColor, 1.4)
                                 font.pixelSize: 11
                                 wrapMode: Text.WordWrap
+                            }
+
+                            // Download progress bar — only painted while
+                            // an install is in flight. When the server
+                            // gave us a Content-Length we show real %;
+                            // otherwise we fall back to indeterminate
+                            // motion (from: 0; to: 0) so the user sees
+                            // the work is still happening.
+                            ProgressBar {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 6
+                                visible: root.updateInstalling && root.updateError === ""
+                                from: 0
+                                to: root.updateDownloadTotal > 0 ? root.updateDownloadTotal : 0
+                                value: root.updateDownloadBytes
+                                indeterminate: root.updateDownloadTotal <= 0
                             }
 
                             RowLayout {

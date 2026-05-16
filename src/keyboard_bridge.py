@@ -281,6 +281,13 @@ class KeyboardBridge(QObject):
     # "the update broke the keyboard" — see docs/AUTO_UPDATE.md § Update
     # progress indicator.
     updateInstallHandoffPending = Signal(str)
+    # Streaming download progress for the update installer. Bytes
+    # received + total bytes (or -1 when the server omits Content-Length).
+    # Emitted from the install worker thread; QML auto-connects via the
+    # default queued-connection so the bar repaints on the UI thread.
+    # Cadence is throttled at the emit site so a 64 KB chunk size doesn't
+    # spam the signal bus on a fast download.
+    updateDownloadProgress = Signal(int, int)
 
     # Edit-mode signals — when the prediction-edit popup is open, OSK
     # keystrokes must target its TextField, not the OS-focused app
@@ -1420,9 +1427,29 @@ class KeyboardBridge(QObject):
                 self.updateInstallHandoffPending.emit(version)
                 time.sleep(_PRE_INSTALL_TOAST_DWELL_S)
 
+            # Throttle the download-progress emits. The downloader's
+            # 64 KB chunk size means an 85 MB installer would fire ~1300
+            # signals; coalescing to ~once-per-256 KB keeps the bar
+            # smooth without flooding the queued-signal connection.
+            # Also always emit the final chunk so the bar lands at 100 %.
+            last_emit = [0]
+            EMIT_EVERY = 256 * 1024
+
+            def _on_progress(written: int, total: Optional[int]) -> None:
+                if (
+                    written - last_emit[0] >= EMIT_EVERY
+                    or (total is not None and written >= total)
+                ):
+                    last_emit[0] = written
+                    self.updateDownloadProgress.emit(
+                        written, total if total is not None else -1,
+                    )
+
             try:
                 ok, err = download_and_install(
-                    info, on_installer_launching=_on_installer_launching,
+                    info,
+                    progress=_on_progress,
+                    on_installer_launching=_on_installer_launching,
                 )
             except Exception as e:                       # noqa: BLE001
                 _logger.error("Install raised: %s", e)
