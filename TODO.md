@@ -20,11 +20,11 @@
 - [x] **Escape key always visible** — Placed in number row (not behind Function Keys toggle)
 - [x] **System keys in nav panel** — PrtSc, ScrLk, Pause grouped with navigation keys
 - [x] **Persistent preferences** — Layout toggles, theme, suggestions saved via Qt Settings
-- [x] **Suggestions toggle** — "Aa" button in title bar, quick on/off
+- [x] **Suggestions toggle** — Settings → Smart Typing → Suggestions → Show Suggestions
 - [x] **Predictions clear on deactivation** — Suggestions clear when user clicks away
 - [x] **No predictions for numbers** — Typing digits/symbols clears suggestion bar
 - [x] **Configurable suggestion count** — 3–10 suggestions (default 8), adjustable in settings
-- [x] **Comprehensive settings panel** — Layout, suggestions, accessibility profiles, vocabulary packs, theme, data management
+- [x] **Comprehensive settings panel** — Four-category drill-down: Appearance, Smart Typing, Your Language Model, Data & Privacy
 
 ## Phase 3: AI Prediction ✅
 
@@ -32,7 +32,6 @@
 - [x] **Prediction integration** — Connected to QML UI with real-time updates
 - [x] **Personal vocabulary** — Learns from typed words and selections
 - [ ] **Abbreviation expansion** — Custom shortcuts (e.g., "omw" → "on my way")
-- [ ] **Medical/AT dictionary** — Specialized terms
 
 ## Phase 4: Voice Dictation
 
@@ -50,10 +49,8 @@
 
 ## Phase 6: Collaboration
 
-- [ ] **Shared word lists** — Import/export vocabularies
-- [ ] **Community profiles** — Pre-built accessibility configs
+- [ ] **Shared word lists** — Import/export vocabularies (the import side ships today; export is open)
 - [ ] **Cloud sync** — Settings across devices (optional)
-- [ ] **Accessibility presets** — One-click configurations
 
 ## Backlog
 
@@ -112,13 +109,13 @@
 - [x] Escape key always visible in number row
 - [x] Navigation panel (PrtSc, ScrLk, Pause, Ins, Del, Home, End, PgUp, PgDn, Arrows)
 - [x] Number pad with NumLock
-- [x] Settings panel — layout, suggestions, accessibility profiles, vocabulary packs, theme, data
+- [x] Settings panel — four-category drill-down (Appearance / Smart Typing / Your Language Model / Data & Privacy)
 - [x] Compact mode option
 - [x] LLM_ONBOARDING.md updated for AI assistants
 - [x] Key hold/repeat functionality
 - [x] Key hover effect (lighten on mouse hover)
 - [x] Next-word prediction after word selection
-- [x] Suggestions toggle (Aa button in title bar)
+- [x] Suggestions toggle (Settings → Smart Typing → Suggestions)
 - [x] Persistent preferences via Qt Settings
 - [x] Multi-modifier shortcuts (Win+Shift+S, etc.)
 - [x] Windows port — Platform abstraction, SendInput, UIAccess manifest
