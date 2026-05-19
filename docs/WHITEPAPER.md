@@ -1,8 +1,9 @@
 # Alpha-OSK: A Predictive On-Screen Keyboard for Motor-Impaired Users
 
-**Version:** 1.1.0
-**Date:** May 2026
+**Document revision:** 1.1 (May 2026)
 **Audience:** Software engineers, accessibility researchers, assistive-technology practitioners
+
+> *App version references inline (e.g. "1.1.0+" in §5.6) denote the first release in which a feature ships. The single source of truth for the current installed version is `src/__version__.py`.*
 
 ---
 
@@ -16,7 +17,7 @@ Alpha-OSK is an on-screen keyboard (OSK) for Windows and Linux designed for user
 
 ### 1.1 The accessibility gap in OS-bundled keyboards
 
-The on-screen keyboards bundled with Windows (`osk.exe`) and Linux desktops (GNOME On-Screen Keyboard, Onboard) provide a baseline accessibility surface, but they predate the prediction quality that mainstream mobile keyboards (Gboard, SwiftKey, iOS) have offered since the early 2010s. For an able-bodied user typing on glass, weak prediction is a minor annoyance; for a wheelchair user controlling a mouse with limited range of motion, weak prediction directly costs typing throughput, fatigue budget, and — over a working day — the ability to communicate at all.
+The on-screen keyboards bundled with Windows (`osk.exe`) and Linux desktops (GNOME On-Screen Keyboard, Onboard) provide a baseline accessibility surface, but they predate the prediction quality that mainstream mobile keyboards (Gboard, SwiftKey, iOS) have offered since the early 2010s. For an able-bodied user typing on glass, weak prediction is a minor annoyance; for a wheelchair user controlling a mouse with limited range of motion, weak prediction directly costs typing throughput, fatigue budget, and (over a working day) the ability to communicate at all.
 
 Mobile-grade prediction has not transferred to the desktop OSK category for two structural reasons. First, mobile keyboards are tightly coupled to their operating systems' input method frameworks; the desktop equivalents (Windows TSF, Linux IBus/Fcitx) target IME use cases (CJK input) rather than augmentative communication. Second, the major mobile prediction stacks (LatinIME, SwiftKey's proprietary engine) are either Android-only or closed source, and the open-source desktop tools that approach their quality (Presage) have stalled.
 
@@ -24,15 +25,20 @@ Mobile-grade prediction has not transferred to the desktop OSK category for two 
 
 Alpha-OSK is shaped by five goals, in priority order:
 
-1. **The OSK must never steal focus from the target application.** A focus loss to the keyboard is not just an annoyance — it can drop a modifier, abort a drag, or lose the user's place in a long composition.
+1. **The OSK must never steal focus from the target application.** A focus loss to the keyboard is not just an annoyance. It can drop a modifier, abort a drag, or lose the user's place in a long composition.
 2. **Predictions must be useful from the first keystroke.** A user who can only type 5–10 words per minute cannot afford a "warm-up" period where the engine learns their vocabulary before earning its keep.
-3. **Local-first: no cloud round-trip on the prediction or learning path; no GPU; no LLM.** The system must run on the modest hardware motor-impaired users typically inherit (older laptops, low-power desktops). Keystrokes must never be exfiltrated — this is a category where data sensitivity is unusually high (passwords, medical communication, intimate correspondence). The community-impact pipeline added in 1.1.0 (§5.5) is the only optional egress and is gated on explicit user consent; even when enabled, it submits only the lifetime counters the user already sees on the in-app dashboard, never content.
+3. **Local-first: no cloud round-trip on the prediction or learning path; no GPU; no LLM.** The system must run on the modest hardware motor-impaired users typically inherit (older laptops, low-power desktops). Keystrokes must never be exfiltrated. This is a category where data sensitivity is unusually high (passwords, medical communication, intimate correspondence). The community-impact pipeline added in 1.1.0 (§5.6) is the only optional egress and is gated on explicit user consent; even when enabled, it submits only the lifetime counters the user already sees on the in-app dashboard, never content.
 4. **Spatial errors must be corrected without punishing deliberate typing.** A user with hand tremor will land off-centre on keys; a user typing "thru" deliberately must not be autocorrected to "throw".
 5. **Every interaction must be reachable from the mouse.** Keyboard shortcuts, modal dialogs that require Enter, and physical-keyboard fallbacks are non-options.
 
 ### 1.3 What this paper covers
 
 Section 2 lays out the runtime architecture and the two boundaries that dominate the design (QML↔Python and Python↔OS). Section 3 describes the prediction engine in depth. Section 4 walks through the accessibility-driven engineering decisions whose constraints rippled through the architecture. Section 5 covers privacy and security. Section 6 discusses performance. Section 7 covers distribution and updates. Section 8 enumerates the open work and the known gaps relative to commercial keyboards. The deeper algorithm-level design docs are cross-referenced inline rather than reproduced.
+
+<p align="center">
+  <img src="../assets/screenshots/dark-theme-keyboard.png" alt="Alpha-OSK full keyboard in the Dark theme, showing function row, QWERTY block, navigation cluster, and numpad." width="900" />
+  <br /><em>Figure 1. Full keyboard surface. Left to right: function row (F1–F12), QWERTY block with sticky modifier keys, navigation cluster (PrtSc / ScrLk / Pause / Ins / Home / PgUp / Del / End / PgDn / arrows), and numpad. Title bar carries (right side) the update indicator, Learning / Paused privacy toggle, clear-context, settings, minimize, and close. Width is user-resizable from either edge; height auto-fits content.</em>
+</p>
 
 ---
 
@@ -46,7 +52,7 @@ Alpha-OSK is a single user-mode process. There is no daemon, no background servi
 - A Python "bridge" object (`src/keyboard_bridge.py`) that holds the prediction engine, the modifier state machine, the context buffer, and the per-platform key synthesiser.
 - Two long-lived `QTimer` instances: a 200 ms password-field poller (Windows) and a 250 ms foreground-window poller for predicting context resets across app switches.
 
-The process never elevates voluntarily. On Windows, the launcher (`run.py`) intentionally avoids `runas` and the build pipeline produces an installer that drops a UIAccess-marked executable into a Program Files subdirectory — UIAccess lets the OSK inject input into elevated target windows without itself running elevated, preserving the sandboxing properties of medium integrity level.
+The process never elevates voluntarily. On Windows, the launcher (`run.py`) intentionally avoids `runas` and the build pipeline produces an installer that drops a UIAccess-marked executable into a Program Files subdirectory. UIAccess lets the OSK inject input into elevated target windows without itself running elevated, preserving the sandboxing properties of medium integrity level.
 
 ### 2.2 The QML ↔ Python bridge
 
@@ -57,7 +63,7 @@ QML drives all rendering and gesture detection. Python owns all state and side e
 3. The bridge emits a `Signal` (`predictionsChanged`, `capsLockActiveChanged`, `editKeyTyped`, …).
 4. QML bindings react and re-render.
 
-This is deliberately the *only* coupling between the layers. There are no shared Qt models, no `QQmlListProperty`, no QML access to Python attributes other than `@Property`-decorated ones. The reason is testability: the Python side has 450+ pytest tests that exercise prediction, capitalization, modifier semantics, and persistence without spinning up a Qt event loop.
+This is deliberately the *only* coupling between the layers. There are no shared Qt models, no `QQmlListProperty`, no QML access to Python attributes other than `@Property`-decorated ones. The reason is testability: the Python side has 640+ pytest tests that exercise prediction, capitalization, modifier semantics, and persistence without spinning up a Qt event loop.
 
 ### 2.3 Platform abstraction
 
@@ -65,11 +71,11 @@ The platform abstraction lives in `src/platform/` and consists of three concerns
 
 `src/platform/base.py` defines the abstract `KeyboardSynthesizer` interface:
 
-- `send_text(text)` — emit a stream of characters (used for prediction insertion, swipe results).
-- `send_key(name, modifiers=None)` — emit one named key, optionally chorded with modifiers.
-- `hold_modifier(name)` / `release_modifier(name)` — pin a modifier at the OS level. This is what enables Shift+drag in the target app, Ctrl+click on hyperlinks, and so on. Without it, sticky modifiers would only attach to the next synthesised key, not to the user's *physical* mouse interactions.
-- `replace_text(prefix_length, replacement)` — used only when a clicked prediction's casing diverges from the typed prefix.
-- `reset_modifier_state()` — called once at startup to release any modifier left held by a crashed prior instance.
+- `send_text(text)`: emit a stream of characters (used for prediction insertion, swipe results).
+- `send_key(name, modifiers=None)`: emit one named key, optionally chorded with modifiers.
+- `hold_modifier(name)` / `release_modifier(name)`: pin a modifier at the OS level. This is what enables Shift+drag in the target app, Ctrl+click on hyperlinks, and so on. Without it, sticky modifiers would only attach to the next synthesised key, not to the user's *physical* mouse interactions.
+- `replace_text(prefix_length, replacement)`: used only when a clicked prediction's casing diverges from the typed prefix.
+- `reset_modifier_state()`: called once at startup to release any modifier left held by a crashed prior instance.
 
 `src/platform/windows.py` implements this via the Win32 `SendInput` API, called through `ctypes`. There is one important type subtlety documented in the codebase: `KEYBDINPUT.dwExtraInfo` is `ULONG_PTR`, an integer-sized field that the kernel does not dereference, but it must not be set to a Python pointer object whose lifetime ends before the `INPUT` struct is consumed. We alias it to `ctypes.c_size_t` and pass `0`.
 
@@ -94,7 +100,7 @@ All persistent user data lives in OS-standard per-user locations:
 | Windows  | `%APPDATA%\alpha-osk\` |
 | Linux    | `~/.config/alpha-osk/` |
 
-The directories hold three artefacts: `models/ngram_model.json` (learned vocabulary, capitalisation, suppression flags), `models/ppm_model.json` (character-level n-gram trie), and `analytics.json` (lifetime stats — see §5). User-imported vocabulary packs go to `packs/` under the same root. The application ships with **no built-in packs** — earlier releases shipped six (medical, programming, academic, gaming, business, NSFW) but each was 200–400 words, ~30× smaller than the base wordlist, and personal learning caught up within minutes. The current system is import-only; the rationale and pack format are documented in §3.1.2.
+The directories hold three artefacts: `models/ngram_model.json` (learned vocabulary, capitalisation, suppression flags), `models/ppm_model.json` (character-level n-gram trie), and `analytics.json` (lifetime stats. See §5). User-imported vocabulary packs go to `packs/` under the same root. The application ships with **no built-in packs**. Earlier releases shipped six (medical, programming, academic, gaming, business, NSFW) but each was 200–400 words, ~30× smaller than the base wordlist, and personal learning caught up within minutes. The current system is import-only; the rationale and pack format are documented in §3.1.2.
 
 The application *never* writes to its own install directory at runtime. This invariant matters for Program Files installs (where writes would silently redirect to VirtualStore) and for AppImage packaging (where the bundle is read-only).
 
@@ -102,7 +108,7 @@ The application *never* writes to its own install directory at runtime. This inv
 
 ## 3. The Prediction Engine
 
-The prediction engine is the most novel component of the system and the most salient to the user. It lives in `src/prediction/`. The design follows the layered approach pioneered by Presage (Vescovi) — multiple predictors with different strengths, merged by linear interpolation — extended with a spatial recognition layer borrowed in spirit from LatinIME.
+The prediction engine is the most novel component of the system and the most salient to the user. It lives in `src/prediction/`. The design follows the layered approach pioneered by Presage (Vescovi) (multiple predictors with different strengths, merged by linear interpolation) extended with a spatial recognition layer borrowed in spirit from LatinIME.
 
 ### 3.1 Component overview
 
@@ -121,25 +127,25 @@ For deep design treatments of each, see `docs/PPM.md`, `docs/FUZZY_RECOGNITION.m
 
 #### 3.1.1 Why layered
 
-Each predictor in isolation has a complementary failure mode, and the merge layer is what makes the whole stack stronger than any of its parts. A pure n-gram model is excellent at "the user just typed *I want* — they probably want *to*", but it has no notion of partial words, so it cannot complete *th* into *the*. A pure PPM character model is excellent at completing partial words, but it sees the world as a stream of characters, not words, so it readily produces suffixes that match no real word ("th" → "throu" rather than "through"). A pure fuzzy/spatial recogniser corrects mis-taps but is context-blind: after typing "of ", it cannot tell *the* from *thy* — both are spatially plausible neighbours of whatever the user meant. Merge them and each layer's strength covers the others' blind spots: the n-gram supplies context, PPM supplies prefix-completion, fuzzy supplies typo-tolerance.
+Each predictor in isolation has a complementary failure mode, and the merge layer is what makes the whole stack stronger than any of its parts. A pure n-gram model is excellent at "the user just typed *I want*. They probably want *to*", but it has no notion of partial words, so it cannot complete *th* into *the*. A pure PPM character model is excellent at completing partial words, but it sees the world as a stream of characters, not words, so it readily produces suffixes that match no real word ("th" → "throu" rather than "through"). A pure fuzzy/spatial recogniser corrects mis-taps but is context-blind: after typing "of ", it cannot tell *the* from *thy*. Both are spatially plausible neighbours of whatever the user meant. Merge them and each layer's strength covers the others' blind spots: the n-gram supplies context, PPM supplies prefix-completion, fuzzy supplies typo-tolerance.
 
-This layered approach mirrors Presage's "natural language as a combination of redundant information sources" framing and the merge model used in LatinIME and Gboard. The Alpha-OSK contribution is not the layering itself but the specific weights, the cold-start strategy (§3.3), the fragment filter (§3.4), and the spatial-bigram cross-talk in the merge (§3.6) — each tuned for the OSK use case where a single predictor's wrong answer costs the user real fatigue.
+This layered approach mirrors Presage's "natural language as a combination of redundant information sources" framing and the merge model used in LatinIME and Gboard. The Alpha-OSK contribution is not the layering itself but the specific weights, the cold-start strategy (§3.3), the fragment filter (§3.4), and the spatial-bigram cross-talk in the merge (§3.6). Each tuned for the OSK use case where a single predictor's wrong answer costs the user real fatigue.
 
 #### 3.1.2 Per-component internals
 
 **`NgramPredictor` (`ngram_predictor.py`).** Holds three plain dicts: `unigrams: Dict[str, int]`, `bigrams: Dict[str, Dict[str, int]]`, and `trigrams: Dict[str, Dict[str, int]]` keyed by `"w₁ w₂"`. It also owns the capitalisation table (`Dict[str, str]`), the blacklist set, the dispreference counter, and a `_user_total` invariant that must equal `sum(user_vocab.values())` after every mutation (§3.4 detail). `predict(context, n)` performs the linear-interpolated rank described in §3.2; `learn(word)` updates frequencies through the fragment filter and repetition gate; `get_capitalized(word, sentence_start)` is the export hook used by the merge layer to apply the three-tier capitalisation model. This file is the largest by volume in the prediction package because every persistent piece of user data lives here.
 
-**`PPMPredictor` and `PPMWordPredictor` (`ppm_predictor.py`).** Two cooperating classes. `PPMPredictor` is the raw character model — a variable-order Markov chain with PPMD escape, following Cleary & Witten's original construction. It learns from a stream of characters and predicts a probability distribution over the next character given the last N (where N is the model order, default 5). `PPMWordPredictor` wraps it: it walks the character distribution into the most likely full-word completions of the partial prefix the user has typed. The wrapping matters because the merge layer takes word predictions, not character distributions.
+**`PPMPredictor` and `PPMWordPredictor` (`ppm_predictor.py`).** Two cooperating classes. `PPMPredictor` is the raw character model. A variable-order Markov chain with PPMD escape, following Cleary & Witten's original construction. It learns from a stream of characters and predicts a probability distribution over the next character given the last N (where N is the model order, default 5). `PPMWordPredictor` wraps it: it walks the character distribution into the most likely full-word completions of the partial prefix the user has typed. The wrapping matters because the merge layer takes word predictions, not character distributions.
 
-**`FuzzyRecognizer` (`fuzzy_recognizer.py`).** Owns a `SpatialKeyModel` (Gaussian distribution over neighbouring keys keyed by Euclidean distance on the QWERTY layout, σ = `spatial_uncertainty / 2`, default σ = 0.7) and a `FuzzyWordGenerator` that combines the spatial beam search with a SymSpell-backed edit-distance lookup (`src/prediction/symspell.py`). Two query paths: `get_fuzzy_predictions(context, n)` returns ranked candidates for the merge, and `should_autocorrect(typed, candidate)` runs the two-tier threshold (§3.7) when the system has to decide whether to *commit* a correction (e.g. on space) versus merely *suggest* it. The recogniser is the most numerically tuned component — its constants are spelled out in §3.6.
+**`FuzzyRecognizer` (`fuzzy_recognizer.py`).** Owns a `SpatialKeyModel` (Gaussian distribution over neighbouring keys keyed by Euclidean distance on the QWERTY layout, σ = `spatial_uncertainty / 2`, default σ = 0.7) and a `FuzzyWordGenerator` that combines the spatial beam search with a SymSpell-backed edit-distance lookup (`src/prediction/symspell.py`). Two query paths: `get_fuzzy_predictions(context, n)` returns ranked candidates for the merge, and `should_autocorrect(typed, candidate)` runs the two-tier threshold (§3.7) when the system has to decide whether to *commit* a correction (e.g. on space) versus merely *suggest* it. The recogniser is the most numerically tuned component. Its constants are spelled out in §3.6.
 
-**`HybridPredictor` (`hybrid_predictor.py`).** The orchestrator. Holds references to one `NgramPredictor`, one `PPMWordPredictor`, one `FuzzyRecognizer`, one `PackManager`, and (optionally) one `TransformerPredictor`. The `predict()` entry point runs the three primary predictors in sequence (not in threads — Python's GIL would defeat parallelism here, and each predictor is fast enough that single-threaded sequential is simpler and still meets the <30 ms latency budget). It then dispatches to a strategy-specific scorer (`_score_rank` / `_score_rrf` / `_score_linear` / `_score_loglinear`) keyed on the user's selection in *Settings → Smart Typing → Suggestion Engine*; default is `rank`. Source weights are shared across every strategy (`_source_weights` returns 3.0/0.3/0.6 for next-word, 1.0/0.8/0.6 for mid-word completion). The default rank strategy scores each candidate as the sum of `weight / (rank + 1)` from every source it appeared in. Consensus boost (RRF) substitutes `weight / (60 + rank + 1)` so the rank-1 vs rank-2 gap shrinks and consensus across sources matters more. Confidence-weighted (linear) normalises each source's raw scores into a sum-to-1 distribution and combines `Σ w_i · P_i(w)`. Multiplicative (log-linear) does the same per-source normalisation but combines `Σ w_i · log P_i(w)` with a 1e-6 floor for words missing from a source — equivalent to `Π P_i(w)^w_i`. Klakow (1998) showed log-linear beats linear interpolation by ~20% relative perplexity on n-gram smoothing. Across every strategy, the spatial-bigram cross-talk (`1 + log1p(bigram_count) / 2`) re-weights fuzzy candidates against the previous word's bigram table — the only context signal fuzzy has access to. Dispreference penalties divide the score by `(1 + count · 0.5)` and capitalisation is applied last (`_finalize_scores`), so all internal scoring is case-insensitive. Full strategy trade-offs and migration history live in `docs/HYBRID_MERGING.md`.
+**`HybridPredictor` (`hybrid_predictor.py`).** The orchestrator. Holds references to one `NgramPredictor`, one `PPMWordPredictor`, one `FuzzyRecognizer`, one `PackManager`, and (optionally) one `TransformerPredictor`. The `predict()` entry point runs the three primary predictors in sequence (not in threads. Python's GIL would defeat parallelism here, and each predictor is fast enough that single-threaded sequential is simpler and still meets the <30 ms latency budget). It then dispatches to a strategy-specific scorer (`_score_rank` / `_score_rrf` / `_score_linear` / `_score_loglinear`) keyed on the user's selection in *Settings → Smart Typing → Suggestion Engine*; default is `rank`. Source weights are shared across every strategy (`_source_weights` returns 3.0/0.3/0.6 for next-word, 1.0/0.8/0.6 for mid-word completion). The default rank strategy scores each candidate as the sum of `weight / (rank + 1)` from every source it appeared in. Consensus boost (RRF) substitutes `weight / (60 + rank + 1)` so the rank-1 vs rank-2 gap shrinks and consensus across sources matters more. Confidence-weighted (linear) normalises each source's raw scores into a sum-to-1 distribution and combines `Σ w_i · P_i(w)`. Multiplicative (log-linear) does the same per-source normalisation but combines `Σ w_i · log P_i(w)` with a 1e-6 floor for words missing from a source. Equivalent to `Π P_i(w)^w_i`. Klakow (1998) showed log-linear beats linear interpolation by ~20% relative perplexity on n-gram smoothing. Across every strategy, the spatial-bigram cross-talk (`1 + log1p(bigram_count) / 2`) re-weights fuzzy candidates against the previous word's bigram table. The only context signal fuzzy has access to. Dispreference penalties divide the score by `(1 + count · 0.5)` and capitalisation is applied last (`_finalize_scores`), so all internal scoring is case-insensitive. Full strategy trade-offs and migration history live in `docs/HYBRID_MERGING.md`.
 
-**`VocabularyPack` and `PackManager` (`vocabulary_pack.py`).** A pack is a folder of plain-text files: `dictionary.txt` (one word per line), optional `bigrams.txt` (whitespace-separated pairs), `trigrams.txt`, and a `pack.json` metadata stub. `PackManager` enumerates packs from the user's import directory (`%APPDATA%/alpha-osk/packs/` on Windows, `~/.config/alpha-osk/packs/` on Linux), tracks which are enabled, and on enable calls `apply_to_predictor(ngram)` to write the pack's contents *into* the n-gram model's tables. All three tables are merged with `max(existing, pack_weight)` (`PACK_UNIGRAM_WEIGHT = 3`, `PACK_BIGRAM_WEIGHT = PACK_TRIGRAM_WEIGHT = 30`) so a pack never flattens an organically-learned high-frequency word — the pack establishes a floor, the user's own typing can climb above it. The architectural point: packs are not an independent predictor at merge time — they are a *modifier* of the n-gram tables, applied at enable-time. This is why the merge layer sees three predictors (n-gram, PPM, fuzzy), not four.
+**`VocabularyPack` and `PackManager` (`vocabulary_pack.py`).** A pack is a folder of plain-text files: `dictionary.txt` (one word per line), optional `bigrams.txt` (whitespace-separated pairs), `trigrams.txt`, and a `pack.json` metadata stub. `PackManager` enumerates packs from the user's import directory (`%APPDATA%/alpha-osk/packs/` on Windows, `~/.config/alpha-osk/packs/` on Linux), tracks which are enabled, and on enable calls `apply_to_predictor(ngram)` to write the pack's contents *into* the n-gram model's tables. All three tables are merged with `max(existing, pack_weight)` (`PACK_UNIGRAM_WEIGHT = 3`, `PACK_BIGRAM_WEIGHT = PACK_TRIGRAM_WEIGHT = 30`) so a pack never flattens an organically-learned high-frequency word. The pack establishes a floor, the user's own typing can climb above it. The architectural point: packs are not an independent predictor at merge time. They are a *modifier* of the n-gram tables, applied at enable-time. This is why the merge layer sees three predictors (n-gram, PPM, fuzzy), not four.
 
-The system is **import-only as of 1.1.0+**. Earlier releases shipped six built-in packs (medical, programming, academic, gaming, business, NSFW) but each was 200–400 words — too thin to compete with the engine's organic learning, which bumps a word's score by +5 every time the user accepts it as a pill. Sourcing real domain vocabularies (SNOMED-grade for medical, full API surface for programming) is its own project and runs into licensing rabbit holes; curated 300-word lists were strictly worse than no shipped packs at all. The import path is preserved so power users with a real domain wordlist (a nurse with her unit's drug list, a researcher with citation keywords) can still drop a folder in. A known limitation, documented in `CLAUDE.md`: disabling a pack does not currently undo its predictor injection — `apply_to_predictor` uses `max()`, `disable_pack` only clears the pack's own in-memory copy, so injected words persist until the next process restart. Mostly invisible with no built-ins shipping; the fix (track per-pack contributions, revert on disable, guard against clobbering organic learning that piled on after enable) is open work.
+The system is **import-only as of 1.1.0+**. Earlier releases shipped six built-in packs (medical, programming, academic, gaming, business, NSFW) but each was 200–400 words. Too thin to compete with the engine's organic learning, which bumps a word's score by +5 every time the user accepts it as a pill. Sourcing real domain vocabularies (SNOMED-grade for medical, full API surface for programming) is its own project and runs into licensing rabbit holes; curated 300-word lists were strictly worse than no shipped packs at all. The import path is preserved so power users with a real domain wordlist (a nurse with her unit's drug list, a researcher with citation keywords) can still drop a folder in. A known limitation, documented in `CLAUDE.md`: disabling a pack does not currently undo its predictor injection. `apply_to_predictor` uses `max()`, `disable_pack` only clears the pack's own in-memory copy, so injected words persist until the next process restart. Mostly invisible with no built-ins shipping; the fix (track per-pack contributions, revert on disable, guard against clobbering organic learning that piled on after enable) is open work.
 
-**`SwipeRecognizer` (`swipe_recognizer.py`).** Outside the normal predict path. The QML side intercepts a swipe gesture, forwards the raw point trace through `KeyboardBridge.processSwipe`, and the recogniser returns a ranked list of words by SHARK²-style shape matching. The top result is typed verbatim; the rest replace the prediction bar so the user can repick. The recogniser uses its own dictionary (the same unigrams the n-gram model has) but bypasses the merge layer entirely — swipe is its own input modality, not a refinement of typed input.
+**`SwipeRecognizer` (`swipe_recognizer.py`).** Outside the normal predict path. The QML side intercepts a swipe gesture, forwards the raw point trace through `KeyboardBridge.processSwipe`, and the recogniser returns a ranked list of words by SHARK²-style shape matching. The top result is typed verbatim; the rest replace the prediction bar so the user can repick. The recogniser uses its own dictionary (the same unigrams the n-gram model has) but bypasses the merge layer entirely. Swipe is its own input modality, not a refinement of typed input.
 
 **`TransformerPredictor` (`transformer_predictor.py`).** Optional, disabled by default. When enabled, it operates as an asynchronous re-ranking pass over the merged candidate list (`predict_with_refinement` is the entry point, not `predict`). The async design is deliberate: the synchronous `predict` path must return in tens of milliseconds, but a small transformer pass can take 100–300 ms even on CPU. The path emits a second, refined `predictionsRefined` signal so the QML side can update the bar a beat later if the refinement produced a different ranking. In practice this is rarely on; the layered classical stack is good enough for the hardware target, and the transformer dependency drags in PyTorch which would inflate the bundle by ~600 MB.
 
@@ -168,16 +174,16 @@ Total wall-clock budget for steps 4–5 on a 2018 laptop is comfortably under 30
 score(w) = λ₃·P(w | w₋₂, w₋₁)  +  λ₂·P(w | w₋₁)  +  λ₁·P_uni(w)
 ```
 
-with λ = (0.5, 0.3, 0.2). All three terms live in probability space, so a strong bigram signal can override a higher-frequency unigram — after typing "I want", "to" beats "the" because `P(to | want)` ≫ `P(the)`. This is the textbook Jelinek–Mercer interpolation applied at three orders.
+with λ = (0.5, 0.3, 0.2). All three terms live in probability space, so a strong bigram signal can override a higher-frequency unigram. After typing "I want", "to" beats "the" because `P(to | want)` ≫ `P(the)`. This is the textbook Jelinek–Mercer interpolation applied at three orders.
 
-When there is no preceding word (start of input, or after a context reset), the trigram and bigram terms collapse to zero and `P_uni` is taken at full weight, so partial-prefix completion is not attenuated. An earlier implementation added bigram and unigram counts in raw frequency space (`freq·2` for bigram, `p·100_000` for unigram), which made unigram dominate by three orders of magnitude — bigram evidence was effectively dead weight. The fix to a proper interpolated formula is one of the larger quality wins in the engine.
+When there is no preceding word (start of input, or after a context reset), the trigram and bigram terms collapse to zero and `P_uni` is taken at full weight, so partial-prefix completion is not attenuated. An earlier implementation added bigram and unigram counts in raw frequency space (`freq·2` for bigram, `p·100_000` for unigram), which made unigram dominate by three orders of magnitude. Bigram evidence was effectively dead weight. The fix to a proper interpolated formula is one of the larger quality wins in the engine.
 
 ### 3.3 Cold-start signal: curated bigram / trigram corpus
 
 Linear interpolation only helps when the higher-order tables have data. To avoid a cold-start period where the engine learns from scratch, the n-gram loader seeds two curated corpora at first launch:
 
-- `data/common_bigrams.txt` — ~750 hand-picked English bigrams with weight 50 each.
-- `data/common_trigrams.txt` — ~740 trigrams with weight 50 each, plus 10 reinforcement on each of the two internal bigrams (`w₁→w₂` and `w₂→w₃`).
+- `data/common_bigrams.txt`: ~750 hand-picked English bigrams with weight 50 each.
+- `data/common_trigrams.txt`: ~740 trigrams with weight 50 each, plus 10 reinforcement on each of the two internal bigrams (`w₁→w₂` and `w₂→w₃`).
 
 The seed corpora cover conversational English (subject–verb–object skeletons, common discourse markers, frequent prepositions). They are deliberately small enough to be hand-audited; the next planned scale-up is COCA top-100k bigrams or Google n-gram exports (see §8).
 
@@ -185,9 +191,9 @@ The seed corpora cover conversational English (subject–verb–object skeletons
 
 A naive learning policy ("any sequence of letters terminated by space is a word") makes the engine rapidly unusable. Real OSK input includes false starts, mistakes the user backspaced past but reformulated, accidental letter sequences from drags, and miss-tapped key fragments. The engine therefore applies `_is_plausible_word` at three points:
 
-1. **At learn time** (`NgramPredictor.learn`) — fragments are rejected before entering the candidate pool.
-2. **At seed-corpus load time** — the Google 10k and 20k supplement wordlists are scraped from web search corpora and contain every isolated letter of the alphabet plus several hundred two-letter abbreviations and state codes at high frequency. Without filtering, typing a single-letter prefix would surface a flood of one- and two-letter "words".
-3. **At model load** — existing users' `ngram_model.json` files are scrubbed on first launch after the filter shipped, so historical fragment pollution gets cleaned up rather than persisted forever.
+1. **At learn time** (`NgramPredictor.learn`): fragments are rejected before entering the candidate pool.
+2. **At seed-corpus load time**: the Google 10k and 20k supplement wordlists are scraped from web search corpora and contain every isolated letter of the alphabet plus several hundred two-letter abbreviations and state codes at high frequency. Without filtering, typing a single-letter prefix would surface a flood of one- and two-letter "words".
+3. **At model load**: existing users' `ngram_model.json` files are scrubbed on first launch after the filter shipped, so historical fragment pollution gets cleaned up rather than persisted forever.
 
 The filter rules: words of length ≤ 2 must be on a short whitelist (legitimate two-letter words like "is", "in", "to"); words of length ≥ 3 must contain both a vowel and a non-`aeiou` letter, with `y` counting as both (so "eye" and "cry" pass, but "aaaa" and "xqz" do not).
 
@@ -199,7 +205,7 @@ Pills only auto-capitalise the **`I` family** (`I`, `I'm`, `I'll`, `I'd`, `I've`
 
 Earlier builds shipped a three-tier Gboard-style system (Tier 1 = `I` family; Tier 2 = sentence-start auto-cap for ~130 ambiguous names like `will`, `jack`, `may`, `mark`; Tier 3 = ~8 000 unambiguous proper nouns from `data/proper_nouns.txt` plus user-taught forms). Tiers 2 and 3 were dropped because they fired on common English words ("the hope is", "a rose by", "may I", and the post-period word in every sentence) and pills came back capitalised when the user had typed lowercase. The user-facing rule is now "shift / caps lock is the cap signal", with the `I` family kept as the one mid-sentence exception.
 
-`NgramPredictor.capitalization` is still populated — `_load_proper_nouns` reads `data/proper_nouns.txt` at startup, and `learn_capitalization` records user-taught forms (right-click → Edit, prediction-click after typing a capital, word completion with non-trivial casing). All-uppercase typings are still rejected by default because the dominant cause of all-uppercase input is Caps Lock being on; deliberate all-caps (right-clicking each letter, Caps Lock off the whole word — the bridge tracks this with a `_word_typed_under_caps_lock` flag and passes `allow_uppercase = not _flag`) is allowed through. The accumulated dict is persisted to `ngram_model.json`. `get_capitalized` does not consult it today, but keeping the data lets a future opt-in toggle revive proper-noun cap without re-teaching from scratch.
+`NgramPredictor.capitalization` is still populated. `_load_proper_nouns` reads `data/proper_nouns.txt` at startup, and `learn_capitalization` records user-taught forms (right-click → Edit, prediction-click after typing a capital, word completion with non-trivial casing). All-uppercase typings are still rejected by default because the dominant cause of all-uppercase input is Caps Lock being on; deliberate all-caps (right-clicking each letter, Caps Lock off the whole word. The bridge tracks this with a `_word_typed_under_caps_lock` flag and passes `allow_uppercase = not _flag`) is allowed through. The accumulated dict is persisted to `ngram_model.json`. `get_capitalized` does not consult it today, but keeping the data lets a future opt-in toggle revive proper-noun cap without re-teaching from scratch.
 
 ### 3.6 Spatial fuzzy recognition
 
@@ -208,18 +214,18 @@ Earlier builds shipped a three-tier Gboard-style system (Tier 1 = `I` family; Ti
 1. **Spatial beam search** over the typed positions, considering each key plus its neighbours weighted by inverse distance. Beam width is bounded by `min_prob = 0.001`.
 2. **SymSpell-backed edit-distance candidates** at edit distance ≤ 2 (`src/prediction/symspell.py`). For every dictionary word, deletion variants up to two deletions are precomputed and indexed; at query time the input's deletion variants are looked up against the same index, and a Damerau-Levenshtein post-filter confirms the actual edit distance. Each surviving candidate is scored with a per-edit-type penalty when the distance is 1 (`_TRANSPOSITION_PROB = 0.30`, `_DELETION_PROB = 0.20`, `_INSERTION_PROB = 0.15`, `_SUBSTITUTION_PROB = 0.18`, `_APOSTROPHE_INSERTION_PROB = 0.50`) and a flat `_DOUBLE_EDIT_PROB = 0.05` at distance 2. Apostrophe insertion is bumped to `0.50` because missing apostrophes ("im" → "I'm", "dont" → "don't") are by far the dominant insertion error in real OSK typing. The index is built eagerly at the end of `set_frequencies` so the ~200 ms one-time cost lands in startup latency rather than the user's first keystroke; per-query lookup runs in well under 1 ms on a 10K-word dictionary.
 
-The two paths produce overlapping candidates, which are deduplicated by string and rescored against the unigram frequency table. The spatial path is best at near-key mis-taps (Gaussian neighbour probability picks them up at the candidate-generation level, scoring them by spatial proximity); the SymSpell path is best at non-spatial typos (transpositions, missed letters, double edits). Together they cover the full failure space — a property the prior pure-edit-distance-1 path did not have, since substitutions outside the spatial neighbour radius were not enumerated at all.
+The two paths produce overlapping candidates, which are deduplicated by string and rescored against the unigram frequency table. The spatial path is best at near-key mis-taps (Gaussian neighbour probability picks them up at the candidate-generation level, scoring them by spatial proximity); the SymSpell path is best at non-spatial typos (transpositions, missed letters, double edits). Together they cover the full failure space. A property the prior pure-edit-distance-1 path did not have, since substitutions outside the spatial neighbour radius were not enumerated at all.
 
 ### 3.7 Two-tier autocorrect threshold
 
-Spatial recognition produces a list of correction candidates. Whether to *commit* a correction (e.g. on space) — as opposed to merely surfacing it as a suggestion — is gated by two thresholds in `should_autocorrect`:
+Spatial recognition produces a list of correction candidates. Whether to *commit* a correction (e.g. on space) (as opposed to merely surfacing it as a suggestion) is gated by two thresholds in `should_autocorrect`:
 
 - **Absolute confidence:** the correction's score must exceed `confidence_threshold = 0.65`.
 - **Relative margin:** the correction must clear `_typed_baseline(typed_word) × 1.5`, where `_typed_baseline` returns `log1p(1) ≈ 0.69` for plausibly-shaped typings (vowel + consonant) and `0` for implausible slop ("xqz", "thx").
 
 This is the LatinIME / Gboard pattern in miniature: the literal typed word competes against corrections in the same scoring frame. Plausible deliberate typings ("thru", "lol", "btw") are protected by the relative gate; implausible inputs fall back to the absolute gate alone. The goal is to commit a correction when the user clearly mis-tapped, and to leave the typing alone when the user typed exactly what they meant.
 
-A fully unified scoring model — where the literal typed word has an explicit probability and competes against alternatives in a single ranked list — is the proper long-term fix and is described as Known Gap #1 in §8.
+A fully unified scoring model (where the literal typed word has an explicit probability and competes against alternatives in a single ranked list) is the proper long-term fix and is described as Known Gap #1 in §8.
 
 ### 3.8 Swipe / glide typing
 
@@ -257,20 +263,20 @@ On Linux, the equivalent is `Qt::Tool` plus `_NET_WM_STATE_ABOVE` and `_NET_WM_W
 
 Two consequences ripple out:
 
-1. **Qt's built-in `onActiveChanged` does not fire reliably**, because `WS_EX_NOACTIVATE` keeps the window from becoming the active window even when the user is interacting with it. The bridge therefore polls the OS directly (`GetForegroundWindow()` on Windows, `xdotool getactivewindow` on X11) on a 250 ms timer to detect app switches and reset the prediction context. Wayland does not expose the foreground window to unprivileged clients, so this poll is a no-op there — context resets only happen on explicit cues (e.g. a clicked prediction).
+1. **Qt's built-in `onActiveChanged` does not fire reliably**, because `WS_EX_NOACTIVATE` keeps the window from becoming the active window even when the user is interacting with it. The bridge therefore polls the OS directly (`GetForegroundWindow()` on Windows, `xdotool getactivewindow` on X11) on a 250 ms timer to detect app switches and reset the prediction context. Wayland does not expose the foreground window to unprivileged clients, so this poll is a no-op there. Context resets only happen on explicit cues (e.g. a clicked prediction).
 2. **Physical keyboard input never lands in the OSK**, because the OSK never holds focus. This makes the in-app text edit popup (§4.5) non-trivial to build.
 
 ### 4.2 Sticky modifiers
 
 Modifier keys are *sticky*: tap once to activate, tap again to deactivate, auto-release after one keypress (Shift) or remain held until explicit toggle (Caps Lock). This is the mainstream OSK model.
 
-The non-obvious part is that activating a sticky modifier holds it at the *OS level* via `hold_modifier(name)`, not just in Python state. Without OS-level holding, sticky Shift would only attach to synthesised keystrokes — Shift+click and Shift+drag in the target app would not extend selections. With OS-level holding, the OSK behaves identically to the user pressing-and-holding a physical Shift key, which is the model users expect. `release_modifier(name)` is called on auto-release and on app shutdown so a phantom modifier is not left held against the X server, the Wayland compositor, or the Windows kernel after the OSK quits.
+The non-obvious part is that activating a sticky modifier holds it at the *OS level* via `hold_modifier(name)`, not just in Python state. Without OS-level holding, sticky Shift would only attach to synthesised keystrokes. Shift+click and Shift+drag in the target app would not extend selections. With OS-level holding, the OSK behaves identically to the user pressing-and-holding a physical Shift key, which is the model users expect. `release_modifier(name)` is called on auto-release and on app shutdown so a phantom modifier is not left held against the X server, the Wayland compositor, or the Windows kernel after the OSK quits.
 
 Caps Lock and Shift are independent toggles; toggling caps no longer flips shift. Both are surfaced separately to QML.
 
 ### 4.3 Suffix-only insertion for predictions
 
-When the user has typed "hel" and clicks the "hello" prediction, the OSK sends `lo ` — only the suffix and a trailing space. Earlier versions sent Backspace×3 followed by "hello ", which was correct in plain text fields but failed in two important cases:
+When the user has typed "hel" and clicks the "hello" prediction, the OSK sends `lo `. Only the suffix and a trailing space. Earlier versions sent Backspace×3 followed by "hello ", which was correct in plain text fields but failed in two important cases:
 
 - **Slack and similar chat composers** treat Backspace at the start of an empty input as "discard draft and close composer" or "go to previous channel". A full Backspace-then-replace was destroying user state.
 - **Terminals and REPLs** disable shell-style Shift+Left text selection, making any "select then overwrite" approach impossible.
@@ -279,7 +285,7 @@ Suffix-only insertion sidesteps both. The fall-back to `replace_text(prefix_leng
 
 ### 4.4 Right-click for shifted variant
 
-A right-click on a character key types its shifted variant *without* flipping the sticky-shift state: `1` → `!`, `,` → `<`, `a` → `A`. This is a one-shot, modifier-free way to type a single shifted character — a common operation that would otherwise cost two clicks (Shift, then key).
+A right-click on a character key types its shifted variant *without* flipping the sticky-shift state: `1` → `!`, `,` → `<`, `a` → `A`. This is a one-shot, modifier-free way to type a single shifted character. A common operation that would otherwise cost two clicks (Shift, then key).
 
 The QML side resolves the output (preferring `kd.shifted` from the layout JSON, falling back to `kd.key.toUpperCase()` for letters), then routes through `keyboard.pressKeyLiteral(rch)` rather than `pressKey(rch)`. The distinction matters: `pressKey` applies the current shift/caps state and would lowercase the chosen `'A'` back to `'a'` if shift is off, defeating the feature. `pressKeyLiteral` types the character verbatim. Any future input source where the QML side has already chosen the final character (e.g. a long-press alternates picker) should use `pressKeyLiteral`.
 
@@ -289,8 +295,8 @@ Users frequently need to correct learned capitalisations: the engine learned "ip
 
 Because the OSK never holds OS focus, OSK keystrokes normally synthesise to whatever app is *behind* the OSK. To make keystrokes land in *our* `TextField`, the popup uses an "edit-mode intercept" pattern:
 
-- `predEditPopup.modal = false` — a modal overlay would swallow MouseAreas on the keyboard below.
-- `closePolicy: Popup.CloseOnEscape` — every OSK key click is a "press outside" relative to the popup; the default close-on-press-outside policy would slam the popup shut on the first keystroke.
+- `predEditPopup.modal = false`: a modal overlay would swallow MouseAreas on the keyboard below.
+- `closePolicy: Popup.CloseOnEscape`: every OSK key click is a "press outside" relative to the popup; the default close-on-press-outside policy would slam the popup shut on the first keystroke.
 - On open, the popup calls `keyboard.setEditMode(true)`. While active, `pressKey` and `pressSpecialKey` short-circuit the synthesiser and emit `editKeyTyped(char)` / `editSpecialPressed(name)` instead. A `Connections` block inside the popup wires those to TextField operations: insert at cursor, backspace, cursor motion, etc.
 
 This pattern generalises: any future input source that needs OSK keystrokes to land in-app rather than out-of-app (a voice-dictation review field, a snippet editor) should follow the same shape.
@@ -299,9 +305,14 @@ This pattern generalises: any future input source that needs OSK keystrokes to l
 
 The OSK window height is *bound* to the keyboard content's implicit height: `height: outerLayout.implicitHeight + 60`. There is no vertical resize handle (both edges are `SizeHorCursor`), and only the window *width* is persisted across launches.
 
-An earlier version also persisted height. The first time `Component.onCompleted` ran `root.height = savedWindowHeight`, the binding broke (Qt binds are one-shot and any imperative assignment severs them). After that, any width change scaled the keyboard but the height was frozen — the user got either clipped bottom rows or empty bands above and below the keys, with no way to fix it. The fix was to delete the height-persistence path entirely. If height persistence is ever reintroduced, it must use `Qt.binding(...)` or a re-clamp in `onHeightChanged` to keep the binding live.
+An earlier version also persisted height. The first time `Component.onCompleted` ran `root.height = savedWindowHeight`, the binding broke (Qt binds are one-shot and any imperative assignment severs them). After that, any width change scaled the keyboard but the height was frozen. The user got either clipped bottom rows or empty bands above and below the keys, with no way to fix it. The fix was to delete the height-persistence path entirely. If height persistence is ever reintroduced, it must use `Qt.binding(...)` or a re-clamp in `onHeightChanged` to keep the binding live.
 
 This is a small example of a pattern that recurs: accessibility constraints (in this case, no vertical resize handle because users with limited motor precision struggle with edge resizes) push *into* code that would be trivially correct in a normal desktop app.
+
+<p align="center">
+  <img src="../assets/screenshots/settings-appearance.png" alt="Appearance settings panel: panel-visibility toggles for function row, navigation, and numpad; layout picker for QWERTY / Dvorak / Colemak; nine-theme picker; sound and opacity controls." width="420" />
+  <br /><em>Figure 2. Appearance panel from the drill-down settings menu. Panel-visibility toggles (function row / navigation / numpad) let users strip the keyboard to the minimum surface their precision can hit reliably. The layout picker covers QWERTY, Dvorak, and Colemak. Nine themes ship, including a high-contrast Blackboard option. Opacity is a continuous slider (default 100%) for users who need to see through the keyboard at the cost of contrast.</em>
+</p>
 
 ---
 
@@ -311,24 +322,29 @@ This is a small example of a pattern that recurs: accessibility constraints (in 
 
 Alpha-OSK does not connect to the network at runtime except for the auto-update check (§7) and, only if the user explicitly opts in, the usage-stats pipeline (§5.6). There is no crash reporter, no model-improvement upload path, and no implicit telemetry. Lifetime statistics persist to a local `analytics.json` and are visible to the user through the in-app dashboard; **the dashboard is always local-only**, regardless of the §5.6 toggle. The toggle controls a separate, narrower pipeline that submits only the same lifetime counters the dashboard already shows the user, and only when explicitly enabled.
 
+<p align="center">
+  <img src="../assets/screenshots/settings-data-privacy.png" alt="Data and Privacy settings: data-backup export and import buttons, anonymous-usage-stats toggle (off), installed version, and check-for-updates-on-startup toggle." width="420" />
+  <br /><em>Figure 3. Data & Privacy panel. Data Backup writes a single .zip containing the user's model, lifetime stats, and imported vocabulary packs; importing on a new machine restores everything in place. The telemetry contributor ID is deliberately excluded from exports so contributions never link across machines. The anonymous-usage-stats toggle (off by default) controls the §5.6 pipeline. Auto-update is opt-out and shown alongside the installed version.</em>
+</p>
+
 ### 5.2 Privacy mode and password-field detection
 
 A typed password should never enter the prediction model. Two paths enforce this on Windows:
 
 1. **Background polling.** A 200 ms `QTimer` calls `is_password_field()` from `src/platform/password_detect.py`, which uses Windows UI Automation (`IUIAutomation::GetFocusedElement` → `UIA_IsPasswordPropertyId`). UIA covers native applications and modern browsers that expose accessibility metadata. A Win32 fallback (`EM_GETPASSWORDCHAR`) catches older Win32-only apps.
-2. **Per-keystroke synchronous check.** `pressKey` and `pressSpecialKey` call `_check_password_field_sync()` rate-limited to ~50 ms. This closes the race window where the user types the first characters of a password between timer ticks — without the synchronous check, those characters would reach the prediction cache before the timer fires.
+2. **Per-keystroke synchronous check.** `pressKey` and `pressSpecialKey` call `_check_password_field_sync()` rate-limited to ~50 ms. This closes the race window where the user types the first characters of a password between timer ticks. Without the synchronous check, those characters would reach the prediction cache before the timer fires.
 
 When privacy mode is active (auto-detected or manually toggled by the "Learning" / "Paused" button in the title bar), keystrokes still reach the OS, but `_current_word`, predictions, and learning are all suppressed. The prediction bar shows "Learning paused".
 
 On Linux, the equivalent uses AT-SPI 2 (`gi.repository.Atspi`). A daemon thread owns a GLib event loop and listens for `object:state-changed:focused`; whenever focus lands on an accessible whose state set contains `STATE_PASSWORD_TEXT`, the privacy flag flips on. Coverage spans GTK (`GtkEntry` with `visibility=false`), Qt (`QLineEdit` in Password echo mode), and browsers that expose accessibility metadata. If `gi` fails to import or AT-SPI is not running, the detector falls back silently to the null detector and the user can still toggle privacy mode manually.
 
-The COM lifecycle on Windows is worth noting: `_WindowsUIADetector` tracks `_owns_com` so `CoUninitialize` only fires if our code called `CoInitializeEx` and got `S_OK`. If `CoInitializeEx` returned `S_FALSE` (some other component already initialised the apartment), we skip the uninit — calling it would tear down the other caller's COM environment.
+The COM lifecycle on Windows is worth noting: `_WindowsUIADetector` tracks `_owns_com` so `CoUninitialize` only fires if our code called `CoInitializeEx` and got `S_OK`. If `CoInitializeEx` returned `S_FALSE` (some other component already initialised the apartment), we skip the uninit. Calling it would tear down the other caller's COM environment.
 
 ### 5.3 Pack import hardening
 
 The vocabulary system is import-only (§3.1.2 covers why no built-ins ship). Users import third-party packs from arbitrary filesystem paths, which makes import the dominant security surface for the prediction stack. `PackManager.import_pack` enforces:
 
-- The source folder's name is sanitised against `^[a-z0-9][a-z0-9_-]{0,63}$` — total length 1–64 characters, the first character must be alphanumeric (so a leading `_` or `-` is rejected, blocking dotfile-style or argument-style escapes), and only lowercase alphanumerics, underscore, and hyphen are accepted. Anything else (including `..`, slashes, spaces, uppercase) is rejected.
+- The source folder's name is sanitised against `^[a-z0-9][a-z0-9_-]{0,63}$`: total length 1–64 characters, the first character must be alphanumeric (so a leading `_` or `-` is rejected, blocking dotfile-style or argument-style escapes), and only lowercase alphanumerics, underscore, and hyphen are accepted. Anything else (including `..`, slashes, spaces, uppercase) is rejected.
 - The resolved destination path is verified to sit strictly under `user_packs_dir` before any `rmtree` or `copytree` runs. This blocks symlink traversal that resolves outside the packs root.
 - Symlinks inside the source tree are *skipped*, not dereferenced. A pack that contains a symlink to `/etc/passwd` will import without that file.
 
@@ -336,9 +352,21 @@ The regression tests for these properties are in `tests/test_vocabulary_pack.py:
 
 ### 5.4 Model load caps
 
-Both the n-gram and PPM model loaders reject files over 50 MB. The n-gram loader additionally rejects models with more than 500,000 unigrams, 500,000 bigram prefixes, or 100,000 capitalisation entries — anything beyond these is assumed to be corrupt or hostile and is silently skipped (the in-memory base dictionary is kept). These limits are intentionally well above what real long-term users produce.
+Both the n-gram and PPM model loaders reject files over 50 MB. The n-gram loader additionally rejects models with more than 500,000 unigrams, 500,000 bigram prefixes, or 100,000 capitalisation entries. Anything beyond these is assumed to be corrupt or hostile and is silently skipped (the in-memory base dictionary is kept). These limits are intentionally well above what real long-term users produce.
 
-### 5.5 Opt-in usage telemetry (1.1.0+)
+### 5.5 Data backup (export / import)
+
+Lifetime stats and learned vocabulary are the part of a user's setup that takes the longest to rebuild from scratch. Settings (theme, layout, panel toggles) live in the Qt settings layer and are quick to reconfigure manually; the irreplaceable artefact is the prediction model that has accumulated over months of typing. *Settings → Data & Privacy → Data Backup* writes the model, lifetime stats, and imported vocabulary packs into a single `.zip` the user controls. The implementation lives in `src/data_export.py`.
+
+**What's in the archive.** A `manifest.json` (schema version, app version, ISO-8601 UTC timestamp, file list, pack id list) plus `models/ngram_model.json`, `models/ppm_model.json`, `analytics.json`, and `packs/<id>/...` for each imported pack. `telemetry.json` is **deliberately excluded** so the contributor `anon_id` does not link contributions across machines (the user's data-policy promise in §5.6 and `docs/PRIVACY.md` would otherwise be silently broken). A fresh `anon_id` is generated on the new machine when telemetry is re-enabled.
+
+**Import is replace, not merge.** The imported state is "the user's full snapshot at export time", so imported files overwrite the corresponding files in the config directory and packs not in the archive are removed. Before any overwrite, the current state is written to a timestamped rescue archive at `<config_dir>/exports/rescue-<ts>.zip`, so a regrettable import is one click away from a rollback. Rescue-write failures are logged but do not abort the import; correctness of the import path takes priority over the safety net. Model files are replaced via tempfile-then-rename so a partial write cannot corrupt the existing file. After files are replaced, `HybridPredictor.reload_from_disk()` re-reads the models and re-discovers packs; `TypingAnalytics.reload_from_disk()` re-reads lifetime counters. The user does not need to restart the application. Enabled-pack state is intentionally reset (imported packs come back disabled and the user re-enables what they want, matching what would happen if they imported each pack one at a time on the new machine).
+
+**Archive validation.** Both the inspect path (preview before commit) and the import path enforce the same allow-list extraction policy. Reject any archive entry whose path contains `..` components, is absolute, has a drive prefix, or contains backslashes (zip-slip defence; `Path` handles `..` natively, but the explicit check is defence in depth and matches the pack-id validation in §5.3). Enforce a 75 MB per-entry cap, a 500 MB total-uncompressed cap, and a 200 MB archive-on-disk cap. Caps trip on file-size metadata before any bytes are extracted, so a forged 50 GB entry is refused without OOM. Extraction is allow-list, not deny-list: only members matching the exact expected paths (`models/ngram_model.json`, `models/ppm_model.json`, `analytics.json`, `packs/<sanitised-id>/<allowed-filename>`) are written to disk. A hand-edited archive that snuck a `telemetry.json` or a `../../boot.ini` past the manifest check is silently ignored at extraction time. Pack ids are re-matched against the §5.3 regex on import. If the manifest's `schema_version` exceeds the current schema version, import is refused with an "upgrade the application first" message rather than half-applied.
+
+Regression coverage for the validation properties is in `tests/test_data_export.py`. A hand-crafted archive cannot smuggle `telemetry.json` past the extractor, a zip-slip path is rejected at inspect time, an absolute path is rejected, an oversize entry is rejected, and a future-`schema_version` archive is rejected.
+
+### 5.6 Opt-in usage telemetry (1.1.0+)
 
 Alpha-OSK has a community-impact pipeline that lets users contribute to a shared "X million keystrokes saved" aggregate. **It is off by default.** Both the user-facing data policy (`docs/PRIVACY.md`) and the design (`docs/TELEMETRY.md`) are versioned in the repo.
 
@@ -352,14 +380,14 @@ The backend is a Cloudflare Worker (`backend/cf-worker/`) backed by D1. Two tabl
 
 The `DEFAULT_ENDPOINT` constant in `src/telemetry.py` is the kill switch. While it is the empty string, the client treats the endpoint as not configured and silently no-ops every submit even when the toggle is on; setting it to a deployed worker URL activates the pipeline. This decoupling lets the client and the toggle UI ship in a release that has the backend not yet deployed (or for a release where telemetry is intentionally disabled across the board, e.g. a regression-investigation build).
 
-#### 5.5.1 Threat model for the telemetry pipeline
+#### 5.6.1 Threat model for the telemetry pipeline
 
 - **An operator with full backend access** sees `anon_id`s, app-version distribution, OS distribution, and lifetime counters per user. Cannot see content, individual sessions, words used, or anything that would identify a user.
 - **A passive network observer** sees that the user POSTed to the telemetry endpoint, plus the payload size (~200 bytes). TLS hides the payload contents.
 - **A compromised backend** could backfill submissions to fake the public aggregate. Sanity ceilings on each counter limit the blast radius; per-IP rate limiting at the Cloudflare edge limits volume.
 - **An adversary trying to deanonymize a user** has very little to work with: the `anon_id` is opaque, no IP is stored, no User-Agent is stored, no submission history is retained (only `latest`), and the aggregate endpoint never exposes individual rows.
 
-### 5.6 Auto-update threat model
+### 5.7 Auto-update threat model
 
 Auto-update fetches from the release repository `okstudio1/alpha-osk-releases`, which is separate from the source repo `okstudio1/alpha-osk`. Both are public; the split is preserved because the updater's API URL is hard-pinned to the releases repo. The threat model and per-defence rationale are in `docs/AUTO_UPDATE.md`; the short version is:
 
@@ -385,7 +413,7 @@ Alpha-OSK is intended to run unobtrusively on hardware that motor-impaired users
 
 The prediction engine is pure Python with no native extensions. The hot paths (n-gram lookup, fuzzy candidate generation) operate on plain dicts and lists rather than NumPy or compiled tries. This is deliberate: the working-set size is small enough (tens of thousands of words) that Python dict performance is adequate, and a native dependency would complicate cross-platform builds.
 
-The single-instance lock uses `QSharedMemory`. The lock-holder reference is module-level in `keyboard_app.py` — a function-local would be destroyed before the application started, releasing the lock prematurely.
+The single-instance lock uses `QSharedMemory`. The lock-holder reference is module-level in `keyboard_app.py`. A function-local would be destroyed before the application started, releasing the lock prematurely.
 
 ---
 
@@ -395,13 +423,13 @@ The single-instance lock uses `QSharedMemory`. The lock-holder reference is modu
 
 Windows builds are produced by `build/windows/build.py`, which drives PyInstaller, NSIS (for the installer), and SignTool (for EV signing). The signing step is the single most common build trap: SafeNet Authentication Client exposes the eToken-resident certificate to the *user session only*, so the build must run from a non-elevated shell with the eToken plugged in. An elevated shell will fail with "Cannot find certificate."
 
-The release-asset filename must match `Alpha-OSK-Setup-{version}.exe` exactly — the auto-updater rejects anything else. Version is sourced from `src/__version__.py` and read by both the updater (to compare against the latest GitHub release) and the build script (to name the installer and stamp the registry entry).
+The release-asset filename must match `Alpha-OSK-Setup-{version}.exe` exactly. The auto-updater rejects anything else. Version is sourced from `src/__version__.py` and read by both the updater (to compare against the latest GitHub release) and the build script (to name the installer and stamp the registry entry).
 
 UIAccess is granted at install time via the `uiAccess="true"` manifest entry and the Program Files install location. UIAccess lets the OSK inject input into elevated target windows (UAC consent dialog, Task Manager, regedit) without the OSK itself running elevated.
 
 ### 7.2 Linux
 
-Linux builds use a parallel pipeline in `build/linux/build.py` that produces a PyInstaller bundle and, optionally, an AppImage (`--appimage --fetch-appimagetool`). Signing is not part of the Linux flow — AppImage is unsigned by design, and EV signing is Windows-specific. The AppImage entry script (`build/linux/AppRun`) points `QT_PLUGIN_PATH` and `QML2_IMPORT_PATH` at the bundled Qt and defaults `QT_QPA_PLATFORM=xcb`.
+Linux builds use a parallel pipeline in `build/linux/build.py` that produces a PyInstaller bundle and, optionally, an AppImage (`--appimage --fetch-appimagetool`). Signing is not part of the Linux flow. AppImage is unsigned by design, and EV signing is Windows-specific. The AppImage entry script (`build/linux/AppRun`) points `QT_PLUGIN_PATH` and `QML2_IMPORT_PATH` at the bundled Qt and defaults `QT_QPA_PLATFORM=xcb`.
 
 `xdotool` and `ydotool` are *not* bundled. They are OS-level tools that must be installed on the host. The bundle starts without them but key synthesis silently no-ops, which is a known limitation discussed in `docs/LINUX.md`.
 
@@ -417,13 +445,21 @@ Every release ships two dependency artefacts alongside the installer, plus a CI-
 
 **CycloneDX SBOMs.** Both pipelines additionally emit a CycloneDX 1.6 SBOM (`build/{windows,linux}/build.py::emit_sbom`, via `python -m cyclonedx_py environment`) to `release/Alpha-OSK-Setup-{version}-sbom.cyclonedx.json` (Windows) or `release/Alpha-OSK-{version}-linux-sbom.cyclonedx.json` (Linux). The SBOM is the machine-readable counterpart: per-component PURL (`pkg:pypi/<name>@<version>`), license expression where the package's metadata declares one, integrity hashes, and dependency graph. CycloneDX is OWASP-stewarded, ECMA-424 standardised, and the input format most security scanners (Trivy, Grype, OSV-Scanner, Dependency-Track) expect. `--output-reproducible` strips time/random fields so two builds of the same env produce byte-identical SBOMs. ~100 KB / 80 components at the current Python dep set. Soft-fails (warning, no abort) if `cyclonedx-bom` isn't installed; production builds pull it in via `requirements-dev.txt`.
 
-**Why both.** The lockfile is the human/pip-friendly view, the SBOM is the machine/compliance view. The plaintext lockfile is more discoverable for a developer reading the release page and recreating the env; the SBOM is what a procurement reviewer drops into Dependency-Track or what a CI scanner consumes. They're the same packages from two angles, ~100 KB combined relative to the 85 MB installer — no reason not to ship both.
+**Why both.** The lockfile is the human/pip-friendly view, the SBOM is the machine/compliance view. The plaintext lockfile is more discoverable for a developer reading the release page and recreating the env; the SBOM is what a procurement reviewer drops into Dependency-Track or what a CI scanner consumes. They're the same packages from two angles, ~100 KB combined relative to the 85 MB installer. No reason not to ship both.
 
-**Worker side.** `backend/cf-worker/package-lock.json` is checked in alongside `package.json` so Wrangler / TypeScript / `@cloudflare/workers-types` versions are deterministic between local and CI. A second SBOM (`cf-worker-sbom.cyclonedx.json`, ~470 KB / 209 components — npm dep trees are deeper than pip's) is generated by `npm run sbom` (which calls `@cyclonedx/cyclonedx-npm`) and auto-fires before every `npm run deploy` via the `predeploy` script. The SBOM file is in `.gitignore` since it's regenerable from the lockfile any time.
+**Worker side.** `backend/cf-worker/package-lock.json` is checked in alongside `package.json` so Wrangler / TypeScript / `@cloudflare/workers-types` versions are deterministic between local and CI. A second SBOM (`cf-worker-sbom.cyclonedx.json`, ~470 KB / 209 components. Npm dep trees are deeper than pip's) is generated by `npm run sbom` (which calls `@cyclonedx/cyclonedx-npm`) and auto-fires before every `npm run deploy` via the `predeploy` script. The SBOM file is in `.gitignore` since it's regenerable from the lockfile any time.
 
 **CI-time CVE scanning.** `.github/workflows/ci.yml` has an `osv-scan` job pinned to `google/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2` (v2.3.8) that reads both lockfiles and queries the OSV database on every push and pull request. Merges are gated (`fail-on-vuln: true`): any CVE in either lockfile fails CI, so unknown advisories gate merges by default. The earlier known noise (six dev-only Wrangler-3.x findings: one moderate `esbuild`, five medium-to-high `undici`) was resolved by upgrading the worker to Wrangler 4.x, which ships clean `esbuild` and `miniflare` 4. The Python side had one transitive `lxml` advisory flowing through `cyclonedx-bom`, pinned away via `lxml>=6.1.0` in `requirements-dev.txt`. SARIF upload to the GitHub Security tab is disabled (`upload-sarif: false`) by default; findings surface in the job's annotations / summary instead. Originally disabled because the source repo was private and GitHub Advanced Security was off; the repo went public on 2026-05-16, so SARIF upload could be re-enabled, but it stays off for now because the job summary already surfaces the same findings and publishing them to the public Security tab is a separate disclosure decision. If a future advisory genuinely cannot be fixed before the next push, quarantine it with an `osv-scanner.toml` ignore entry rather than reverting the global gate.
 
 **Compliance posture.** This setup meets the structured-SBOM requirement of US Executive Order 14028 and the form expected by hospital / pharma / defence procurement reviews. The EU Cyber Resilience Act (in force 2027) will require similar documentation for any networked product sold in the EU. Alpha-OSK now has the artefacts ready before the requesters appear.
+
+### 7.5 macOS (in progress)
+
+A third platform port is scaffolded but not yet shipped. The platform abstraction (`src/platform/macos.py`) implements `MacOSKeySynthesizer` on top of `Quartz.CGEventCreateKeyboardEvent`; the `"win"` modifier maps to ⌘ Command. Window flags (`keyboard_app.py::_apply_macos_window_flags`) set float level, all-Spaces collection behaviour, and `hidesOnDeactivate=NO` so the OSK floats above target apps without joining Mission Control's window list. Config and model directories live under `~/Library/Application Support/alpha-osk/`. The build pipeline at `build/macos/` produces an `Alpha-OSK.app` bundle via PyInstaller `BUNDLE()` with an optional `hdiutil` step for a `.dmg`, but is not yet exercised end-to-end.
+
+The hard part is **input delivery**. Naïve `CGEventPost(kCGHIDEventTap, ev)` posts to whatever app is currently frontmost, and on macOS clicking the OSK window activates the OSK as the foreground app (even with `NSApplicationActivationPolicyAccessory`, `Qt.WindowDoesNotAcceptFocus`, `Qt.Tool`, and `hidesOnDeactivate=NO`, all of which help on other surfaces but do not prevent click-activation of a plain NSWindow in Qt 6). The synthesised keystroke then lands back in Alpha-OSK rather than the editor the user was typing into. The working pattern installs an `NSWorkspaceDidActivateApplicationNotification` observer at synth init, records the pid of every non-self app that activates, and posts each event via `CGEventPostToPid(target_pid, ev)`. Pid-targeted delivery is frontmost-independent, so the event lands in the editor whether or not Alpha-OSK is the foreground app at the instant of dispatch. A cold-start window before any target has been recorded falls back to `CGEventPost`; in practice users tab into a target editor before clicking the OSK, so the fallback is rare.
+
+**First-run gotcha.** macOS requires an Accessibility TCC grant (System Settings → Privacy & Security → Accessibility) before `CGEventPostToPid` reaches other apps. Without it, the UI works but keystrokes silently no-op. Explicit follow-up phases include code signing with a Developer ID certificate, notarisation, auto-update parity with the Windows path, and `AXUIElement`-based password-field detection (the macOS analogue of UI Automation on Windows and AT-SPI 2 on Linux). Full plan and phase breakdown are in `docs/MACOS.md`.
 
 ---
 
@@ -431,18 +467,28 @@ Every release ships two dependency artefacts alongside the installer, plus a CI-
 
 ### 8.1 In-app analytics dashboard
 
-`src/analytics.py` records the lifetime counters that drive the in-app analytics dashboard and the §5.5 telemetry payload. Counters are session and `_alltime_*` paired; persisted to `<config_dir>/analytics.json` on shutdown and on explicit save; loaded at launch and incremented in-place. Persisted fields: keystrokes, words, predictions, keystrokes_saved, sessions, minutes, backspaces, prediction_offers, prediction_rank_sum, prediction_rank_count, top_pick_count, plus capped word_freq and key_freq Counters (top 5 000 retained on save so the file stays bounded over years of typing).
+`src/analytics.py` records the lifetime counters that drive the in-app analytics dashboard and the §5.6 telemetry payload. Counters are session and `_alltime_*` paired; persisted to `<config_dir>/analytics.json` on shutdown and on explicit save; loaded at launch and incremented in-place. Persisted fields: keystrokes, words, predictions, keystrokes_saved, sessions, minutes, backspaces, prediction_offers, prediction_rank_sum, prediction_rank_count, top_pick_count, plus capped word_freq and key_freq Counters (top 5 000 retained on save so the file stays bounded over years of typing).
 
 The dashboard (`qml/components/AnalyticsDashboard.qml`) presents four impact tiles in a single 2×2 grid with a Lifetime / This Session toggle:
 
-- **Keystrokes Saved** — absolute count, the headline number ("keys you didn't have to press").
-- **Time Saved** — `keystrokes_saved × user's own seconds per keystroke` (`alltime_minutes × 60 / alltime_keystrokes`, fallback 0.5 s/key for new installs). Using the user's own pace makes the number honest: a slow OSK user genuinely saves more wall-clock time per avoided keystroke than a fast one.
-- **Effort Saved** — savings as a percentage of total typing effort (`keystrokes_saved / (keystrokes + keystrokes_saved)`), the percentage view of the same engine value as Time Saved.
-- **Acceptance** — `prediction_hits / prediction_offers`, asking "when the keyboard offered a suggestion, how often was it useful enough to take". Distinct from the keystroke-share metric Effort Saved measures.
+- **Keystrokes Saved**: absolute count, the headline number ("keys you didn't have to press").
+- **Time Saved**. `keystrokes_saved × user's own seconds per keystroke` (`alltime_minutes × 60 / alltime_keystrokes`, fallback 0.5 s/key for new installs). Using the user's own pace makes the number honest: a slow OSK user genuinely saves more wall-clock time per avoided keystroke than a fast one.
+- **Effort Saved**: savings as a percentage of total typing effort (`keystrokes_saved / (keystrokes + keystrokes_saved)`), the percentage view of the same engine value as Time Saved.
+- **Acceptance**. `prediction_hits / prediction_offers`, asking "when the keyboard offered a suggestion, how often was it useful enough to take". Distinct from the keystroke-share metric Effort Saved measures.
 
 Earlier builds also surfaced a composite 0–100 "Prediction Quality" score (weighted: 40% savings, 25% hit rate, 20% rank-1 accuracy, 15% low backspace rate). It was removed in 1.1.0 because the number wasn't actionable: a user can act on "you've saved 4.2 hours" or "67% of your picks were the first suggestion" but a "73/100" composite hides which lever moved. Per-component metrics are still tracked and exposed in `getAnalytics()` (`predictionHitRate`, `topPickRate`, `backspaceRate`, etc.) for the Model Visualization panel and downstream callers; only the composite was retired. Don't reintroduce the composite as a primary surface; if a single internal scoring number is needed for ranking-strategy comparisons, compute it ad-hoc in tests rather than baking it back into `get_session_stats`.
 
 These metrics track regressions and improvements over time but are not a substitute for benchmark comparisons against other keyboards. We do not yet have a published benchmark; building one is open work.
+
+<p align="center">
+  <img src="../assets/screenshots/analytics-dashboard.png" alt="Lifetime analytics dashboard showing 16.8k keystrokes saved, 153.1 hours saved, 50% effort saved, 28% acceptance, top words bar chart, and vocabulary / bigram / trigram counts." width="720" />
+  <br /><em>Figure 4. Lifetime view of the in-app analytics dashboard. The four impact tiles (Keystrokes Saved, Time Saved, Effort Saved, Acceptance) are surfaced together because each lands differently with different mindsets: absolute count, wall-clock, percentage of effort, and engine-quality. The Lifetime / This Session toggle pivots every tile and chart from `_alltime_*` counters to in-session counters. The five framed cards below (Vocabulary, Bigrams, Trigrams, Top Pick, Saved) make the user's personal language model legible as raw counts rather than abstract scores.</em>
+</p>
+
+<p align="center">
+  <img src="../assets/screenshots/language-model-word-cloud.png" alt="Word Cloud tab of the Your Language Model panel, showing learned vocabulary as circle-packed bubbles sized by frequency." width="480" />
+  <br /><em>Figure 5. Word Cloud tab of the Your Language Model panel. Each bubble is a learned word, sized by unigram frequency. The visualization is built from `getVisualizationData()` over the live n-gram tables; clicking any bubble drills into that word's bigram predecessors, successors, and trigram windows. The Word Flow tab presents the same data as a network graph of bigram edges. Both surfaces pulse the matching node and edge when the user is actively typing, providing a live view of which part of their personal model is firing.</em>
+</p>
 
 ### 8.2 Known gaps relative to commercial keyboards
 
@@ -450,8 +496,8 @@ In rough priority order:
 
 1. **Unified prediction-and-correction scoring.** LatinIME and Gboard score the literal typed word and all corrections in a single ranked list with a shared probability scale. The two-tier autocorrect threshold (§3.7) is a partial proxy; full unification is the proper fix and would clean up several classes of edge cases (deliberate-typing protection, low-confidence corrections that currently surface as suggestions but should not).
 2. **Spatial edit costs in final ranking.** Key-distance weights from `fuzzy_recognizer` currently feed candidate *generation* but not the final rank. Folding them into the merge layer would let the engine prefer "the" over "rhe" in ambiguous contexts based on the fact that `r` is far from `t` in QWERTY.
-3. **Katz / stupid backoff for sparse contexts.** Linear interpolation gives `λ₃·P_tri = 0` weight to the trigram term when the trigram has never been seen, which is correct but pessimistic — Katz backoff would discount seen events and redistribute mass to lower-order fallbacks. Larger-lift change (~100 lines) with a measurable quality gain on rare contexts.
-4. **Larger seed corpus.** The ~750 / ~740 curated bigram/trigram lists are hand-audited but small. Seeding from COCA top-100k bigrams or Google n-gram exports would dwarf them. Easy win, no algorithm changes — just more data.
+3. **Katz / stupid backoff for sparse contexts.** Linear interpolation gives `λ₃·P_tri = 0` weight to the trigram term when the trigram has never been seen, which is correct but pessimistic. Katz backoff would discount seen events and redistribute mass to lower-order fallbacks. Larger-lift change (~100 lines) with a measurable quality gain on rare contexts.
+4. **Larger seed corpus.** The ~750 / ~740 curated bigram/trigram lists are hand-audited but small. Seeding from COCA top-100k bigrams or Google n-gram exports would dwarf them. Easy win, no algorithm changes. Just more data.
 5. **Vocabulary-pack disable undoes injection.** The current `PackManager.disable_pack` only clears the pack's own in-memory copy; it does not revert the per-word entries the pack pushed into the predictor's `unigrams` / `bigrams` / `trigrams` (which were merged with `max()`, see §3.1.2). Toggling a pack off therefore leaves its words ranking until the process restarts. Effectively invisible today because no built-in packs ship and very few users import their own; becomes a real correctness issue if built-ins return or imports become common. The clean fix is to track per-pack `(word, prior_value)` tuples at apply time and revert on disable, guarded so words that organic learning piled on top of (current value > pack's contribution) are not clobbered.
 
 #### Closed gaps
@@ -461,7 +507,7 @@ In rough priority order:
 
 ### 8.3 Federated learning
 
-Federated learning would let users contribute to a shared model without sending raw keystrokes anywhere. The design is in `docs/FEDERATED_LEARNING.md`. Phase 1 (local delta computation — the user's machine produces a "diff" against the base model that summarises learned vocabulary) is the next step. Phases 2 and 3 (secure aggregation, differential privacy budgets) follow.
+Federated learning would let users contribute to a shared model without sending raw keystrokes anywhere. The design is in `docs/FEDERATED_LEARNING.md`. Phase 1 (local delta computation. The user's machine produces a "diff" against the base model that summarises learned vocabulary) is the next step. Phases 2 and 3 (secure aggregation, differential privacy budgets) follow.
 
 The motivation is strongest for the disability-community vocabulary case: users with rare conditions, specific medical equipment, or specialised AAC needs benefit disproportionately from shared vocabulary, but the same users have the strongest privacy concerns about raw keystroke data. Federated learning is the standard answer.
 
@@ -486,7 +532,7 @@ Alpha-OSK is what happens when an accessibility-first OSK is built from scratch 
 
 The prediction stack is honest about its limits. It does not match Gboard's quality on rare contexts, it does not yet have unified scoring that lets the literal typed word compete against corrections in a single ranked frame, and the seed corpus is small. Each of these has a documented path forward and a rough cost estimate. None of them require fundamentally rethinking the architecture.
 
-The accessibility-driven engineering decisions — the non-focus invariant, sticky modifiers held at the OS level, suffix-only prediction insertion, the right-click shifted variant, the edit-popup pattern — are the part of the work that does not appear in textbooks. They are also the part most likely to transfer to other accessibility tools building on the same hardware target.
+The accessibility-driven engineering decisions (the non-focus invariant, sticky modifiers held at the OS level, suffix-only prediction insertion, the right-click shifted variant, the edit-popup pattern) are the part of the work that does not appear in textbooks. They are also the part most likely to transfer to other accessibility tools building on the same hardware target.
 
 ---
 
@@ -494,18 +540,18 @@ The accessibility-driven engineering decisions — the non-focus invariant, stic
 
 ### Internal design docs
 
-- `docs/PPM.md` — Variable-order character model with PPMD escape.
-- `docs/FUZZY_RECOGNITION.md` — Spatial model and tunable constants.
-- `docs/HYBRID_MERGING.md` — Merge weights, validation, capitalisation pipeline.
-- `docs/SWIPE_TYPING.md` — Shape-matching swipe decoder.
-- `docs/AUTO_UPDATE.md` — Update flow, threat model, defences.
-- `docs/TELEMETRY.md` — Opt-in usage stats: payload schema, anon_id lifecycle, backend, deployment workflow.
-- `docs/PRIVACY.md` — User-facing data policy.
-- `docs/PLATFORM_ARCHITECTURE.md` — Cross-platform abstraction details.
-- `docs/FEDERATED_LEARNING.md` — Federated-learning roadmap (separate from §5.5 telemetry; not yet implemented).
-- `docs/ECOSYSTEM.md` — Four-tool adaptive-input platform.
-- `docs/SECURITY_AUDIT.md` — Pack-import hardening, model load caps.
-- `docs/LINUX.md` / `docs/WINDOWS.md` — Platform-specific build and packaging.
+- `docs/PPM.md`: variable-order character model with PPMD escape.
+- `docs/FUZZY_RECOGNITION.md`: spatial model and tunable constants.
+- `docs/HYBRID_MERGING.md`: merge weights, validation, capitalisation pipeline.
+- `docs/SWIPE_TYPING.md`: shape-matching swipe decoder.
+- `docs/AUTO_UPDATE.md`: update flow, threat model, defences.
+- `docs/TELEMETRY.md`: opt-in usage stats. Payload schema, anon_id lifecycle, backend, deployment workflow.
+- `docs/PRIVACY.md`: user-facing data policy.
+- `docs/PLATFORM_ARCHITECTURE.md`: cross-platform abstraction details.
+- `docs/FEDERATED_LEARNING.md`: federated-learning roadmap (separate from §5.6 telemetry; not yet implemented).
+- `docs/ECOSYSTEM.md`: four-tool adaptive-input platform.
+- `docs/SECURITY_AUDIT.md`: pack-import hardening, model load caps.
+- `docs/LINUX.md` / `docs/WINDOWS.md`: platform-specific build and packaging.
 
 ### External references
 
