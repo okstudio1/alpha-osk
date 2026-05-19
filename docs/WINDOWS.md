@@ -34,7 +34,7 @@ Complete guide to running, building, and deploying Alpha-OSK on Windows.
 
 ```powershell
 # Clone the repository
-git clone https://github.com/okstudio1/alpha-osk.git
+git clone https://github.com/owenpkent/alpha-osk.git
 cd alpha-osk
 
 # Launch the keyboard (auto-creates venv, installs PySide6)
@@ -579,7 +579,7 @@ gh release create vX.Y.Z \
   release/Alpha-OSK-Setup-X.Y.Z-sbom.cyclonedx.json \
   --repo okstudio1/alpha-osk-releases \
   --title "vX.Y.Z" \
-  --notes "See https://github.com/okstudio1/alpha-osk/blob/main/CHANGELOG.md"
+  --notes "See https://github.com/owenpkent/alpha-osk/blob/main/CHANGELOG.md"
 ```
 
 The lockfile (~5-10 KB) is the human/pip-friendly answer; the SBOM (~100 KB) is the machine-friendly answer that compliance scanners ingest directly. See *Dependency Lockfile & SBOM* below for what each is for.

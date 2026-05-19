@@ -8,7 +8,7 @@ body:
       value: |
         Thanks for taking the time to report a bug. Please fill in as much
         as you can. If this is a **security issue**, stop here and follow
-        [SECURITY.md](https://github.com/okstudio1/alpha-osk/blob/main/SECURITY.md)
+        [SECURITY.md](https://github.com/owenpkent/alpha-osk/blob/main/SECURITY.md)
         instead.
 
   - type: textarea

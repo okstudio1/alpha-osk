@@ -4,5 +4,5 @@ contact_links:
     url: https://github.com/okstudio1/alpha-osk-releases/security/advisories/new
     about: Report a security issue privately. Do not open a public issue.
   - name: Question or discussion
-    url: https://github.com/okstudio1/alpha-osk/discussions
+    url: https://github.com/owenpkent/alpha-osk/discussions
     about: For general questions, ideas you're still working out, or help using Alpha-OSK.

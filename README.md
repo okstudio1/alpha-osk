@@ -9,7 +9,7 @@
 Type into any Windows or Linux app by clicking on-screen keys. Built for people who can't comfortably use a physical keyboard. Prediction that learns as you go, with no LLM, no GPU, and no data leaving your machine.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![CI](https://github.com/okstudio1/alpha-osk/actions/workflows/ci.yml/badge.svg)](https://github.com/okstudio1/alpha-osk/actions/workflows/ci.yml)
+[![CI](https://github.com/owenpkent/alpha-osk/actions/workflows/ci.yml/badge.svg)](https://github.com/owenpkent/alpha-osk/actions/workflows/ci.yml)
 [![Tests](https://img.shields.io/badge/tests-641-brightgreen.svg)](tests/)
 [![Releases](https://img.shields.io/badge/releases-alpha--osk--releases-orange.svg)](https://github.com/okstudio1/alpha-osk-releases/releases)
 
@@ -78,7 +78,7 @@ Download the latest installer from the public releases repo:
 ### From source
 
 ```bash
-git clone https://github.com/okstudio1/alpha-osk.git
+git clone https://github.com/owenpkent/alpha-osk.git
 cd alpha-osk
 python run.py
 ```

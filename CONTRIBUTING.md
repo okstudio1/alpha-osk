@@ -30,7 +30,7 @@ align on scope and approach.
 ## Development setup
 
 ```bash
-git clone https://github.com/okstudio1/alpha-osk.git
+git clone https://github.com/owenpkent/alpha-osk.git
 cd alpha-osk
 python run.py
 ```

@@ -423,7 +423,7 @@ Action types: `char`, `special`, `hotkey`, `text`, `macro`, `launch`, `layout`, 
 
 Implemented in `src/updater.py`. Flow walkthrough, threat model + defences table, and the per-defence rationale all live in `docs/AUTO_UPDATE.md`. Release checklist is in `docs/WINDOWS.md`.
 
-> ⚠️ **Releases live in a separate public repo** — `okstudio1/alpha-osk-releases`. The updater's API URL is hard-pinned to that repo, so `gh release create` must always pass `--repo okstudio1/alpha-osk-releases`. (Historical note: the source repo `okstudio1/alpha-osk` was private until 2026-05-16; the split was originally a private/public boundary, and is now preserved because the pinned updater URL relies on the releases repo being its own canonical source-of-truth.)
+> ⚠️ **Releases live in a separate public repo** — `okstudio1/alpha-osk-releases`. The updater's API URL is hard-pinned to that repo, so `gh release create` must always pass `--repo okstudio1/alpha-osk-releases`. (Historical note: the source repo `owenpkent/alpha-osk` was private until 2026-05-16; the split was originally a private/public boundary, and is now preserved because the pinned updater URL relies on the releases repo being its own canonical source-of-truth.)
 
 Version source of truth is `src/__version__.py`. The release-asset filename **must** match `Alpha-OSK-Setup-{version}.exe` exactly — the updater rejects anything else. User-facing toggle: *Settings → Data & Privacy → Updates → "Check for updates on startup"* (persisted as `appSettings.savedAutoCheckUpdates`).
 

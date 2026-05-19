@@ -79,10 +79,12 @@ GITHUB_API_URL = (
     "https://api.github.com/repos/okstudio1/alpha-osk-releases/releases/latest"
 )
 # The repo above hosts only release binaries.  The application source
-# lives in a *separate, private* repo (``okstudio1/alpha-osk``); private
-# repos return 404 on ``/releases/latest`` to unauthenticated callers,
-# which is exactly what shipping update clients are.  The split keeps
-# the source private without breaking auto-update.
+# lives in a separate public repo (``owenpkent/alpha-osk``).  The split
+# was originally a private/public boundary (source private until
+# 2026-05-16) and is now preserved because every shipped client is
+# hard-pinned to the releases-repo URL; moving release artefacts to a
+# different URL would orphan all existing installs until the user
+# manually upgraded.
 # SHA1 thumbprint of the OK Studio Inc. EV code-signing certificate.
 # Lowercase, no spaces.  Matches what ``signtool sign /sha1`` uses and
 # what ``Get-AuthenticodeSignature .Thumbprint`` returns (we normalise

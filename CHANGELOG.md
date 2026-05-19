@@ -258,7 +258,7 @@ v1.0.5 / v1.0.6 users have to install v1.0.8 by hand once because their auto-upd
 ## [1.0.5] — 2026-04-16
 
 ### Fixed
-- **Auto-updater now actually works** — v1.0.3 and v1.0.4 hard-coded the GitHub API endpoint to the source repo (`okstudio1/alpha-osk`), which is private. Private repos return 404 on `/releases/latest` to unauthenticated callers, so the updater always silently saw "no update available". The endpoint is now `okstudio1/alpha-osk-releases` — a separate public repo whose only purpose is to host release binaries. The source repo stays private. **One-time manual install required:** v1.0.3 / v1.0.4 users need to install v1.0.5 by hand once; auto-update works for every release after that. Diagnosis + threat-model update in `docs/AUTO_UPDATE.md`.
+- **Auto-updater now actually works** — v1.0.3 and v1.0.4 hard-coded the GitHub API endpoint to the source repo (`owenpkent/alpha-osk`), which is private. Private repos return 404 on `/releases/latest` to unauthenticated callers, so the updater always silently saw "no update available". The endpoint is now `okstudio1/alpha-osk-releases` — a separate public repo whose only purpose is to host release binaries. The source repo stays private. **One-time manual install required:** v1.0.3 / v1.0.4 users need to install v1.0.5 by hand once; auto-update works for every release after that. Diagnosis + threat-model update in `docs/AUTO_UPDATE.md`.
 
 ### Added
 - **Installed version surfaced in Settings → Updates** — `KeyboardBridge.appVersion` reads from `src/__version__.py` and is shown above the "Check for updates on startup" toggle. Easiest way to confirm an upgrade actually landed.

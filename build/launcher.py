@@ -33,7 +33,7 @@ def main():
                 None, "Alpha-OSK Error",
                 f"Failed to start Alpha-OSK:\n\n{e}\n\n"
                 f"Please report this at:\n"
-                f"https://github.com/okstudio1/alpha-osk/issues"
+                f"https://github.com/owenpkent/alpha-osk/issues"
             )
         except Exception:
             pass

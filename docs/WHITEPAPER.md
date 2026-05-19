@@ -391,7 +391,7 @@ The `DEFAULT_ENDPOINT` constant in `src/telemetry.py` is the kill switch. While 
 
 ### 5.7 Auto-update threat model
 
-Auto-update fetches from the release repository `okstudio1/alpha-osk-releases`, which is separate from the source repo `okstudio1/alpha-osk`. Both are public; the split is preserved because the updater's API URL is hard-pinned to the releases repo. The threat model and per-defence rationale are in `docs/AUTO_UPDATE.md`; the short version is:
+Auto-update fetches from the release repository `okstudio1/alpha-osk-releases`, which is separate from the source repo `owenpkent/alpha-osk`. Both are public; the split is preserved because the updater's API URL is hard-pinned to the releases repo. The threat model and per-defence rationale are in `docs/AUTO_UPDATE.md`; the short version is:
 
 - The update endpoint is `https://api.github.com/repos/okstudio1/alpha-osk-releases/releases/latest` over HTTPS with system-trusted CA roots.
 - The downloaded asset filename must match `Alpha-OSK-Setup-{version}.exe` exactly. Anything else is rejected before execution.
@@ -567,4 +567,4 @@ The accessibility-driven engineering decisions (the non-focus invariant, sticky 
 
 ---
 
-*Alpha-OSK is developed by Owen Kent. Source repository: github.com/okstudio1/alpha-osk. Public releases: github.com/okstudio1/alpha-osk-releases.*
+*Alpha-OSK is developed by Owen Kent. Source repository: github.com/owenpkent/alpha-osk. Public releases: github.com/okstudio1/alpha-osk-releases.*
