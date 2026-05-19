@@ -158,7 +158,7 @@ Settings ⚙ → Appearance → Sound & Opacity → Opacity slider.
 Windows: `%APPDATA%\alpha-osk\`. Linux: `~/.config/alpha-osk/`. The model files are `models/ngram_model.json` and `models/ppm_model.json`. Lifetime stats are in `analytics.json`. Settings → Data & Privacy → Data Backup writes all of it (plus any imported vocabulary packs) to a single `.zip` you can move between machines.
 
 **Does any of this send my typing to a server?**
-No. The only optional egress is the weekly anonymous-stats POST, which is off by default. When enabled, it sends nine integer counters (lifetime keystroke count, words typed, predictions used, etc.) plus a random UUID. Never content, word frequencies, key frequencies, IP, or hostname. See [`docs/PRIVACY.md`](docs/PRIVACY.md).
+No. The opt-in anonymous-stats client is wired into the app but `DEFAULT_ENDPOINT` is currently the empty string, so the client silently no-ops every submission attempt regardless of the toggle. When the endpoint is deployed in a future release, opting in would send nine integer counters per week (lifetime keystroke count, words typed, predictions used, etc.) plus a random UUID. Never content, word frequencies, key frequencies, IP, or hostname. See [`docs/PRIVACY.md`](docs/PRIVACY.md).
 
 **Can I import my own vocabulary?**
 Yes. Settings → Your Language Model → Vocabulary Packs → Import Custom Pack. A pack is a folder containing `dictionary.txt` (one word per line) and optionally `bigrams.txt`, `trigrams.txt`, and `pack.json`. No built-in packs ship; the rationale is in the white paper.
@@ -173,9 +173,9 @@ Yes on Windows (Unicode keystroke injection covers anything in BMP and supplemen
 | Core keyboard (Windows + Linux) | Shipping |
 | Hybrid prediction engine | Shipping |
 | Custom vocabulary import | Shipping |
-| Swipe / glide typing | Shipping |
+| Swipe / glide typing | In development (off by default) |
 | Auto-update (Windows) | Shipping |
-| Anonymous telemetry (opt-in) | Shipping |
+| Anonymous telemetry (opt-in) | Client + UI shipped, endpoint not yet deployed |
 | Analytics dashboard | Shipping |
 | Data backup (export / import) | Shipping |
 | Test suite | 641 tests passing |
@@ -273,7 +273,7 @@ For security issues, follow [`SECURITY.md`](SECURITY.md). Do not file public iss
 
 - Learning is on-device only. Your typing never leaves your computer unless you opt into telemetry.
 - Password fields are auto-detected (Windows UI Automation, Linux AT-SPI) and pause learning automatically. There's also a manual Learning / Paused toggle in the title bar.
-- Telemetry is opt-in, off by default, and sends nine integer counters per week with no content. See [`docs/PRIVACY.md`](docs/PRIVACY.md) and [`docs/TELEMETRY.md`](docs/TELEMETRY.md).
+- Telemetry is opt-in and off by default. The client and the consent toggle are in the build, but the submission endpoint isn't deployed yet, so opting in is currently a no-op. When the endpoint goes live, opting in would send nine integer counters per week and never any content. See [`docs/PRIVACY.md`](docs/PRIVACY.md) and [`docs/TELEMETRY.md`](docs/TELEMETRY.md).
 - Data export bundles your model, lifetime stats, and imported vocabulary packs into a single `.zip` you control. The telemetry contributor ID is **excluded** from exports so contributions stay unlinkable across machines.
 - Auto-update fetches release metadata from GitHub. Installers are verified against an EV-signed certificate before launching.
 
