@@ -401,7 +401,7 @@ Commercial keyboards (Gboard/LatinIME, Presage) treat prediction and spell-check
 
 ### Known gaps (future work, priority order)
 1. **SymSpell for fuzzy matching** — Replace Levenshtein edit-distance in `fuzzy_recognizer.py` with SymSpell's precomputed-deletion approach. ~1000x faster, O(1) lookup, ~30MB RAM. (Garbe, 2012)
-2. **Unified scoring** — Make the literal typed word compete against corrections in the same ranked list with an explicit score, so the system knows when NOT to correct. The two-tier autocorrect threshold above is a partial proxy; full unified scoring is the proper fix.
+2. **Unified scoring** — Make the literal typed word compete against corrections in the same ranked list with an explicit score, so the system knows when NOT to correct. The two-tier autocorrect threshold above is a partial proxy; full unified scoring is the proper fix. Reference implementation worth studying: `willwade/noisy-channel-correction` (Python, MIT, AAC-focused). It ranks candidates as `log P(intended) + log P(noisy | intended)` using a PPM language model plus a learned character-level confusion matrix. The interesting bit is the confusion matrix (built by simulating realistic errors against the target input modality), not the library itself; integration as a runtime dep would pull in NumPy + Levenshtein and the surface is CLI-script-shaped, so the realistic move is to port the scoring formula and confusion-matrix concept into `fuzzy_recognizer.py` rather than vendor the project.
 3. **Spatial edit costs in ranking** — Key-distance weights from fuzzy_recognizer should feed into final prediction ranking, not just candidate generation.
 4. **Katz / Stupid Backoff for sparse contexts** — The linear-interpolation formula above gives λ₃·P_tri even when the trigram table has never seen this 2-word prefix (P_tri = 0). Katz backoff discounts seen events and redistributes the mass to the bigram/unigram fallback. Better behaviour on rare contexts. Larger lift (~100 lines).
 5. **Even larger n-gram corpus from a real public source** — the ~700/700 curated lists cover a lot of conversational English, but seeding from COCA top-100k bigrams or Google n-gram exports would dwarf that. Easy win, doesn't require algorithm changes — just more data.
@@ -412,6 +412,8 @@ Commercial keyboards (Gboard/LatinIME, Presage) treat prediction and spell-check
 - **Dasher**: PPM-C character-level prediction. Our PPM predictor is based on this.
 - **SymSpell**: precompute all deletion variants within edit distance N at index time. Query = generate deletions of input + hash lookup. (github.com/wolfgarbe/SymSpell)
 - **Hunspell**: affix-based dictionary + phonetic matching. Slower but handles morphology.
+- **noisy-channel-correction (willwade)**: Python/MIT AAC correction library implementing the unified-scoring formula in Known gap #2. See that gap for integration notes.
+- **WorldAlphabets (AACTools)**: MIT JSON data covering alphabets, letter frequencies, and keyboard layouts for 310+ languages. Not used today (Alpha-OSK is English-only), but the canonical dataset to reach for if multilingual support is ever scoped.
 
 ## Modular Layouts
 
