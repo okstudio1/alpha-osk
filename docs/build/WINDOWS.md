@@ -410,7 +410,7 @@ Uses the **same EV certificate and signing workflow** as
 |-------|-------|
 | **Certificate** | Sectigo Public Code Signing CA EV R36 |
 | **Issued to** | OK Studio Inc. |
-| **Type** | EV (Extended Validation) — **immediate SmartScreen trust** |
+| **Type** | EV (Extended Validation). Shows the verified **OK Studio Inc.** publisher name. Note: EV no longer grants immediate SmartScreen trust (Microsoft removed that in 2024). See *SmartScreen warnings are NOT a signing failure* below. |
 | **Hardware** | SafeNet USB eToken (physical USB key) |
 | **Thumbprint** | `fc22b5221318f3f3f6b3eb2d969d7f99091557bf` |
 | **Timestamp server** | `http://timestamp.digicert.com` |
@@ -477,6 +477,24 @@ during scanning (same problem gitconnect's `sign.js` solves).  Key behaviour:
 | `SignTool Error: file being used by another process` | Windows Defender scanning | `sign.py` retry logic handles this automatically |
 | `Cannot find certificate` by subject | Multiple certs | Config uses `certificateSha1` thumbprint — verify with `certutil -store -user My` |
 | Timestamp server timeout | DigiCert slow | Alternative: `http://timestamp.sectigo.com` — edit `TIMESTAMP_SERVER` in `sign.py` |
+
+### SmartScreen warnings are NOT a signing failure
+
+Users (especially on a fresh PC) sometimes report the installer "isn't signed right": a blue **"Windows protected your PC"** SmartScreen box, often described as "Unknown Publisher." Before re-investigating the certificate, confirm what's actually happening, because in every case so far the signature has been fine.
+
+Triage on the affected machine:
+
+```powershell
+Get-AuthenticodeSignature "<path>\Alpha-OSK-Setup-<ver>.exe" | Format-List Status, StatusMessage, SignerCertificate
+```
+
+- **`Status: Valid`** (the common case). The signature is trusted and shows `CN=OK Studio Inc.` This is purely **SmartScreen reputation**, not a signing problem. Microsoft removed the EV "instant reputation" fast-pass in **2024** (see the [SmartScreen reputation doc](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation)); EV and OV now build reputation identically, from download volume on both the file hash and the publisher cert. There is **no developer mechanism to prime consumer SmartScreen reputation** (the Microsoft file-submission portal only covers enterprise/managed deployments and Defender AV false-positives). The warning fades on its own as installs accumulate, and reputation **carries forward to future releases signed with the same OK Studio cert**, so keep using the same cert and never modify a file after signing. The user can install immediately via **More info, then Run anyway**, which shows the verified publisher.
+- **`NotTrusted` / `UnknownError`**: the target machine is missing the Sectigo root/intermediate (offline or policy-blocked automatic root update). Get it online + Windows Update, or manually import the **Sectigo Public Code Signing Root R46** root.
+- **`HashMismatch`**: corrupted download. Re-fetch the official asset.
+
+The only guaranteed zero-warning path is the Microsoft Store (re-signs with Microsoft's cert), which is a non-starter for Alpha-OSK because it needs `SendInput` + UIAccess that Store sandboxing won't grant. The practical mitigation is the user-facing note shipped in the README and every GitHub release body (see Release Checklist step 7).
+
+**Distribution channels that often skip the prompt (not yet adopted).** A browser download attaches the "Mark of the Web" zone tag (`Zone.Identifier` NTFS stream), and that tag is what triggers the SmartScreen App Reputation prompt. Installing through a package manager (`winget install`, Chocolatey, Scoop) usually does not attach that tag, so users typically never see the blue box even before reputation builds. The app is already a clean fit for winget (stable public releases repo, EV-signed installer, versioned asset names), so a winget manifest is the highest-value next step if the prompt is costing installs. This is likely-helps rather than guaranteed; verify current winget + SmartScreen behavior before relying on it. Reputation still accrues to the publisher cert in parallel regardless of channel, and **cert reputation carries forward to future releases**, so seasoning the OK Studio cert (funnel downloads through one canonical URL, avoid over-churning versions) is the permanent fix.
 
 ---
 
@@ -585,6 +603,17 @@ gh release create vX.Y.Z \
 The lockfile (~5-10 KB) is the human/pip-friendly answer; the SBOM (~100 KB) is the machine-friendly answer that compliance scanners ingest directly. See *Dependency Lockfile & SBOM* below for what each is for.
 
 > ⚠️ **The `--repo okstudio1/alpha-osk-releases` flag is mandatory.** The auto-updater's API URL is hard-pinned to the releases repo (`src/updater.py::GITHUB_API_URL`). Forgetting `--repo` will create the release in the source repo where end users' updaters won't look. Tag the source repo for changelog tracking; publish binaries in the releases repo.
+
+**Add the SmartScreen note to the top of every release body.** Downloaders land on the releases page, not the README, so the install warning explanation belongs there too. Prepend this block above the changelog (em-dash-free, matches the README copy):
+
+```markdown
+> **Installing on Windows: about the SmartScreen prompt.**
+> On first launch you may see a blue "Windows protected your PC" screen. This is normal for newer apps and does **not** mean anything is wrong. Alpha-OSK is digitally signed by **OK Studio Inc.** Click **More info** and you will see that publisher name, then click **Run anyway** to install. The prompt stops appearing on its own as more people install. (Microsoft removed the SmartScreen fast-pass for code-signed apps in 2024, so reputation now builds from download volume, not from the certificate.)
+
+---
+```
+
+To add it to an already-published release: `gh release view vX.Y.Z --repo okstudio1/alpha-osk-releases --json body --jq .body > body.md`, prepend the block, then `gh release edit vX.Y.Z --repo okstudio1/alpha-osk-releases --notes-file body.md`. See *SmartScreen warnings are NOT a signing failure* under Code Signing for why this is reputation, not a signing bug.
 
 ### Tracking downloads
 

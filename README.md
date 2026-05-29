@@ -75,6 +75,8 @@ Download the latest installer from the public releases repo:
 | Linux    | `Alpha-OSK-X.Y.Z-x86_64.AppImage` | Unsigned by design. `chmod +x` and run. Needs `xdotool` (X11) or `ydotool` (Wayland) installed at the OS level. |
 | macOS    | In progress | Tracked in [`docs/build/MACOS.md`](docs/build/MACOS.md). Synthesiser and window flags scaffolded; code-signing and notarisation still to do. |
 
+> **First launch on Windows:** you may see a blue "Windows protected your PC" screen. This is normal for newer apps and does not mean anything is wrong. Alpha-OSK is digitally signed by **OK Studio Inc.** (click **More info** and you will see that publisher name). Click **More info -> Run anyway** to install. The prompt stops appearing on its own as more people install. (Microsoft removed the SmartScreen fast-pass for signed apps in 2024, so reputation now builds purely from download volume.)
+
 ### From source
 
 ```bash

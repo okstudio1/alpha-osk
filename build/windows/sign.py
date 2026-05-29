@@ -23,7 +23,7 @@ Certificate Details
 | Field            | Value                                              |
 |------------------|----------------------------------------------------|
 | Issued to        | OK Studio Inc.                                     |
-| Type             | EV (Extended Validation) — immediate SmartScreen    |
+| Type             | EV (Extended Validation); shows verified publisher  |
 | Thumbprint       | ``fc22b5221318f3f3f6b3eb2d969d7f99091557bf``       |
 | Timestamp server | ``http://timestamp.digicert.com``                  |
 
